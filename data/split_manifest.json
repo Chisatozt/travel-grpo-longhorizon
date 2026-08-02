@@ -1,0 +1,364 @@
+{
+  "artifacts": {
+    "evaluation": {
+      "jsonl": {
+        "path": "evaluation/tasks.jsonl",
+        "sha256": "afb22df3cad121bd23e1e3dc5dc403375f18ee753d79c33526592887a407338d"
+      },
+      "parquet": {
+        "path": "evaluation/tasks.parquet",
+        "sha256": "9973e0a46f21e54e3e82501c182f839f86e21c4c57eb166d0dcf7b220806d9c3"
+      },
+      "rows": 471
+    },
+    "grpo_train": {
+      "jsonl": {
+        "path": "grpo/train.jsonl",
+        "sha256": "9a89744b150711afc545a753d922c76b861576aa9d9a59a6977903cbb5750ff8"
+      },
+      "parquet": {
+        "path": "grpo/train.parquet",
+        "sha256": "286fafc5d1be73fe69733db4594f06def85bd4206577bbb32785e5eb8c298fb4"
+      },
+      "rows": 1723
+    },
+    "grpo_validation": {
+      "jsonl": {
+        "path": "grpo/validation.jsonl",
+        "sha256": "e6445f361eb9bb26da2dd6546c21fa4ddc89abc699f3fcec9341e3731b0905c4"
+      },
+      "parquet": {
+        "path": "grpo/validation.parquet",
+        "sha256": "412a3c754419cbd479b5c0dde856a2e5a10a58581cdb9851ebfee502c88cf2c6"
+      },
+      "rows": 132
+    },
+    "sft_train": {
+      "jsonl": {
+        "path": "sft/tasks_train.jsonl",
+        "sha256": "9fe2821550ccf6bebaa92e2134336435be9a73c707d3967395f70f99878117c7"
+      },
+      "parquet": {
+        "path": "sft/tasks_train.parquet",
+        "sha256": "e66f0ee1ab742d622e8a0779536f52072032971a8fd6ca7958e86c27b9e8ca1c"
+      },
+      "rows": 716
+    },
+    "sft_validation": {
+      "jsonl": {
+        "path": "sft/tasks_validation.jsonl",
+        "sha256": "f9565a227c97a79c093ac25504de6b8dd9fb40e674f0a6bf938f1b8f9ce724e5"
+      },
+      "parquet": {
+        "path": "sft/tasks_validation.parquet",
+        "sha256": "a9e1afeea8f49e1eddb65b89508f73db78917f28981c993183cb15b3e47d14fc"
+      },
+      "rows": 80
+    }
+  },
+  "builder": {
+    "pyarrow_version": "25.0.0"
+  },
+  "checks": {
+    "project_split_intersections": {
+      "grpo_train:evaluation": 0,
+      "grpo_train:grpo_validation": 0,
+      "grpo_validation:evaluation": 0,
+      "sft_train:evaluation": 0,
+      "sft_train:grpo_train": 0,
+      "sft_train:grpo_validation": 0,
+      "sft_train:sft_validation": 0,
+      "sft_validation:evaluation": 0,
+      "sft_validation:grpo_train": 0,
+      "sft_validation:grpo_validation": 0
+    },
+    "upstream_train_test_overlap": 0
+  },
+  "counts": {
+    "by_composition": {
+      "22": {
+        "evaluation": 101,
+        "grpo_train": 371,
+        "grpo_validation": 28,
+        "sft_train": 154,
+        "sft_validation": 17
+      },
+      "2222": {
+        "evaluation": 17,
+        "grpo_train": 62,
+        "grpo_validation": 5,
+        "sft_train": 26,
+        "sft_validation": 3
+      },
+      "233": {
+        "evaluation": 61,
+        "grpo_train": 222,
+        "grpo_validation": 17,
+        "sft_train": 92,
+        "sft_validation": 10
+      },
+      "33": {
+        "evaluation": 87,
+        "grpo_train": 318,
+        "grpo_validation": 24,
+        "sft_train": 132,
+        "sft_validation": 15
+      },
+      "333": {
+        "evaluation": 53,
+        "grpo_train": 195,
+        "grpo_validation": 15,
+        "sft_train": 81,
+        "sft_validation": 9
+      },
+      "334": {
+        "evaluation": 47,
+        "grpo_train": 173,
+        "grpo_validation": 13,
+        "sft_train": 72,
+        "sft_validation": 8
+      },
+      "44": {
+        "evaluation": 67,
+        "grpo_train": 246,
+        "grpo_validation": 19,
+        "sft_train": 102,
+        "sft_validation": 12
+      },
+      "444": {
+        "evaluation": 38,
+        "grpo_train": 136,
+        "grpo_validation": 11,
+        "sft_train": 57,
+        "sft_validation": 6
+      }
+    },
+    "project_splits": {
+      "evaluation": 471,
+      "grpo_train": 1723,
+      "grpo_validation": 132,
+      "sft_train": 716,
+      "sft_validation": 80
+    },
+    "total": 3122,
+    "upstream_test": 471,
+    "upstream_train": 2651
+  },
+  "output_schema": {
+    "columns": [
+      "task_id",
+      "composition",
+      "difficulty",
+      "source_split",
+      "prompt"
+    ],
+    "project_split_from_artifact_path": true,
+    "reference": "data/example.jsonl",
+    "source_split_values": [
+      "train",
+      "test"
+    ]
+  },
+  "schema_version": "travel-dataset-split-manifest-v2",
+  "source_files": [
+    {
+      "composition": "22",
+      "path": "environments/UserBench/data/travel22_multiturn_onechoice/train.parquet",
+      "rows": 570,
+      "sha256": "18232da195baaeff4afcfedf0a2df6af590e387e49cba5c8ad01a4dae6cfe7e1",
+      "upstream_split": "train"
+    },
+    {
+      "composition": "22",
+      "path": "environments/UserBench/data/travel22_multiturn_onechoice/test.parquet",
+      "rows": 101,
+      "sha256": "c0c7ca1715196b27fe0dabb1f7820f65e8c670b985c8a05fc5c71f07d60403b4",
+      "upstream_split": "test"
+    },
+    {
+      "composition": "33",
+      "path": "environments/UserBench/data/travel33_multiturn_onechoice/train.parquet",
+      "rows": 489,
+      "sha256": "bfb2ddf2d3dd86fad6dbfb93e3e1c1d603f6b4d54022cbc631e3475e8e69afa2",
+      "upstream_split": "train"
+    },
+    {
+      "composition": "33",
+      "path": "environments/UserBench/data/travel33_multiturn_onechoice/test.parquet",
+      "rows": 87,
+      "sha256": "572f122801f1d9abc9a1a67f91c0b20d98e2c51c46269c1586a6b2a58f26de36",
+      "upstream_split": "test"
+    },
+    {
+      "composition": "44",
+      "path": "environments/UserBench/data/travel44_multiturn_onechoice/train.parquet",
+      "rows": 379,
+      "sha256": "4207fad29295d89aaa194b0a03b5d91ddfda01545da554a4ef0f9d1af7e7e180",
+      "upstream_split": "train"
+    },
+    {
+      "composition": "44",
+      "path": "environments/UserBench/data/travel44_multiturn_onechoice/test.parquet",
+      "rows": 67,
+      "sha256": "1b438228d81f5d7bb3ddf9a1e6358b366b2d9f146db875c3704a177347787686",
+      "upstream_split": "test"
+    },
+    {
+      "composition": "2222",
+      "path": "environments/UserBench/data/travel2222_multiturn_onechoice/train.parquet",
+      "rows": 96,
+      "sha256": "66c9cc12a54c4cfd05904766b891a6d44ef66dc4476708d002ff14b26e763709",
+      "upstream_split": "train"
+    },
+    {
+      "composition": "2222",
+      "path": "environments/UserBench/data/travel2222_multiturn_onechoice/test.parquet",
+      "rows": 17,
+      "sha256": "b27ffba3bc425f60a6d24718ca29faeab43bee2526ac4ce18f5feaedbe5f25ce",
+      "upstream_split": "test"
+    },
+    {
+      "composition": "233",
+      "path": "environments/UserBench/data/travel233_multiturn_onechoice/train.parquet",
+      "rows": 341,
+      "sha256": "4e1c83c69ecefd418cfa6bd3086131286a346fb3b84a2ce5abdd7c347bbeab79",
+      "upstream_split": "train"
+    },
+    {
+      "composition": "233",
+      "path": "environments/UserBench/data/travel233_multiturn_onechoice/test.parquet",
+      "rows": 61,
+      "sha256": "624d5c70cc43480cf9a5e18707ef326573c67f3bf3997798d8753132b01266d4",
+      "upstream_split": "test"
+    },
+    {
+      "composition": "333",
+      "path": "environments/UserBench/data/travel333_multiturn_onechoice/train.parquet",
+      "rows": 300,
+      "sha256": "cd2966c4fdb3639ef5beb8c2f15a8bc071a90146743ac9b1416727b61ecd2e67",
+      "upstream_split": "train"
+    },
+    {
+      "composition": "333",
+      "path": "environments/UserBench/data/travel333_multiturn_onechoice/test.parquet",
+      "rows": 53,
+      "sha256": "5555de7005692473a2d2824f9dd9ea755f304e9fcd988ecf97af9740de800dd8",
+      "upstream_split": "test"
+    },
+    {
+      "composition": "334",
+      "path": "environments/UserBench/data/travel334_multiturn_onechoice/train.parquet",
+      "rows": 266,
+      "sha256": "2c1658f6692141012fde33f924992f3a06c62e2b1d7ef60a71c1a4021200e384",
+      "upstream_split": "train"
+    },
+    {
+      "composition": "334",
+      "path": "environments/UserBench/data/travel334_multiturn_onechoice/test.parquet",
+      "rows": 47,
+      "sha256": "4b64ace59d326efddf05690b2966b6d2422f0f780904567ef89e4dcdbb402a1a",
+      "upstream_split": "test"
+    },
+    {
+      "composition": "444",
+      "path": "environments/UserBench/data/travel444_multiturn_onechoice/train.parquet",
+      "rows": 210,
+      "sha256": "69e672ff1dc95f3dd9854c2efe47c27be1300ea696834dfe331e66005bc736f3",
+      "upstream_split": "train"
+    },
+    {
+      "composition": "444",
+      "path": "environments/UserBench/data/travel444_multiturn_onechoice/test.parquet",
+      "rows": 38,
+      "sha256": "1fe0996fb6f74e5004c266cf65b503e74a93ebb13a50ade78edea036bac0a2f9",
+      "upstream_split": "test"
+    }
+  ],
+  "split_spec": {
+    "compositions": [
+      "22",
+      "33",
+      "44",
+      "2222",
+      "233",
+      "333",
+      "334",
+      "444"
+    ],
+    "config_schema_version": "travel-dataset-split-v2",
+    "hash_seed": "userbench-onechoice-disjoint-v1",
+    "quotas": {
+      "22": {
+        "evaluation": 101,
+        "grpo_train": 371,
+        "grpo_validation": 28,
+        "sft_train": 154,
+        "sft_validation": 17
+      },
+      "2222": {
+        "evaluation": 17,
+        "grpo_train": 62,
+        "grpo_validation": 5,
+        "sft_train": 26,
+        "sft_validation": 3
+      },
+      "233": {
+        "evaluation": 61,
+        "grpo_train": 222,
+        "grpo_validation": 17,
+        "sft_train": 92,
+        "sft_validation": 10
+      },
+      "33": {
+        "evaluation": 87,
+        "grpo_train": 318,
+        "grpo_validation": 24,
+        "sft_train": 132,
+        "sft_validation": 15
+      },
+      "333": {
+        "evaluation": 53,
+        "grpo_train": 195,
+        "grpo_validation": 15,
+        "sft_train": 81,
+        "sft_validation": 9
+      },
+      "334": {
+        "evaluation": 47,
+        "grpo_train": 173,
+        "grpo_validation": 13,
+        "sft_train": 72,
+        "sft_validation": 8
+      },
+      "44": {
+        "evaluation": 67,
+        "grpo_train": 246,
+        "grpo_validation": 19,
+        "sft_train": 102,
+        "sft_validation": 12
+      },
+      "444": {
+        "evaluation": 38,
+        "grpo_train": 136,
+        "grpo_validation": 11,
+        "sft_train": 57,
+        "sft_validation": 6
+      }
+    },
+    "source_label": "environments/UserBench",
+    "split_version": "userbench-onechoice-disjoint-v1",
+    "target_ratios": {
+      "grpo_train": 0.65,
+      "grpo_validation": 0.05,
+      "sft_train": 0.27,
+      "sft_validation": 0.03
+    },
+    "variant": "multiturn_onechoice"
+  },
+  "upstream": {
+    "commit": "80506d2ab484cab843e60a2401ff3e0290d05b87",
+    "license": "Apache-2.0",
+    "name": "UserBench",
+    "url": "https://github.com/SalesforceAIResearch/UserBench"
+  }
+}

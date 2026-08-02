@@ -1,0 +1,77 @@
+schema_version = "travel-dataset-split-v2"
+variant = "multiturn_onechoice"
+split_version = "userbench-onechoice-disjoint-v1"
+hash_seed = "userbench-onechoice-disjoint-v1"
+source_label = "environments/UserBench"
+upstream_commit = "80506d2ab484cab843e60a2401ff3e0290d05b87"
+compositions = ["22", "33", "44", "2222", "233", "333", "334", "444"]
+
+[target_ratios]
+sft_train = 0.27
+sft_validation = 0.03
+grpo_train = 0.65
+grpo_validation = 0.05
+
+[composition."22"]
+train = 570
+test = 101
+sft_train = 154
+sft_validation = 17
+grpo_train = 371
+grpo_validation = 28
+
+[composition."33"]
+train = 489
+test = 87
+sft_train = 132
+sft_validation = 15
+grpo_train = 318
+grpo_validation = 24
+
+[composition."44"]
+train = 379
+test = 67
+sft_train = 102
+sft_validation = 12
+grpo_train = 246
+grpo_validation = 19
+
+[composition."2222"]
+train = 96
+test = 17
+sft_train = 26
+sft_validation = 3
+grpo_train = 62
+grpo_validation = 5
+
+[composition."233"]
+train = 341
+test = 61
+sft_train = 92
+sft_validation = 10
+grpo_train = 222
+grpo_validation = 17
+
+[composition."333"]
+train = 300
+test = 53
+sft_train = 81
+sft_validation = 9
+grpo_train = 195
+grpo_validation = 15
+
+[composition."334"]
+train = 266
+test = 47
+sft_train = 72
+sft_validation = 8
+grpo_train = 173
+grpo_validation = 13
+
+[composition."444"]
+train = 210
+test = 38
+sft_train = 57
+sft_validation = 6
+grpo_train = 136
+grpo_validation = 11

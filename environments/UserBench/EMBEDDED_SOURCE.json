@@ -1,0 +1,12 @@
+{
+  "name": "UserBench",
+  "upstream_url": "https://github.com/SalesforceAIResearch/UserBench",
+  "upstream_commit": "80506d2ab484cab843e60a2401ff3e0290d05b87",
+  "embedded_on": "2026-08-03",
+  "snapshot_method": "git archive",
+  "license": "Apache-2.0",
+  "license_file": "LICENSE.txt",
+  "local_modifications": [
+    "Added EMBEDDED_SOURCE.json provenance manifest; all upstream files are unchanged."
+  ]
+}

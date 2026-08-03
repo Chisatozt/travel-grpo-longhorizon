@@ -16,6 +16,7 @@ simulator:
   model: deepseek-v4-flash
 
 collection:
+  policy_version: teacher-state-machine-v2
   train_tasks: data/sft/tasks_train.jsonl
   validation_tasks: data/sft/tasks_validation.jsonl
   frozen_evaluation_tasks: data/evaluation/tasks.jsonl
@@ -25,6 +26,12 @@ collection:
   trajectory_attempts: 3
   strict_filter: true
   capture_upstream_diagnostics: true
+  reward_version: userbench-travel-reward-v2
+  minimum_terminal_reward: 0.7
+  require_zero_policy_penalty: true
+  fail_fast_on_strict_violation: true
+  checkpoint_each_task: true
+  resume_safe: true
   artifacts:
     accepted: "*.accepted.jsonl"
     rejected: "*.rejected.jsonl"

@@ -6,6 +6,7 @@ import copy
 import inspect
 import json
 import os
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -101,6 +102,18 @@ class TeacherRuntime:
 
 
 @dataclass(frozen=True)
+class TeacherRequestConstraint:
+    """Request-only phase constraints; never added to the archived tool schema."""
+
+    choice: ActionChoice
+    allowed_contents: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(value, str) or not value.strip() for value in self.allowed_contents):
+            raise ValueError("allowed_contents must contain non-empty strings")
+
+
+@dataclass(frozen=True)
 class TeacherToolCall:
     """Validated assistant tool call, independent of the OpenAI SDK types."""
 
@@ -109,6 +122,8 @@ class TeacherToolCall:
     content: str | None = None
     protocol_attempts: int = 1
     protocol_rejections: tuple[dict[str, Any], ...] = ()
+    latency_seconds: float = 0.0
+    usage: Mapping[str, int] = field(default_factory=dict)
 
     @property
     def parameters(self) -> dict[str, str]:
@@ -145,6 +160,7 @@ class TeacherClientProtocol(Protocol):
         messages: Sequence[Mapping[str, Any]],
         *,
         force_answer: bool = False,
+        constraint: TeacherRequestConstraint | None = None,
     ) -> TeacherToolCall: ...
 
     async def close(self) -> None: ...
@@ -152,6 +168,16 @@ class TeacherClientProtocol(Protocol):
 
 def _attribute(value: Any, name: str) -> Any:
     return value.get(name) if isinstance(value, Mapping) else getattr(value, name, None)
+
+
+def _usage_record(response: Any) -> dict[str, int]:
+    usage = _attribute(response, "usage")
+    return {
+        name: int(value)
+        for name in ("prompt_tokens", "completion_tokens", "total_tokens")
+        if isinstance((value := _attribute(usage, name)), int)
+        and not isinstance(value, bool)
+    }
 
 
 class OpenAICompatibleTeacherClient:
@@ -183,12 +209,19 @@ class OpenAICompatibleTeacherClient:
         messages: Sequence[Mapping[str, Any]],
         *,
         force_answer: bool = False,
+        constraint: TeacherRequestConstraint | None = None,
     ) -> TeacherToolCall:
         if not messages:
             raise TeacherProtocolError("teacher messages must not be empty")
         rejections: list[dict[str, Any]] = []
         correction: str | None = None
         locked_action: tuple[ActionChoice, str] | None = None
+        if force_answer:
+            forced = TeacherRequestConstraint(ActionChoice.ANSWER)
+            if constraint is not None and constraint.choice is not ActionChoice.ANSWER:
+                raise TeacherProtocolError("force_answer conflicts with request constraint")
+            constraint = constraint or forced
+        elapsed = 0.0
         for attempt in range(self.runtime.protocol_retries + 1):
             schema = copy.deepcopy(get_interact_with_env_schema())
             parameters = schema["function"]["parameters"]
@@ -199,8 +232,12 @@ class OpenAICompatibleTeacherClient:
                 "One short operational sentence for the next action, at most "
                 f"{self.runtime.thought_max_chars} characters. Do not include hidden chain of thought."
             )
-            if force_answer:
-                parameters["properties"]["choice"]["enum"] = ["answer"]
+            if constraint is not None:
+                parameters["properties"]["choice"]["enum"] = [constraint.choice.value]
+                if constraint.allowed_contents:
+                    parameters["properties"]["content"]["enum"] = list(
+                        constraint.allowed_contents
+                    )
             request: dict[str, Any] = {
                 "model": self.runtime.model,
                 "messages": self._protocol_messages(messages, attempt, correction),
@@ -213,7 +250,10 @@ class OpenAICompatibleTeacherClient:
             if self.runtime.thinking is not None:
                 request["extra_body"] = {"thinking": {"type": self.runtime.thinking}}
             try:
+                started = time.perf_counter()
                 response = await self._client.chat.completions.create(**request)
+                request_latency = time.perf_counter() - started
+                elapsed += request_latency
             except Exception as exc:
                 raise TeacherApiError(
                     f"teacher API request failed with {exc.__class__.__name__}"
@@ -235,11 +275,21 @@ class OpenAICompatibleTeacherClient:
                     error.reason_code = "thought_too_long"
                     error.thought_length = len(parsed.action.thought)
                     raise error
-                if force_answer and parsed.action.choice is not ActionChoice.ANSWER:
+                if constraint is not None and parsed.action.choice is not constraint.choice:
                     error = TeacherProtocolError(
-                        "teacher must answer because the trajectory is in its reserved answer phase"
+                        f"teacher choice must be {constraint.choice.value!r} in the current phase"
                     )
-                    error.reason_code = "reserved_phase_requires_answer"
+                    error.reason_code = "phase_requires_choice"
+                    raise error
+                if (
+                    constraint is not None
+                    and constraint.allowed_contents
+                    and parsed.action.content not in constraint.allowed_contents
+                ):
+                    error = TeacherProtocolError(
+                        "teacher content is outside the current phase allowlist"
+                    )
+                    error.reason_code = "phase_content_not_allowed"
                     raise error
                 return TeacherToolCall(
                     call_id=parsed.call_id,
@@ -247,12 +297,16 @@ class OpenAICompatibleTeacherClient:
                     content=parsed.content,
                     protocol_attempts=attempt + 1,
                     protocol_rejections=tuple(rejections),
+                    latency_seconds=elapsed,
+                    usage=_usage_record(response),
                 )
             except TeacherProtocolError as exc:
                 diagnostic: dict[str, Any] = {
                     "attempt": attempt + 1,
                     "reason": str(exc),
                     "reason_code": getattr(exc, "reason_code", "invalid_tool_call"),
+                    "latency_seconds": request_latency,
+                    "usage": _usage_record(response),
                 }
                 thought_length = getattr(exc, "thought_length", None)
                 if thought_length is not None:
@@ -318,11 +372,13 @@ class OpenAICompatibleTeacherClient:
                 "`thought` with one operational sentence no longer than "
                 f"{self.runtime.thought_max_chars} characters."
             )
-        if reason_code == "reserved_phase_requires_answer":
+        if reason_code in {"reserved_phase_requires_answer", "phase_requires_choice"}:
             return (
-                "The trajectory is in its reserved answer phase. Emit exactly one "
-                "interact_with_env call with choice=`answer` and one option ID."
+                "Follow the current phase choice enum exactly and emit one "
+                "interact_with_env call."
             )
+        if reason_code == "phase_content_not_allowed":
+            return "Copy one content value from the tool schema enum exactly."
         return (
             f"The previous completion was invalid: {error}. Emit exactly one valid "
             "interact_with_env tool call with only thought, choice, and content."
@@ -370,6 +426,12 @@ class OpenAICompatibleTeacherClient:
         content = _attribute(message, "content")
         if content is not None and not isinstance(content, str):
             raise TeacherProtocolError("teacher assistant content must be text or null")
+        if isinstance(content, str) and content.strip():
+            error = TeacherProtocolError(
+                "teacher assistant content must be empty when a tool call is present"
+            )
+            error.reason_code = "assistant_content_not_empty"
+            raise error
         return TeacherToolCall(call_id=call_id, action=action, content=content)
 
     async def close(self) -> None:

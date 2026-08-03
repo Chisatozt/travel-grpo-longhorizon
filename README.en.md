@@ -2,7 +2,7 @@
 
 A UserBench-based post-training and evaluation project for long-horizon travel-assistant agents.
 
-> Status: **early development**. The pinned UserBench snapshot, reproducible task partitioning, environment wrapper, teacher API trajectory collector, and veRL 0.6.1 adapter are implemented. Action-only SFT/GRPO launchers and final evaluation rollouts remain scaffolds.
+> Status: **early development**. The pinned UserBench snapshot, reproducible task partitioning, environment wrapper, Reward-v2-gated teacher collection, action-only LoRA/QLoRA SFT pipeline, and veRL 0.6.1 adapter are implemented. Formal SFT runs, GRPO launch completion, and final evaluation rollouts have not been executed.
 
 ## Intended pipeline
 

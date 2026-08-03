@@ -139,6 +139,7 @@ def test_verl_yaml_paths_and_simulator_roles_are_consistent():
         (config_root / "train/grpo/vanilla_grpo.yaml").read_text(encoding="utf-8")
     )
     multi_turn = grpo["actor_rollout_ref"]["rollout"]["multi_turn"]
+    assert grpo["data"]["apply_chat_template_kwargs"]["enable_thinking"] is False
     assert multi_turn["max_parallel_calls"] == 1
     assert multi_turn["tool_config_path"] == (
         "configs/tool_config/userbench_tools.yaml"

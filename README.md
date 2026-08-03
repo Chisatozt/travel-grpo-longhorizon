@@ -2,7 +2,7 @@
 
 面向长程旅游助手 Agent 的 UserBench 后训练与评测项目。
 
-> 当前状态：**早期开发**。固定版本的 UserBench 快照、可复现任务划分、环境包装、教师轨迹 API 采集和 veRL 0.6.1 适配层已经实现；action-only SFT/GRPO 训练启动和最终评测 rollout 尚未实现。
+> 当前状态：**早期开发**。固定版本的 UserBench 快照、可复现任务划分、环境包装、Reward v2 严格准入的教师轨迹采集、action-only LoRA/QLoRA SFT 流水线和 veRL 0.6.1 适配层已经实现；尚未执行正式 SFT、完整 GRPO 启动和最终评测 rollout。
 
 ## 目标流水线
 

@@ -1,9 +1,44 @@
 model:
   base: Qwen/Qwen3.5-2B
+  cache_dir: outputs/cache/huggingface
+  trust_remote_code: false
+  qlora: false
+  torch_dtype: bfloat16
 
 data:
   train_trajectories: outputs/teacher_trajectories/sft_train.accepted.jsonl
   validation_trajectories: outputs/teacher_trajectories/sft_validation.accepted.jsonl
+  tool_schema_path: configs/tool_config/userbench_tools.yaml
   assistant_loss: action_only
+  example_unit: assistant_turn
+  max_sequence_length: 16384
 
-# Optimizer, LoRA, batching, and checkpoint settings remain unimplemented.
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+training:
+  output_dir: outputs/sft/qwen3.5-2b-lora
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: cosine
+  optim: adamw_torch
+  num_train_epochs: 2
+  max_steps: -1
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+  logging_steps: 5
+  eval_strategy: steps
+  eval_steps: 50
+  save_strategy: steps
+  save_steps: 50
+  save_total_limit: 2
+  seed: 42
+  report_to: none

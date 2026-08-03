@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-# Placeholder SFT launcher. Not implemented in the scaffold.
+set -euo pipefail
+
+python scripts/train/sft/sft_train.py --config configs/train/sft/sft_lora.yaml "$@"

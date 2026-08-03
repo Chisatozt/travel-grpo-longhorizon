@@ -10,8 +10,10 @@ from travel_grpo.models.openai_compatible import (
     OpenAICompatibleTeacherClient,
     TeacherApiError,
     TeacherProtocolError,
+    TeacherRequestConstraint,
     TeacherRuntime,
 )
+from travel_grpo.envs.userbench_tools import ActionChoice
 
 
 def runtime():
@@ -173,6 +175,43 @@ def test_teacher_force_answer_narrows_tool_schema():
             "properties"
         ]["choice"]
         assert choice["enum"] == ["answer"]
+
+    asyncio.run(scenario())
+
+
+def test_teacher_request_constraint_narrows_choice_and_content():
+    async def scenario():
+        content = "Which hotel amenities are important to you?"
+        completions = FakeCompletions(
+            response({"thought": "ask", "choice": "action", "content": content})
+        )
+        client = OpenAICompatibleTeacherClient(
+            runtime(), client=FakeClient(completions)
+        )
+        await client.generate_action(
+            [{"role": "user", "content": "trip"}],
+            constraint=TeacherRequestConstraint(ActionChoice.ACTION, (content,)),
+        )
+        properties = completions.requests[0]["tools"][0]["function"]["parameters"][
+            "properties"
+        ]
+        assert properties["choice"]["enum"] == ["action"]
+        assert properties["content"]["enum"] == [content]
+
+    asyncio.run(scenario())
+
+
+def test_teacher_rejects_nonempty_assistant_prose_with_tool_call():
+    async def scenario():
+        value = response(
+            {"thought": "x", "choice": "search", "content": "hotels"}
+        )
+        value.choices[0].message.content = "I will search."
+        client = OpenAICompatibleTeacherClient(
+            runtime(), client=FakeClient(FakeCompletions(value))
+        )
+        with pytest.raises(TeacherProtocolError, match="must be empty"):
+            await client.generate_action([{"role": "user", "content": "trip"}])
 
     asyncio.run(scenario())
 

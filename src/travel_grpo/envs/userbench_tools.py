@@ -242,6 +242,86 @@ def _contains_hint(query: str, hint: str) -> bool:
     return re.search(rf"(?<![a-z0-9]){re.escape(hint)}(?![a-z0-9])", query) is not None
 
 
+def _hint_spans(query: str, hint: str) -> tuple[tuple[int, int], ...]:
+    pattern = rf"(?<![a-z0-9]){re.escape(hint)}(?![a-z0-9])"
+    return tuple(match.span() for match in re.finditer(pattern, query))
+
+
+_KNOWN_HINT_TOKENS = {
+    token
+    for fields in FIELD_QUERY_HINTS.values()
+    for hints in fields.values()
+    for hint in hints
+    for token in re.findall(r"[a-z0-9]+", hint.casefold())
+}
+
+
+def _normalize_query_words(value: str) -> str:
+    """Normalize only known hint inflections without stemming arbitrary text."""
+
+    words = re.findall(r"[a-z0-9]+", value.casefold().replace("_", " "))
+    normalized: list[str] = []
+    for word in words:
+        candidates: list[str] = []
+        if word.endswith("ies") and len(word) > 3:
+            candidates.append(word[:-3] + "y")
+        if word.endswith("es") and len(word) > 2:
+            candidates.append(word[:-2])
+        if word.endswith("s") and len(word) > 1:
+            candidates.append(word[:-1])
+        normalized.append(next((item for item in candidates if item in _KNOWN_HINT_TOKENS), word))
+    return " ".join(normalized)
+
+
+def action_field_matches(
+    content: str, task_dimensions: Sequence[str]
+) -> set[tuple[str, str]]:
+    """Return every deterministic aspect/field mentioned by a preference question."""
+
+    dimensions = {value for value in task_dimensions if value in FIELD_QUERY_HINTS}
+    query = _normalize_query_words(content)
+    explicit = {
+        aspect
+        for aspect in dimensions
+        if any(
+            _contains_hint(query, _normalize_query_words(hint))
+            for hint in ASPECT_QUERY_HINTS[aspect]
+        )
+    }
+    candidates = explicit or dimensions
+    result: set[tuple[str, str]] = set()
+    for aspect in candidates:
+        matches: list[tuple[str, tuple[int, int], int]] = []
+        for field, hints in FIELD_QUERY_HINTS[aspect].items():
+            for hint in hints:
+                normalized_hint = _normalize_query_words(hint)
+                matches.extend(
+                    (field, span, len(normalized_hint.split()))
+                    for span in _hint_spans(query, normalized_hint)
+                )
+        for field, span, width in matches:
+            shadowed = any(
+                other_field != field
+                and other_width > width
+                and other_span[0] <= span[0]
+                and other_span[1] >= span[1]
+                for other_field, other_span, other_width in matches
+            )
+            if not shadowed:
+                result.add((aspect, field))
+    return result
+
+
+def action_mentions_aspect(content: str, aspect: str) -> bool:
+    if aspect not in ASPECT_QUERY_HINTS:
+        return False
+    query = _normalize_query_words(content)
+    return any(
+        _contains_hint(query, _normalize_query_words(hint))
+        for hint in ASPECT_QUERY_HINTS[aspect]
+    )
+
+
 def semantic_action_signature(
     action: UserBenchAction, task_dimensions: Sequence[str]
 ) -> tuple[str, str] | None:
@@ -249,22 +329,7 @@ def semantic_action_signature(
 
     if action.choice is not ActionChoice.ACTION:
         return None
-    dimensions = {value for value in task_dimensions if value in FIELD_QUERY_HINTS}
-    query = " ".join(action.content.casefold().replace("_", " ").split())
-    explicit = {
-        aspect
-        for aspect in dimensions
-        if any(_contains_hint(query, hint) for hint in ASPECT_QUERY_HINTS[aspect])
-    }
-    if len(explicit) > 1:
-        return None
-    candidates = explicit or dimensions
-    matches = {
-        (aspect, field)
-        for aspect in candidates
-        for field, hints in FIELD_QUERY_HINTS[aspect].items()
-        if any(_contains_hint(query, hint) for hint in hints)
-    }
+    matches = action_field_matches(action.content, task_dimensions)
     return next(iter(matches)) if len(matches) == 1 else None
 
 
@@ -275,20 +340,8 @@ def action_query_issue(
 
     if action.choice is not ActionChoice.ACTION:
         return None
-    dimensions = {value for value in task_dimensions if value in FIELD_QUERY_HINTS}
-    query = " ".join(action.content.casefold().replace("_", " ").split())
-    explicit = {
-        aspect
-        for aspect in dimensions
-        if any(_contains_hint(query, hint) for hint in ASPECT_QUERY_HINTS[aspect])
-    }
-    matches = {
-        (aspect, field)
-        for aspect in (explicit or dimensions)
-        for field, hints in FIELD_QUERY_HINTS[aspect].items()
-        if any(_contains_hint(query, hint) for hint in hints)
-    }
-    if len(explicit) > 1 or len(matches) > 1:
+    matches = action_field_matches(action.content, task_dimensions)
+    if len({aspect for aspect, _ in matches}) > 1 or len(matches) > 1:
         return "bundled"
     if len(matches) == 0:
         return "vague"

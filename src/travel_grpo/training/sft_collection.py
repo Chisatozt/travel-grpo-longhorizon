@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
+import inspect
 import json
+import math
 import os
 import tempfile
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,28 +25,37 @@ from travel_grpo.envs.userbench_wrapper import (
     UserBenchEnvironmentConfig,
     UserBenchWrapper,
 )
-from travel_grpo.models.openai_compatible import TeacherClientProtocol
+from travel_grpo.envs.userbench_context import UserBenchSessionState
+from travel_grpo.envs.reward import REWARD_VERSION
+from travel_grpo.models.openai_compatible import (
+    TeacherClientProtocol,
+    TeacherRequestConstraint,
+)
 from travel_grpo.envs.userbench_tools import (
-    ActionChoice,
-    FIELD_QUERY_HINTS,
-    aspect_from_option_id,
     normalized_action_signature,
     semantic_action_signature,
 )
+from travel_grpo.training.teacher_policy import (
+    POLICY_VERSION,
+    AttemptStrategy,
+    TeacherPhase,
+    TeacherPolicyState,
+    canonical_content_for,
+)
 
-TRAJECTORY_SCHEMA_VERSION = "userbench-teacher-trajectory-v3"
-COLLECTION_DIAGNOSTIC_SCHEMA_VERSION = "userbench-teacher-diagnostic-v2"
+TRAJECTORY_SCHEMA_VERSION = "userbench-teacher-trajectory-v4"
+COLLECTION_DIAGNOSTIC_SCHEMA_VERSION = "userbench-teacher-diagnostic-v4"
 SIMULATOR_FALLBACK_TEXT = (
     "I'm sorry, I'm not sure how to respond to your latest utterance right now. "
     "Please try again."
 )
 TEACHER_ACTOR_POLICY = """Teacher policy for strict UserBench trajectories:
 - Emit exactly one interact_with_env call per turn. Keep thought to one short operational sentence of at most 200 characters.
-- Search one travel aspect at a time. Ask exactly one concrete preference field per action; never ask vague "other preferences" questions or bundle fields.
-- Field order: flight company/path/time/amenities/service; hotel or apartment name/room/amenities/service/rating; rental car brand/model/seats/insurance/service; restaurant cuisine/tags/rating/expectation.
-- Never repeat an exact action or an already asked aspect/field. Ask no more than four focused questions per aspect.
-- Reserve one turn per unanswered aspect plus two recovery turns. When only that reserve remains, answer an aspect instead of asking another question.
-- Submit exactly one option ID for each answer and complete every requested aspect within 20 environment calls."""
+- Follow the controller's current phase, aspect, and preference field exactly.
+- Ask one concrete preference field per action; never ask vague "other preferences" questions or bundle fields.
+- Search each travel aspect at most once, after its preferences are complete.
+- Answer immediately after search with exactly one visible option ID for the current aspect.
+- Never repeat an exact action, semantic preference field, search aspect, or answered aspect."""
 
 
 class TeacherCollectionError(RuntimeError):
@@ -52,9 +65,24 @@ class TeacherCollectionError(RuntimeError):
 class TeacherGenerationError(TeacherCollectionError):
     """Raised after request-local action correction attempts are exhausted."""
 
-    def __init__(self, message: str, diagnostics: Sequence[Mapping[str, Any]]) -> None:
+    def __init__(
+        self,
+        message: str,
+        diagnostics: Sequence[Mapping[str, Any]],
+        *,
+        reason_code: str = "teacher_action_exhausted",
+    ) -> None:
         super().__init__(message)
         self.diagnostics = tuple(dict(value) for value in diagnostics)
+        self.reason_code = reason_code
+
+
+class TeacherAttemptAbort(TeacherCollectionError):
+    """Stops an attempt as soon as strict admission becomes impossible."""
+
+    def __init__(self, reason_code: str, message: str) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
 
 
 def validate_teacher_collection_config(path: str | Path) -> Mapping[str, Any]:
@@ -101,6 +129,32 @@ def validate_teacher_collection_config(path: str | Path) -> Mapping[str, Any]:
         raise TeacherCollectionError(
             "teacher collection capture_upstream_diagnostics must be true"
         )
+    if collection.get("reward_version") != REWARD_VERSION:
+        raise TeacherCollectionError(
+            "teacher collection reward_version must be userbench-travel-reward-v2"
+        )
+    if collection.get("minimum_terminal_reward") != 0.7:
+        raise TeacherCollectionError(
+            "teacher collection minimum_terminal_reward must be 0.7"
+        )
+    if collection.get("require_zero_policy_penalty") is not True:
+        raise TeacherCollectionError(
+            "teacher collection must require zero policy penalty"
+        )
+    if collection.get("policy_version") != POLICY_VERSION:
+        raise TeacherCollectionError(
+            f"teacher collection policy_version must be {POLICY_VERSION}"
+        )
+    if collection.get("fail_fast_on_strict_violation") is not True:
+        raise TeacherCollectionError(
+            "teacher collection must fail fast on strict violations"
+        )
+    if collection.get("checkpoint_each_task") is not True:
+        raise TeacherCollectionError(
+            "teacher collection must checkpoint every completed task"
+        )
+    if collection.get("resume_safe") is not True:
+        raise TeacherCollectionError("teacher collection resume_safe must be true")
     return document
 
 
@@ -123,12 +177,19 @@ class TeacherTrajectory:
     simulator_search_fallbacks: int = 0
     generation_diagnostics: tuple[dict[str, Any], ...] = ()
     trajectory_attempt: int = 1
+    reward_breakdown: Mapping[str, Any] | None = None
+    policy_version: str = POLICY_VERSION
+    attempt_strategy: str = AttemptStrategy.NATURAL.value
+    teacher_request_count: int = 0
+    teacher_usage: Mapping[str, int] | None = None
 
     @property
     def total_reward(self) -> float:
         return float(sum(self.step_rewards))
 
     def to_record(self) -> dict[str, Any]:
+        reward = dict(self.reward_breakdown or {})
+        teacher_usage = dict(self.teacher_usage or {})
         return {
             "schema_version": TRAJECTORY_SCHEMA_VERSION,
             "task_id": self.task_id,
@@ -149,7 +210,66 @@ class TeacherTrajectory:
             "simulator_judgment_fallbacks": self.simulator_judgment_fallbacks,
             "simulator_search_fallbacks": self.simulator_search_fallbacks,
             "trajectory_attempt": self.trajectory_attempt,
+            "policy_version": self.policy_version,
+            "attempt_strategy": self.attempt_strategy,
+            "teacher_request_count": self.teacher_request_count,
+            "teacher_usage": teacher_usage,
+            "reward_version": reward.get("reward_version"),
+            "reward_valid": reward.get("reward_valid"),
+            "terminal_reward": reward.get("terminal_reward"),
+            "reward_breakdown": reward or None,
+            "completion_rate": reward.get("completion_rate"),
+            "correct_itinerary": reward.get("correct_itinerary"),
+            "gold_itinerary": reward.get("gold_itinerary"),
+            "fully_grounded": reward.get("fully_grounded"),
+            "active_preference_coverage": reward.get(
+                "active_preference_coverage"
+            ),
+            "passive_preference_coverage": reward.get(
+                "passive_preference_coverage"
+            ),
+            "policy_penalty": reward.get("policy_penalty"),
+            "invalid_actions": reward.get("invalid_actions", 0),
+            "exact_repeats": reward.get("exact_repeats", 0),
+            "semantic_repeats": reward.get("semantic_repeats", 0),
+            "ambiguous_actions": reward.get("ambiguous_actions", 0),
+            "unsearched_answers": reward.get("unsearched_answers", 0),
+            "wrong_answers": reward.get("wrong_answers", 0),
+            "infrastructure_errors": reward.get("infrastructure_errors", []),
         }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "TeacherTrajectory":
+        if record.get("schema_version") != TRAJECTORY_SCHEMA_VERSION:
+            raise TeacherCollectionError("checkpoint contains an unsupported trajectory")
+        return cls(
+            task_id=str(record["task_id"]),
+            composition=str(record["composition"]),
+            difficulty=str(record["difficulty"]),
+            source_split=str(record["source_split"]),
+            teacher_model=str(record["teacher_model"]),
+            simulator_model=str(record["simulator_model"]),
+            messages=tuple(copy.deepcopy(record["messages"])),
+            step_rewards=tuple(float(value) for value in record["step_rewards"]),
+            terminated=record.get("terminated") is True,
+            truncated=record.get("truncated") is True,
+            expected_aspects=tuple(str(value) for value in record["expected_aspects"]),
+            answered_aspects=tuple(str(value) for value in record["answered_aspects"]),
+            simulator_fallbacks=int(record.get("simulator_fallbacks", 0)),
+            simulator_judgment_fallbacks=int(
+                record.get("simulator_judgment_fallbacks", 0)
+            ),
+            simulator_search_fallbacks=int(record.get("simulator_search_fallbacks", 0)),
+            generation_diagnostics=tuple(
+                copy.deepcopy(record.get("generation_diagnostics", ()))
+            ),
+            trajectory_attempt=int(record.get("trajectory_attempt", 1)),
+            reward_breakdown=copy.deepcopy(record.get("reward_breakdown")),
+            policy_version=str(record.get("policy_version", "")),
+            attempt_strategy=str(record.get("attempt_strategy", "")),
+            teacher_request_count=int(record.get("teacher_request_count", 0)),
+            teacher_usage=copy.deepcopy(record.get("teacher_usage", {})),
+        )
 
 
 @dataclass(frozen=True)
@@ -162,6 +282,8 @@ class TeacherAttemptDiagnostic:
     error_type: str | None = None
     error_message: str | None = None
     partial_trajectory: Mapping[str, Any] | None = None
+    policy_version: str = POLICY_VERSION
+    attempt_strategy: str = AttemptStrategy.NATURAL.value
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -169,6 +291,8 @@ class TeacherAttemptDiagnostic:
             "task_id": self.task_id,
             "attempt": self.attempt,
             "accepted": self.accepted,
+            "policy_version": self.policy_version,
+            "attempt_strategy": self.attempt_strategy,
             "rejection_reasons": list(self.rejection_reasons),
             "generation_diagnostics": list(self.generation_diagnostics),
             "error_type": self.error_type,
@@ -179,6 +303,31 @@ class TeacherAttemptDiagnostic:
                 else dict(self.partial_trajectory)
             ),
         }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "TeacherAttemptDiagnostic":
+        if record.get("schema_version") != COLLECTION_DIAGNOSTIC_SCHEMA_VERSION:
+            raise TeacherCollectionError("checkpoint contains unsupported diagnostics")
+        return cls(
+            task_id=str(record["task_id"]),
+            attempt=int(record["attempt"]),
+            accepted=record.get("accepted") is True,
+            rejection_reasons=tuple(str(value) for value in record["rejection_reasons"]),
+            generation_diagnostics=tuple(
+                copy.deepcopy(record.get("generation_diagnostics", ()))
+            ),
+            error_type=(
+                None if record.get("error_type") is None else str(record["error_type"])
+            ),
+            error_message=(
+                None
+                if record.get("error_message") is None
+                else str(record["error_message"])
+            ),
+            partial_trajectory=copy.deepcopy(record.get("partial_trajectory")),
+            policy_version=str(record.get("policy_version", "")),
+            attempt_strategy=str(record.get("attempt_strategy", "")),
+        )
 
 
 @dataclass(frozen=True)
@@ -200,7 +349,38 @@ class TeacherTaskOutcome:
             "rejection_reasons": list(final.rejection_reasons),
             "error_type": final.error_type,
             "error_message": final.error_message,
+            "policy_version": final.policy_version,
+            "attempt_strategy": final.attempt_strategy,
         }
+
+    def to_checkpoint_record(self) -> dict[str, Any]:
+        return {
+            "schema_version": "userbench-teacher-task-checkpoint-v1",
+            "policy_version": POLICY_VERSION,
+            "task_id": self.task_id,
+            "trajectory": None if self.trajectory is None else self.trajectory.to_record(),
+            "attempts": [value.to_record() for value in self.attempts],
+        }
+
+    @classmethod
+    def from_checkpoint_record(cls, record: Mapping[str, Any]) -> "TeacherTaskOutcome":
+        if record.get("schema_version") != "userbench-teacher-task-checkpoint-v1":
+            raise TeacherCollectionError("unsupported teacher task checkpoint")
+        if record.get("policy_version") != POLICY_VERSION:
+            raise TeacherCollectionError("teacher task checkpoint policy mismatch")
+        trajectory_record = record.get("trajectory")
+        return cls(
+            task_id=str(record["task_id"]),
+            trajectory=(
+                None
+                if trajectory_record is None
+                else TeacherTrajectory.from_record(trajectory_record)
+            ),
+            attempts=tuple(
+                TeacherAttemptDiagnostic.from_record(value)
+                for value in record.get("attempts", ())
+            ),
+        )
 
 
 def load_teacher_task_pool(
@@ -316,48 +496,6 @@ def _simulator_diagnostic_count(result: Any, name: str) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
-def _duplicate_correction(
-    *,
-    action: Any,
-    semantic: tuple[str, str] | None,
-    dimensions: Sequence[str],
-    completed_semantic_fields: set[tuple[str, str]],
-    answered_aspects: set[str],
-    generation_attempt: int,
-    force_answer: bool,
-) -> str:
-    completed = (
-        ", ".join(
-            f"{aspect}/{field}" for aspect, field in sorted(completed_semantic_fields)
-        )
-        or "none"
-    )
-    available = [
-        f"{aspect}/{field}"
-        for aspect in dimensions
-        if aspect not in answered_aspects
-        for field in FIELD_QUERY_HINTS[aspect]
-        if (aspect, field) not in completed_semantic_fields
-    ]
-    available_text = ", ".join(available) or "no unasked preference fields"
-    if semantic is not None:
-        duplicate = f"{semantic[0]}/{semantic[1]}"
-    else:
-        duplicate = f"exact {action.choice.value} choice/content"
-    answer_rule = (
-        " You are in the reserved answer phase: submit one option ID for an unanswered aspect."
-        if force_answer
-        else ""
-    )
-    return (
-        f"Duplicate-action correction {generation_attempt}: `{duplicate}` was already "
-        f"committed. Completed preference fields: {completed}. Available unasked fields: "
-        f"{available_text}. Do not ask `{duplicate}` again. Choose one available field, "
-        "switch aspect, search if needed, or answer when grounded. Emit exactly one "
-        f"interact_with_env call.{answer_rule}"
-    )
-
-
 def _partial_trajectory_record(
     *,
     task_id: str,
@@ -373,6 +511,8 @@ def _partial_trajectory_record(
     simulator_search_fallbacks: int,
     terminated: bool,
     truncated: bool,
+    teacher_request_count: int,
+    teacher_usage: Mapping[str, int],
 ) -> dict[str, Any]:
     """Build a credential-free rejected-attempt snapshot for diagnosis."""
 
@@ -395,6 +535,8 @@ def _partial_trajectory_record(
         "simulator_search_fallbacks": simulator_search_fallbacks,
         "terminated": terminated,
         "truncated": truncated,
+        "teacher_request_count": teacher_request_count,
+        "teacher_usage": dict(teacher_usage),
     }
 
 
@@ -424,6 +566,25 @@ def _message_contract_errors(messages: Sequence[Mapping[str, Any]]) -> tuple[str
     return tuple(sorted(set(errors)))
 
 
+def _feedback_policy_errors(
+    messages: Sequence[Mapping[str, Any]],
+) -> tuple[str, ...]:
+    """Map deterministic UserBench rejection feedback to stable SFT reasons."""
+
+    errors: set[str] = set()
+    for message in messages:
+        if message.get("role") != "tool":
+            continue
+        content = str(message.get("content") or "")
+        if "too vague and general" in content:
+            errors.add("vague_action_feedback")
+        if "already recommended an option" in content:
+            errors.add("duplicate_recommendation_feedback")
+        if "Invalid option ID format" in content:
+            errors.add("invalid_option_id_feedback")
+    return tuple(sorted(errors))
+
+
 def trajectory_rejection_reasons(trajectory: TeacherTrajectory) -> tuple[str, ...]:
     """Apply the strict SFT admission gate to a completed collection attempt."""
 
@@ -441,6 +602,42 @@ def trajectory_rejection_reasons(trajectory: TeacherTrajectory) -> tuple[str, ..
     if trajectory.simulator_search_fallbacks:
         reasons.append("simulator_search_fallback")
     reasons.extend(_message_contract_errors(trajectory.messages))
+    reasons.extend(_feedback_policy_errors(trajectory.messages))
+    reward = trajectory.reward_breakdown
+    if not isinstance(reward, Mapping):
+        reasons.append("missing_reward_evidence")
+    else:
+        if reward.get("reward_version") != REWARD_VERSION:
+            reasons.append("wrong_reward_version")
+        if reward.get("reward_valid") is not True:
+            reasons.append("reward_invalid")
+        if reward.get("completion_rate") != 1.0:
+            reasons.append("incomplete_reward_completion")
+        if reward.get("correct_itinerary") is not True:
+            reasons.append("incorrect_itinerary")
+        policy_penalty = reward.get("policy_penalty")
+        if not isinstance(policy_penalty, (int, float)) or isinstance(
+            policy_penalty, bool
+        ) or float(policy_penalty) != 0.0:
+            reasons.append("policy_penalty")
+        terminal_reward = reward.get("terminal_reward")
+        if not isinstance(terminal_reward, (int, float)) or isinstance(
+            terminal_reward, bool
+        ) or not math.isfinite(float(terminal_reward)) or float(terminal_reward) < 0.7:
+            reasons.append("terminal_reward_below_threshold")
+        for field in (
+            "invalid_actions",
+            "exact_repeats",
+            "semantic_repeats",
+            "ambiguous_actions",
+            "unsearched_answers",
+            "wrong_answers",
+        ):
+            value = reward.get(field, 0)
+            if not isinstance(value, int) or isinstance(value, bool) or value != 0:
+                reasons.append(field)
+        if reward.get("infrastructure_errors"):
+            reasons.append("infrastructure_error")
     return tuple(sorted(set(reasons)))
 
 
@@ -453,14 +650,12 @@ async def collect_teacher_trajectory(
     source_root: str | Path | None = None,
     trajectory_attempt: int = 1,
 ) -> TeacherTrajectory:
-    """Collect one tool-only trajectory without sharing actor/simulator clients."""
+    """Collect one state-machine-controlled tool trajectory."""
 
     if teacher.runtime.model.casefold() != DEEPSEEK_V4_FLASH_MODEL:
         raise TeacherCollectionError("teacher must use deepseek-v4-flash")
     if simulator.role is not SimulatorRole.COLLECTION:
-        raise TeacherCollectionError(
-            "teacher collection requires collection simulator role"
-        )
+        raise TeacherCollectionError("teacher collection requires collection simulator role")
     if simulator.model.casefold() != DEEPSEEK_V4_FLASH_MODEL:
         raise TeacherCollectionError("collection simulator must use deepseek-v4-flash")
 
@@ -470,6 +665,7 @@ async def collect_teacher_trajectory(
         raise TeacherCollectionError("teacher task is missing task_id or prompt")
     messages = _prepare_teacher_messages(prompt)
     dimensions = task_dimensions(task_id)
+    strategy = AttemptStrategy.for_attempt(trajectory_attempt)
     wrapper = wrapper_factory(
         task_id,
         simulator,
@@ -487,94 +683,176 @@ async def collect_teacher_trajectory(
     simulator_fallbacks = 0
     simulator_judgment_fallbacks = 0
     simulator_search_fallbacks = 0
+    reward_state: UserBenchSessionState | None = None
+    reward_breakdown: dict[str, Any] | None = None
+    teacher_request_count = 0
+    teacher_usage: Counter[str] = Counter()
     try:
         wrapper.reset()
+        reward_task = wrapper.reward_task()
+        reward_state = UserBenchSessionState(
+            request_id=f"teacher-{task_id}-{trajectory_attempt}",
+            task_id=task_id,
+            wrapper=wrapper,
+            reward_task=reward_task,
+            reward_snapshot=wrapper.reward_snapshot(),
+        )
+        policy = TeacherPolicyState(reward_task, strategy)
         for turn in range(wrapper.config.max_steps):
-            remaining_turns = wrapper.config.max_steps - turn
-            unanswered = set(dimensions) - answered_aspects
-            force_answer = bool(unanswered) and remaining_turns <= len(unanswered) + 2
-            request_messages: Sequence[Mapping[str, Any]] = messages
+            try:
+                plan = policy.next_plan(reward_state, messages)
+            except RuntimeError as exc:
+                code = str(exc)
+                raise TeacherAttemptAbort(code, f"task {task_id!r}: {code}") from exc
+
             tool_call = None
             for generation_attempt in range(1, teacher.runtime.action_retries + 2):
-                candidate = await teacher.generate_action(
-                    request_messages, force_answer=force_answer
+                instruction = plan.instruction(generation_attempt)
+                request_messages = [
+                    *messages,
+                    {"role": "user", "content": instruction},
+                ]
+                strongest_retry = (
+                    strategy is AttemptStrategy.CANONICAL
+                    or generation_attempt > teacher.runtime.action_retries
+                    or (
+                        strategy is AttemptStrategy.STRICT
+                        and generation_attempt >= teacher.runtime.action_retries
+                    )
                 )
+                allowed_contents = (
+                    canonical_content_for(plan)
+                    if strongest_retry or plan.phase is TeacherPhase.ANSWER
+                    else ()
+                )
+                constraint = TeacherRequestConstraint(plan.choice, allowed_contents)
+                candidate = await teacher.generate_action(
+                    request_messages,
+                    constraint=constraint,
+                )
+                teacher_request_count += candidate.protocol_attempts
+                teacher_usage.update(candidate.usage)
+                for protocol_rejection in candidate.protocol_rejections:
+                    usage = protocol_rejection.get("usage")
+                    if isinstance(usage, Mapping):
+                        teacher_usage.update(
+                            {
+                                str(name): int(value)
+                                for name, value in usage.items()
+                                if isinstance(value, int) and not isinstance(value, bool)
+                            }
+                        )
                 for rejection in candidate.protocol_rejections:
                     generation_diagnostics.append(
                         {
                             "environment_turn": turn + 1,
                             "generation_attempt": generation_attempt,
                             "reason": "teacher_protocol_retry",
+                            "phase": plan.phase.value,
+                            "aspect": plan.aspect,
+                            "field": plan.field,
+                            "attempt_strategy": strategy.value,
                             "detail": dict(rejection),
                         }
                     )
                 exact = normalized_action_signature(candidate.action)
                 semantic = semantic_action_signature(candidate.action, dimensions)
-                rejection_reason = None
-                if exact in exact_signatures:
+                rejection_reason = plan.validate(candidate.action)
+                if rejection_reason is None and exact in exact_signatures:
                     rejection_reason = "duplicate_action"
-                elif semantic is not None and semantic in semantic_signatures:
+                if (
+                    rejection_reason is None
+                    and semantic is not None
+                    and semantic in semantic_signatures
+                ):
                     rejection_reason = "semantic_duplicate_action"
                 if rejection_reason is None:
                     tool_call = candidate
                     break
-                diagnostic = {
-                    "environment_turn": turn + 1,
-                    "generation_attempt": generation_attempt,
-                    "reason": rejection_reason,
-                    "choice": candidate.action.choice.value,
-                    "semantic_aspect": semantic[0] if semantic else None,
-                    "semantic_field": semantic[1] if semantic else None,
-                    "force_answer": force_answer,
-                }
-                generation_diagnostics.append(diagnostic)
+                content = candidate.action.content
+                generation_diagnostics.append(
+                    {
+                        "environment_turn": turn + 1,
+                        "generation_attempt": generation_attempt,
+                        "reason": rejection_reason,
+                        "phase": plan.phase.value,
+                        "aspect": plan.aspect,
+                        "field": plan.field,
+                        "choice": candidate.action.choice.value,
+                        "content": content[:500],
+                        "content_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                        "thought_length": len(candidate.action.thought),
+                        "attempt_strategy": strategy.value,
+                        "canonical_constraint": bool(allowed_contents),
+                    }
+                )
                 if generation_attempt > teacher.runtime.action_retries:
                     raise TeacherGenerationError(
-                        f"task {task_id!r} exhausted duplicate-action retries",
+                        f"task {task_id!r} exhausted action retries: {rejection_reason}",
                         generation_diagnostics,
+                        reason_code=f"teacher_action_exhausted.{rejection_reason}",
                     )
-                correction = {
-                    "role": "user",
-                    "content": _duplicate_correction(
-                        action=candidate.action,
-                        semantic=semantic,
-                        dimensions=dimensions,
-                        completed_semantic_fields=semantic_signatures,
-                        answered_aspects=answered_aspects,
-                        generation_attempt=generation_attempt,
-                        force_answer=force_answer,
-                    ),
-                }
-                request_messages = [*messages, correction]
             assert tool_call is not None
+
+            before_snapshot = reward_state.reward_snapshot
+            before_wrong = reward_state.wrong_answers
+            before_unsearched = reward_state.unsearched_answers
             result = await wrapper.astep(tool_call.action)
+            after_snapshot = wrapper.reward_snapshot()
+            reward_state.record_step(result, tool_call.action, after_snapshot)
+            policy.record_committed(plan)
             exact_signatures.add(normalized_action_signature(tool_call.action))
             semantic = semantic_action_signature(tool_call.action, dimensions)
             if semantic is not None:
                 semantic_signatures.add(semantic)
-            if tool_call.action.choice is ActionChoice.ANSWER:
-                aspect = aspect_from_option_id(tool_call.action.content)
-                if aspect in dimensions:
-                    answered_aspects.add(aspect)
-            if _simulator_fallback(result):
-                simulator_fallbacks += 1
-            simulator_judgment_fallbacks += _simulator_diagnostic_count(
+            answered_aspects = set(reward_state.answers)
+
+            response_fallback = _simulator_fallback(result)
+            judgment_fallbacks = _simulator_diagnostic_count(
                 result, "userbench_judgment_fallbacks"
             )
-            simulator_search_fallbacks += _simulator_diagnostic_count(
+            search_fallbacks = _simulator_diagnostic_count(
                 result, "userbench_search_fallbacks"
+            )
+            if response_fallback:
+                simulator_fallbacks += 1
+            simulator_judgment_fallbacks += judgment_fallbacks
+            simulator_search_fallbacks += search_fallbacks
+            active_delta = (
+                0
+                if before_snapshot is None
+                else max(
+                    0,
+                    after_snapshot.active_elicited_count
+                    - before_snapshot.active_elicited_count,
+                )
+            )
+            passive_delta = (
+                0
+                if before_snapshot is None
+                else max(
+                    0,
+                    after_snapshot.passive_elicited_count
+                    - before_snapshot.passive_elicited_count,
+                )
             )
             committed_actions.append(
                 {
                     "environment_turn": turn + 1,
+                    "phase": plan.phase.value,
+                    "aspect": plan.aspect,
+                    "field": plan.field,
+                    "attempt_strategy": strategy.value,
                     "choice": tool_call.action.choice.value,
                     "content": tool_call.action.content,
                     "thought_length": len(tool_call.action.thought),
-                    "normalized_signature": normalized_action_signature(
-                        tool_call.action
-                    ),
+                    "normalized_signature": normalized_action_signature(tool_call.action),
                     "semantic_aspect": semantic[0] if semantic else None,
                     "semantic_field": semantic[1] if semantic else None,
+                    "active_preference_delta": active_delta,
+                    "passive_preference_delta": passive_delta,
+                    "teacher_latency_seconds": tool_call.latency_seconds,
+                    "teacher_usage": dict(tool_call.usage),
                     "reward": result.reward,
                     "terminated": result.terminated,
                     "truncated": result.truncated,
@@ -592,12 +870,48 @@ async def collect_teacher_trajectory(
             rewards.append(result.reward)
             terminated = result.terminated
             truncated = result.truncated
+
+            feedback = result.observation.to_tool_text()
+            fail_reason = None
+            if response_fallback:
+                fail_reason = "simulator.response_fallback"
+            elif judgment_fallbacks:
+                fail_reason = "simulator.judgment_fallback"
+            elif search_fallbacks:
+                fail_reason = "simulator.search_fallback"
+            elif "too vague and general" in feedback:
+                fail_reason = "environment.vague_action_feedback"
+            elif "already recommended an option" in feedback:
+                fail_reason = "environment.duplicate_recommendation"
+            elif "Invalid option ID format" in feedback:
+                fail_reason = "environment.invalid_option_id"
+            elif reward_state.wrong_answers > before_wrong:
+                fail_reason = "environment.wrong_answer"
+            elif reward_state.unsearched_answers > before_unsearched:
+                fail_reason = "environment.unsearched_answer"
+            elif (
+                plan.phase is TeacherPhase.SEARCH
+                and plan.aspect not in reward_state.searched_aspects
+            ):
+                fail_reason = "environment.search_not_recorded"
+            elif (
+                plan.phase is TeacherPhase.ANSWER
+                and plan.aspect not in reward_state.answers
+            ):
+                fail_reason = "environment.answer_not_recorded"
+            if fail_reason is not None:
+                raise TeacherAttemptAbort(
+                    fail_reason,
+                    f"task {task_id!r} cannot pass strict admission: {fail_reason}",
+                )
             if result.done:
                 break
         if not (terminated or truncated):
-            raise TeacherCollectionError(
-                f"task {task_id!r} exceeded 20 calls without an environment terminal state"
+            raise TeacherAttemptAbort(
+                "environment.max_steps_without_terminal",
+                f"task {task_id!r} exceeded 20 calls without a terminal state",
             )
+        reward_breakdown = reward_state.reward_report()
     except Exception as exc:
         exc.partial_trajectory = _partial_trajectory_record(
             task_id=task_id,
@@ -613,6 +927,8 @@ async def collect_teacher_trajectory(
             simulator_search_fallbacks=simulator_search_fallbacks,
             terminated=terminated,
             truncated=truncated,
+            teacher_request_count=teacher_request_count,
+            teacher_usage=teacher_usage,
         )
         raise
     finally:
@@ -630,14 +946,17 @@ async def collect_teacher_trajectory(
         terminated=terminated,
         truncated=truncated,
         expected_aspects=dimensions,
-        answered_aspects=tuple(
-            value for value in dimensions if value in answered_aspects
-        ),
+        answered_aspects=tuple(value for value in dimensions if value in answered_aspects),
         simulator_fallbacks=simulator_fallbacks,
         simulator_judgment_fallbacks=simulator_judgment_fallbacks,
         simulator_search_fallbacks=simulator_search_fallbacks,
         generation_diagnostics=tuple(generation_diagnostics),
         trajectory_attempt=trajectory_attempt,
+        reward_breakdown=reward_breakdown,
+        policy_version=POLICY_VERSION,
+        attempt_strategy=strategy.value,
+        teacher_request_count=teacher_request_count,
+        teacher_usage=dict(teacher_usage),
     )
 
 
@@ -713,6 +1032,7 @@ async def collect_teacher_task_with_retries(
                             ),
                         }
                     ),
+                    attempt_strategy=trajectory.attempt_strategy,
                 )
             )
             if accepted:
@@ -729,11 +1049,18 @@ async def collect_teacher_task_with_retries(
                     task_id=task_id,
                     attempt=attempt,
                     accepted=False,
-                    rejection_reasons=("collection_error",),
+                    rejection_reasons=(
+                        getattr(
+                            exc,
+                            "reason_code",
+                            f"collection_error.{exc.__class__.__name__}",
+                        ),
+                    ),
                     generation_diagnostics=tuple(diagnostics),
                     error_type=exc.__class__.__name__,
                     error_message=str(exc),
                     partial_trajectory=getattr(exc, "partial_trajectory", None),
+                    attempt_strategy=AttemptStrategy.for_attempt(attempt).value,
                 )
             )
     return TeacherTaskOutcome(task_id, None, tuple(attempts))
@@ -748,6 +1075,7 @@ async def collect_teacher_outcomes(
     max_attempts: int = 3,
     wrapper_factory: WrapperFactory = UserBenchWrapper,
     source_root: str | Path | None = None,
+    on_outcome: Callable[[TeacherTaskOutcome], Any] | None = None,
 ) -> tuple[TeacherTaskOutcome, ...]:
     """Collect strict task outcomes concurrently while preserving task order."""
 
@@ -757,7 +1085,7 @@ async def collect_teacher_outcomes(
 
     async def collect(task: Mapping[str, Any]) -> TeacherTaskOutcome:
         async with semaphore:
-            return await collect_teacher_task_with_retries(
+            outcome = await collect_teacher_task_with_retries(
                 task,
                 teacher=teacher,
                 simulator=simulator,
@@ -765,8 +1093,170 @@ async def collect_teacher_outcomes(
                 wrapper_factory=wrapper_factory,
                 source_root=source_root,
             )
+            if on_outcome is not None:
+                result = on_outcome(outcome)
+                if inspect.isawaitable(result):
+                    await result
+            return outcome
 
     return tuple(await asyncio.gather(*(collect(task) for task in tasks)))
+
+
+def _atomic_json_record(record: Mapping[str, Any], destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(
+                dict(record),
+                handle,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def initialize_teacher_run(
+    run_dir: str | Path,
+    task_ids: Sequence[str],
+    *,
+    resume: bool = False,
+) -> Path:
+    """Create or validate a resume-safe per-task checkpoint directory."""
+
+    root = Path(run_dir)
+    manifest_path = root / "manifest.json"
+    expected = {
+        "schema_version": "userbench-teacher-run-v1",
+        "policy_version": POLICY_VERSION,
+        "task_ids": list(task_ids),
+    }
+    if manifest_path.exists():
+        if not resume:
+            raise FileExistsError(
+                f"teacher run already exists; pass --resume: {root}"
+            )
+        try:
+            current = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise TeacherCollectionError("teacher run manifest is unreadable") from exc
+        if current != expected:
+            raise TeacherCollectionError(
+                "teacher run manifest does not match policy or ordered task IDs"
+            )
+    else:
+        if resume:
+            raise FileNotFoundError(f"teacher run does not exist: {root}")
+        _atomic_json_record(expected, manifest_path)
+    (root / "tasks").mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def teacher_outcome_checkpoint_path(run_dir: str | Path, task_id: str) -> Path:
+    digest = hashlib.sha256(task_id.encode("utf-8")).hexdigest()
+    return Path(run_dir) / "tasks" / f"{digest}.json"
+
+
+def write_teacher_outcome_checkpoint(
+    outcome: TeacherTaskOutcome, run_dir: str | Path
+) -> Path:
+    destination = teacher_outcome_checkpoint_path(run_dir, outcome.task_id)
+    _atomic_json_record(outcome.to_checkpoint_record(), destination)
+    return destination
+
+
+def load_teacher_outcome_checkpoints(
+    run_dir: str | Path, task_ids: Sequence[str]
+) -> dict[str, TeacherTaskOutcome]:
+    outcomes: dict[str, TeacherTaskOutcome] = {}
+    for task_id in task_ids:
+        path = teacher_outcome_checkpoint_path(run_dir, task_id)
+        if not path.exists():
+            continue
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise TeacherCollectionError(f"invalid task checkpoint: {path}") from exc
+        outcome = TeacherTaskOutcome.from_checkpoint_record(record)
+        if outcome.task_id != task_id:
+            raise TeacherCollectionError("task checkpoint ID does not match its filename")
+        outcomes[task_id] = outcome
+    return outcomes
+
+
+def summarize_teacher_outcomes(
+    outcomes: Sequence[TeacherTaskOutcome],
+) -> dict[str, Any]:
+    """Return a credential-free run summary suitable for progress review."""
+
+    rejection_reasons: Counter[str] = Counter()
+    generation_reasons: Counter[str] = Counter()
+    environment_steps = 0
+    teacher_requests = 0
+    teacher_usage: Counter[str] = Counter()
+    for outcome in outcomes:
+        for attempt in outcome.attempts:
+            rejection_reasons.update(attempt.rejection_reasons)
+            diagnostics = attempt.generation_diagnostics
+            generation_reasons.update(
+                str(value.get("reason", "unknown")) for value in diagnostics
+            )
+            partial = attempt.partial_trajectory or {}
+            if attempt.accepted and outcome.trajectory is not None:
+                steps = len(outcome.trajectory.step_rewards)
+                recorded_requests = outcome.trajectory.teacher_request_count
+                recorded_usage = outcome.trajectory.teacher_usage or {}
+            else:
+                steps = int(
+                    partial.get(
+                        "environment_steps_completed", partial.get("num_steps", 0)
+                    )
+                )
+                recorded_requests = int(partial.get("teacher_request_count", 0))
+                recorded_usage = partial.get("teacher_usage", {})
+            environment_steps += steps
+            action_rejections = sum(
+                value.get("reason") != "teacher_protocol_retry"
+                for value in diagnostics
+            )
+            protocol_retries = sum(
+                value.get("reason") == "teacher_protocol_retry"
+                for value in diagnostics
+            )
+            teacher_requests += recorded_requests or (
+                steps + action_rejections + protocol_retries
+            )
+            if isinstance(recorded_usage, Mapping):
+                teacher_usage.update(
+                    {
+                        str(name): int(value)
+                        for name, value in recorded_usage.items()
+                        if isinstance(value, int) and not isinstance(value, bool)
+                    }
+                )
+    accepted = sum(value.accepted for value in outcomes)
+    return {
+        "tasks": len(outcomes),
+        "accepted": accepted,
+        "rejected": len(outcomes) - accepted,
+        "acceptance_rate": 0.0 if not outcomes else accepted / len(outcomes),
+        "attempts": sum(len(value.attempts) for value in outcomes),
+        "environment_steps": environment_steps,
+        "estimated_teacher_requests": teacher_requests,
+        "teacher_usage": dict(sorted(teacher_usage.items())),
+        "rejection_reasons": dict(sorted(rejection_reasons.items())),
+        "generation_reasons": dict(sorted(generation_reasons.items())),
+    }
 
 
 def write_teacher_trajectories(

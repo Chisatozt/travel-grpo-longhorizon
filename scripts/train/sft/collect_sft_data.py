@@ -24,8 +24,12 @@ from travel_grpo.models.openai_compatible import (  # noqa: E402
 from travel_grpo.training.sft_collection import (  # noqa: E402
     assert_disjoint_from_evaluation,
     collect_teacher_outcomes,
+    initialize_teacher_run,
+    load_teacher_outcome_checkpoints,
     load_teacher_task_pool,
+    summarize_teacher_outcomes,
     validate_teacher_collection_config,
+    write_teacher_outcome_checkpoint,
     write_teacher_collection_artifacts,
 )
 
@@ -60,6 +64,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int)
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
+        "--run-dir",
+        type=Path,
+        help="per-task atomic checkpoint directory (defaults beside --output)",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="resume an existing run with the same ordered task IDs and policy",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="validate task/model/runtime contracts without making API calls",
@@ -79,9 +93,10 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
         f"{artifact_stem}.diagnostics.jsonl"
     )
     outputs = (args.output, rejected_output, diagnostics_output)
+    run_dir = args.run_dir or args.output.parent / f".{artifact_stem}.run"
     if len(set(outputs)) != 3:
         raise ValueError("accepted, rejected, and diagnostics outputs must be distinct")
-    if not args.force and not args.dry_run:
+    if not args.force and not args.dry_run and not args.resume:
         existing = next((path for path in outputs if path.exists()), None)
         if existing is not None:
             raise FileExistsError(f"trajectory output already exists: {existing}")
@@ -105,29 +120,62 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
         "rejected_output": str(rejected_output),
         "diagnostics_output": str(diagnostics_output),
         "trajectory_attempts": args.attempts,
+        "run_dir": str(run_dir),
+        "resume": bool(args.resume),
         "dry_run": bool(args.dry_run),
     }
     if args.dry_run:
         return summary
 
-    teacher = OpenAICompatibleTeacherClient(teacher_runtime)
-    try:
-        outcomes = await collect_teacher_outcomes(
-            tasks,
-            teacher=teacher,
-            simulator=simulator_runtime,
-            concurrency=args.concurrency,
-            max_attempts=args.attempts,
-            source_root=args.source_root,
-        )
-    finally:
-        await teacher.close()
+    task_ids = [str(task["task_id"]) for task in tasks]
+    initialize_teacher_run(run_dir, task_ids, resume=args.resume)
+    checkpointed = load_teacher_outcome_checkpoints(run_dir, task_ids)
+    pending = [task for task in tasks if str(task["task_id"]) not in checkpointed]
+    new_outcomes = ()
+    if pending:
+        teacher = OpenAICompatibleTeacherClient(teacher_runtime)
+        completed_now = 0
+
+        def checkpoint(outcome):
+            nonlocal completed_now
+            path = write_teacher_outcome_checkpoint(outcome, run_dir)
+            completed_now += 1
+            print(
+                json.dumps(
+                    {
+                        "event": "teacher_task_completed",
+                        "completed": len(checkpointed) + completed_now,
+                        "total": len(tasks),
+                        "accepted": outcome.accepted,
+                        "attempts": len(outcome.attempts),
+                        "checkpoint": str(path),
+                    },
+                    ensure_ascii=False,
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+
+        try:
+            new_outcomes = await collect_teacher_outcomes(
+                pending,
+                teacher=teacher,
+                simulator=simulator_runtime,
+                concurrency=args.concurrency,
+                max_attempts=args.attempts,
+                source_root=args.source_root,
+                on_outcome=checkpoint,
+            )
+        finally:
+            await teacher.close()
+    combined = {**checkpointed, **{value.task_id: value for value in new_outcomes}}
+    outcomes = tuple(combined[task_id] for task_id in task_ids)
     write_teacher_collection_artifacts(
         outcomes,
         accepted_path=args.output,
         rejected_path=rejected_output,
         diagnostics_path=diagnostics_output,
-        force=args.force,
+        force=args.force or args.resume,
     )
     accepted = [value.trajectory for value in outcomes if value.trajectory is not None]
     summary.update(
@@ -135,6 +183,9 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
             "accepted": len(accepted),
             "rejected": len(outcomes) - len(accepted),
             "attempts_used": sum(len(value.attempts) for value in outcomes),
+            "resumed_tasks": len(checkpointed),
+            "new_tasks": len(new_outcomes),
+            "quality": summarize_teacher_outcomes(outcomes),
         }
     )
     return summary

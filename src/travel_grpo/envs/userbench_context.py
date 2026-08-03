@@ -163,6 +163,7 @@ class UserBenchSessionState:
             self.termination_reason = "max_steps"
 
         repeated_exactly = False
+        semantic: tuple[str, str] | None = None
         if action is not None:
             signature = normalized_action_signature(action)
             repeated_exactly = signature in self._action_signatures
@@ -195,9 +196,19 @@ class UserBenchSessionState:
         passive_delta = max(
             0, snapshot.passive_elicited_count - before.passive_elicited_count
         )
-        self.active_preference_ids.update(newly_elicited[:active_delta])
+        active_candidates = list(newly_elicited)
+        if semantic is not None:
+            target_ids = self.reward_task.preference_ids_by_aspect.get(
+                semantic[0], frozenset()
+            )
+            active_candidates.sort(key=lambda value: value not in target_ids)
+        active_values = active_candidates[:active_delta]
+        passive_candidates = [
+            value for value in newly_elicited if value not in set(active_values)
+        ]
+        self.active_preference_ids.update(active_values)
         self.passive_preference_ids.update(
-            newly_elicited[active_delta : active_delta + passive_delta]
+            passive_candidates[:passive_delta]
         )
         self.searched_aspects.update(
             before.remaining_search_aspects - snapshot.remaining_search_aspects
@@ -263,6 +274,16 @@ class UserBenchSessionState:
             termination_reason=self.termination_reason,
         )
         report["infrastructure_errors"] = list(self.infrastructure_errors)
+        report.update(
+            {
+                "invalid_actions": self.invalid_actions,
+                "exact_repeats": self.exact_repeats,
+                "semantic_repeats": self.semantic_repeats,
+                "ambiguous_actions": self.ambiguous_actions,
+                "unsearched_answers": self.unsearched_answers,
+                "wrong_answers": self.wrong_answers,
+            }
+        )
         return report
 
     def metrics(self) -> dict[str, Any]:

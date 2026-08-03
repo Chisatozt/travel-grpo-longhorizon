@@ -1,3 +1,9 @@
 # Documentation
 
-Task partitioning is documented in `data-collection.md`. The remaining files reserve design boundaries for future teacher collection, SFT, GRPO, reward, and evaluation implementations.
+The documentation mirrors the runtime pipeline:
+
+- `architecture/`: repository boundaries and ownership;
+- `data/`: frozen task splitting and future trajectory formats;
+- `training/`: SFT and GRPO design;
+- `reward/`: outcome and process-reward contracts;
+- `evaluation/`: frozen UserBench evaluation protocol.

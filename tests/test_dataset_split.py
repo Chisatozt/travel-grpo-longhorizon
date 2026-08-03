@@ -27,7 +27,7 @@ from travel_grpo.data.userbench import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / "configs" / "dataset_split.toml"
+CONFIG = ROOT / "configs" / "data" / "dataset_split.toml"
 SOURCE_ROOT = ROOT / "environments" / "UserBench" / "data"
 EXPECTED_COUNTS = {
     "sft_train": 716,
@@ -213,7 +213,7 @@ def test_cli_dry_run_writes_nothing(tmp_path):
     result = subprocess.run(
         [
             sys.executable,
-            str(ROOT / "scripts" / "build_dataset_splits.py"),
+            str(ROOT / "scripts" / "data" / "build_dataset_splits.py"),
             "--config",
             str(CONFIG),
             "--source-root",

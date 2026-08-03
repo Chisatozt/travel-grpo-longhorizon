@@ -16,6 +16,7 @@ data = [
 ]
 dev = [
   "pytest>=8,<10",
+  "PyYAML>=6,<7",
 ]
 
 [tool.setuptools.packages.find]
@@ -23,3 +24,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+markers = [
+  "integration: explicit opt-in checks for external editable dependencies",
+]

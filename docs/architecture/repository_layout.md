@@ -25,6 +25,8 @@ The layout follows the stage-oriented organization of
 ## Implemented versus scaffolded
 
 The deterministic task-splitting implementation lives in
-`src/travel_grpo/data/`, with its entry point under `scripts/data/`. All model
-training, serving, rollout, reward, and final-evaluation modules remain explicit
-placeholders.
+`src/travel_grpo/data/`, with its entry point under `scripts/data/`. The
+project-owned UserBench lifecycle wrapper lives in `src/travel_grpo/envs/`, and
+the optional veRL 0.6.1 adapter lives in
+`src/travel_grpo/training/grpo/adapter/`. Model training, serving, teacher
+collection, and final-evaluation launchers remain explicit placeholders.

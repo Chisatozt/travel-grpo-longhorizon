@@ -1,1 +1,12 @@
-# Placeholder for the vanilla veRL GRPO trainer configuration.
+# UserBench-specific veRL 0.6.1 overlay. Model, optimizer, cluster, and data
+# settings remain the responsibility of the eventual training launcher.
+actor_rollout_ref:
+  rollout:
+    agent:
+      default_agent_loop: userbench_tool_agent
+      agent_loop_config_path: configs/interaction_config/agent_loop.yaml
+    multi_turn:
+      enable: true
+      max_parallel_calls: 1
+      tool_config_path: configs/tool_config/userbench_tools.yaml
+      interaction_config_path: configs/interaction_config/userbench_interaction.yaml

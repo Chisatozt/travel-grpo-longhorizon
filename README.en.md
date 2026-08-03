@@ -2,7 +2,7 @@
 
 A UserBench-based post-training and evaluation project for long-horizon travel-assistant agents.
 
-> Status: **early development**. The pinned UserBench snapshot and reproducible task partitioning are implemented. Teacher collection, SFT, GRPO, model serving, and final rollouts remain scaffolds.
+> Status: **early development**. The pinned UserBench snapshot, reproducible task partitioning, environment wrapper, and veRL 0.6.1 adapter are implemented. Teacher collection, SFT/GRPO launchers, model serving, and final rollouts remain scaffolds.
 
 ## Intended pipeline
 
@@ -15,6 +15,17 @@ teacher trajectory collection
 ```
 
 The actor, training-time user simulator, and formal evaluation user simulator are separate runtime boundaries.
+
+## Environment integration
+
+The core package has no UserBench or veRL dependency. Install the pinned environment and an external veRL 0.6.1 checkout only in rollout/training environments:
+
+```bash
+pip install -e environments/UserBench
+pip install -e /path/to/verl
+```
+
+The actor sees one tool, `interact_with_env(thought, choice, content)`, with `search`, `action`, and `answer` choices. Training reads `TRAIN_USER_SIM_*`; formal evaluation reads `EVAL_USER_SIM_*`. The pinned UserBench reads its OpenAI endpoint through process environment variables, so training and evaluation simulator roles must run in separate processes. See `docs/training/grpo.md`.
 
 ## Dataset splits
 

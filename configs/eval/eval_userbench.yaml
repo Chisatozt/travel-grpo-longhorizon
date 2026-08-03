@@ -1,2 +1,8 @@
-# Placeholder for frozen UserBench test-set evaluation configuration.
-# The evaluation simulator must be configured independently from training.
+evaluation:
+  dataset: data/evaluation/tasks.parquet
+  upstream_split: test
+  frozen: true
+  environment_config_path: configs/interaction_config/userbench.yaml
+  simulator_config_path: configs/interaction_config/simulator_eval.yaml
+  tool_config_path: configs/tool_config/userbench_tools.yaml
+  agent_loop_config_path: configs/interaction_config/agent_loop.yaml

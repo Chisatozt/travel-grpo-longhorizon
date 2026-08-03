@@ -1,0 +1,6 @@
+interaction:
+  - name: userbench
+    class_name: travel_grpo.training.grpo.adapter.session.UserBenchInteraction
+    config:
+      environment_config_path: configs/interaction_config/userbench.yaml
+      simulator_config_path: configs/interaction_config/simulator_train.yaml

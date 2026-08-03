@@ -1,1 +1,6 @@
-# Placeholder for the isolated local OpenAI-compatible training user simulator.
+simulator:
+  role: train
+  backend: openai_compatible
+  model_env: TRAIN_USER_SIM_MODEL
+  base_url_env: TRAIN_USER_SIM_BASE_URL
+  api_key_env: TRAIN_USER_SIM_API_KEY

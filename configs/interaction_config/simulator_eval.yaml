@@ -1,2 +1,7 @@
-# Placeholder for the separately pinned formal-evaluation user simulator.
+simulator:
+  role: eval
+  backend: openai
+  model_env: EVAL_USER_SIM_MODEL
+  base_url_env: EVAL_USER_SIM_BASE_URL
+  api_key_env: EVAL_USER_SIM_API_KEY
 # Formal evaluation must never reuse the training simulator runtime.

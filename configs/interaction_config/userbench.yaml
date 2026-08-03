@@ -1,2 +1,16 @@
-# Placeholder for the pinned UserBench environment configuration.
-# This configuration must not mutate the embedded third-party snapshot.
+environment:
+  source_root: environments/UserBench
+  max_steps: 20
+  wrong_choice_number: 10
+  noise_choice_number: 5
+  one_choice_per_aspect: true
+  seed: 42
+  reward_scale: 1.0
+  step_penalty: 0.0
+  search_correct_reward: 0.2
+  preference_correct_reward: 0.2
+  choice_best_reward: 1.0
+  choice_correct_reward: 0.8
+  wrong_choice_penalty: 0.0
+  normalize_rewards: false
+  verbose: false

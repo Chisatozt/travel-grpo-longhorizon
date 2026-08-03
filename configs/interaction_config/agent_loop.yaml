@@ -1,1 +1,2 @@
-# Placeholder for the veRL travel AgentLoop and UserBench interaction configuration.
+- name: userbench_tool_agent
+  _target_: travel_grpo.training.grpo.adapter.agent_loop.UserBenchAgentLoop

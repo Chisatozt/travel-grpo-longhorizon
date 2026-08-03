@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -12,6 +12,87 @@ from typing import Any
 TOOL_NAME = "interact_with_env"
 _REQUIRED_PARAMETERS = frozenset({"thought", "choice", "content"})
 _ACTION_PREFIX = re.compile(r"^\[(search|action|answer|finish)\]\s*", re.IGNORECASE)
+OPTION_ID = re.compile(r"^[ACFHR]\d+$")
+ASPECT_BY_OPTION_PREFIX = {
+    "F": "flight",
+    "H": "hotel",
+    "A": "apartment",
+    "C": "rental_car",
+    "R": "restaurant",
+}
+ASPECT_QUERY_HINTS = {
+    "flight": ("flight", "airline", "carrier"),
+    "hotel": ("hotel",),
+    "apartment": ("apartment",),
+    "rental_car": ("rental car", "car rental", "rental vehicle"),
+    "restaurant": ("restaurant", "dining"),
+}
+FIELD_QUERY_HINTS = {
+    "flight": {
+        "company": ("airline", "carrier", "flight company"),
+        "path": ("direct", "nonstop", "non-stop", "layover", "connection", "route"),
+        "time": (
+            "departure time",
+            "arrival time",
+            "depart",
+            "arrive",
+            "morning",
+            "evening",
+        ),
+        "amenities": ("wifi", "wi-fi", "meal", "entertainment", "power outlet"),
+        "service": ("baggage", "luggage", "carry-on", "checked bag", "flight service"),
+    },
+    "hotel": {
+        "name": ("hotel name", "property name", "specific hotel", "name"),
+        "room": ("room", "bedroom", "bathroom", "suite", "guest", "people", "capacity"),
+        "amenities": (
+            "amenity",
+            "amenities",
+            "air conditioning",
+            "wifi",
+            "wi-fi",
+            "parking",
+            "kitchen",
+            "pool",
+            "gym",
+            "elevator",
+        ),
+        "service": ("cleaning", "early check-in", "early checkin", "late checkout"),
+        "rating": ("rating", "star", "review score"),
+    },
+    "apartment": {
+        "name": ("apartment name", "property name", "specific apartment", "name"),
+        "room": ("room", "bedroom", "bathroom", "guest", "people", "capacity"),
+        "amenities": (
+            "amenity",
+            "amenities",
+            "air conditioning",
+            "wifi",
+            "wi-fi",
+            "parking",
+            "kitchen",
+            "washer",
+            "dryer",
+            "pet",
+            "elevator",
+        ),
+        "service": ("cleaning", "early check-in", "early checkin", "late checkout"),
+        "rating": ("rating", "review score"),
+    },
+    "rental_car": {
+        "brand": ("brand", "rental company", "car company"),
+        "model": ("model", "vehicle type", "car type", "economy", "suv", "gasoline"),
+        "seats": ("seat", "seats", "passenger"),
+        "insurance": ("insurance", "waiver", "liability", "accident", "protection"),
+        "service": ("child seat", "additional driver", "underage", "rental service"),
+    },
+    "restaurant": {
+        "cuisine": ("cuisine", "food", "dish"),
+        "tags": ("outdoor seating", "reservation", "walk-in", "occasion", "atmosphere"),
+        "rating": ("rating", "review score"),
+        "expectation": ("price", "cost", "budget", "cheap", "expensive", "affordable"),
+    },
+}
 
 
 class UserBenchActionError(ValueError):
@@ -148,3 +229,48 @@ def get_interact_with_env_schema() -> dict[str, Any]:
     """Return a defensive copy of the official UserBench function schema."""
 
     return copy.deepcopy(_INTERACT_WITH_ENV_SCHEMA)
+
+
+def normalized_action_signature(action: UserBenchAction) -> str:
+    """Return the canonical identity used to reject exact action repeats."""
+
+    content = " ".join(action.content.split()).casefold()
+    return f"{action.choice.value}:{content}"
+
+
+def _contains_hint(query: str, hint: str) -> bool:
+    return re.search(rf"(?<![a-z0-9]){re.escape(hint)}(?![a-z0-9])", query) is not None
+
+
+def semantic_action_signature(
+    action: UserBenchAction, task_dimensions: Sequence[str]
+) -> tuple[str, str] | None:
+    """Infer an unambiguous ``(aspect, preference field)`` question identity."""
+
+    if action.choice is not ActionChoice.ACTION:
+        return None
+    dimensions = {value for value in task_dimensions if value in FIELD_QUERY_HINTS}
+    query = " ".join(action.content.casefold().replace("_", " ").split())
+    explicit = {
+        aspect
+        for aspect in dimensions
+        if any(_contains_hint(query, hint) for hint in ASPECT_QUERY_HINTS[aspect])
+    }
+    if len(explicit) > 1:
+        return None
+    candidates = explicit or dimensions
+    matches = {
+        (aspect, field)
+        for aspect in candidates
+        for field, hints in FIELD_QUERY_HINTS[aspect].items()
+        if any(_contains_hint(query, hint) for hint in hints)
+    }
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
+def aspect_from_option_id(option_id: object) -> str | None:
+    """Map an official answer option such as ``H3`` to its travel aspect."""
+
+    if not isinstance(option_id, str) or not OPTION_ID.fullmatch(option_id.strip()):
+        return None
+    return ASPECT_BY_OPTION_PREFIX.get(option_id.strip()[0])

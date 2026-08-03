@@ -14,8 +14,19 @@ class SimulatorBoundaryError(RuntimeError):
 
 
 class SimulatorRole(str, Enum):
-    TRAIN = "train"
+    COLLECTION = "collection"
+    GRPO = "grpo"
     EVAL = "eval"
+
+
+DEEPSEEK_V4_FLASH_MODEL = "deepseek-v4-flash"
+
+
+_ROLE_PREFIX = {
+    SimulatorRole.COLLECTION: "COLLECTION_USER_SIM",
+    SimulatorRole.GRPO: "GRPO_USER_SIM",
+    SimulatorRole.EVAL: "EVAL_USER_SIM",
+}
 
 
 @dataclass(frozen=True)
@@ -50,11 +61,7 @@ class UserSimulatorRuntime:
     ) -> UserSimulatorRuntime:
         resolved_role = SimulatorRole(role)
         values = os.environ if environ is None else environ
-        prefix = (
-            "TRAIN_USER_SIM"
-            if resolved_role is SimulatorRole.TRAIN
-            else "EVAL_USER_SIM"
-        )
+        prefix = _ROLE_PREFIX[resolved_role]
 
         def require(name: str) -> str:
             value = values.get(f"{prefix}_{name}", "").strip()
@@ -64,12 +71,23 @@ class UserSimulatorRuntime:
                 )
             return value
 
-        return cls(
+        runtime = cls(
             role=resolved_role,
             model=require("MODEL"),
             base_url=require("BASE_URL"),
             api_key=require("API_KEY"),
+            temperature=float(values.get(f"{prefix}_TEMPERATURE", "0")),
+            max_tokens=int(values.get(f"{prefix}_MAX_TOKENS", "2048")),
+            timeout=float(values.get(f"{prefix}_TIMEOUT", "60")),
         )
+        if (
+            resolved_role in {SimulatorRole.COLLECTION, SimulatorRole.GRPO}
+            and runtime.model.casefold() != DEEPSEEK_V4_FLASH_MODEL
+        ):
+            raise SimulatorBoundaryError(
+                f"{prefix}_MODEL must be {DEEPSEEK_V4_FLASH_MODEL!r}"
+            )
+        return runtime
 
 
 _BINDING_LOCK = threading.Lock()

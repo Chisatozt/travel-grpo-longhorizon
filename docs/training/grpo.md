@@ -9,11 +9,13 @@ pip install -e /path/to/verl
 
 `configs/tool_config/userbench_tools.yaml` exposes exactly one native tool. The schema is copied verbatim from the pinned `environments/UserBench/schema/interact_tool.yaml`; each model turn may execute at most one call. Dataset rows must provide matching task IDs through both `extra_info.interaction_kwargs.task_id` and `tools_kwargs.interact_with_env.create_kwargs.id`. Use `build_rollout_extra_info()` to construct this payload.
 
-Each asyncio trajectory owns a separate `UserBenchWrapper` and `TravelEnv`. A `ContextVar` carries a mutable session reference into veRL's child tool task while keeping concurrent trajectories isolated. The custom AgentLoop detects upstream `terminated` or `truncated` immediately after tool processing and does not request another actor turn.
+Each asyncio trajectory owns a separate `UserBenchWrapper` and `TravelEnv`. A `ContextVar` carries a mutable session reference into veRL's child tool task while keeping concurrent trajectories isolated. The custom AgentLoop detects upstream `terminated` or `truncated` immediately after tool processing and does not request another actor turn. If one actor completion contains multiple tool calls, the loop terminates before executing any of them and records `parallel_tool_calls`, the invalid-call count, and the termination reason in rollout diagnostics.
 
 TravelGym step rewards are preserved unchanged. The tool reward is always `0.0`; raw step rewards are retained in tool metadata and the interaction score is their sum. This prevents veRL from counting the same environment reward as both a tool reward and a final interaction score.
 
-The pinned UserBench OpenAI clients read `OPENAI_BASE_URL` from process state. The wrapper therefore binds one simulator runtime once per process. Rebinding the same role/model/endpoint is idempotent; switching any of them fails. Start training and formal evaluation in different processes, using `simulator_train.yaml` and `simulator_eval.yaml` respectively.
+The GRPO actor defaults to `Qwen/Qwen3.5-2B` through `GRPO_ACTOR_MODEL`. Its UserBench simulator is independently pinned to `deepseek-v4-flash` through `GRPO_USER_SIM_MODEL`, `GRPO_USER_SIM_BASE_URL`, and `GRPO_USER_SIM_API_KEY`.
+
+The pinned UserBench OpenAI clients read `OPENAI_BASE_URL` from process state. The wrapper therefore binds one simulator runtime once per process. Rebinding the same role/model/endpoint is idempotent; switching any of them fails. Teacher collection, GRPO, and formal evaluation must run in different processes, using `simulator_collection.yaml`, `simulator_train.yaml`, and `simulator_eval.yaml` respectively.
 
 Training execution and optimizer configuration are not implemented yet. `configs/train/grpo/vanilla_grpo.yaml` only supplies the UserBench-specific multi-turn overlay.
 

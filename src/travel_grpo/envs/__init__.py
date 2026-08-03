@@ -2,6 +2,7 @@
 
 from travel_grpo.envs.observation import UserBenchObservation, UserBenchStepResult
 from travel_grpo.envs.userbench_interaction import (
+    DEEPSEEK_V4_FLASH_MODEL,
     SimulatorBoundaryError,
     SimulatorRole,
     UserSimulatorRuntime,
@@ -21,6 +22,7 @@ from travel_grpo.envs.userbench_wrapper import (
 )
 
 __all__ = [
+    "DEEPSEEK_V4_FLASH_MODEL",
     "ActionChoice",
     "SimulatorBoundaryError",
     "SimulatorRole",

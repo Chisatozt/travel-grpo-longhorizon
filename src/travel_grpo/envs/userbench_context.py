@@ -108,6 +108,8 @@ class UserBenchSessionState:
     terminated: bool = False
     truncated: bool = False
     protocol_error: str | None = None
+    invalid_actions: int = 0
+    termination_reason: str | None = None
 
     @property
     def done(self) -> bool:
@@ -132,6 +134,8 @@ class UserBenchSessionState:
             "terminated": self.terminated,
             "truncated": self.truncated,
             "protocol_error": self.protocol_error,
+            "invalid_actions": self.invalid_actions,
+            "termination_reason": self.termination_reason,
         }
 
 

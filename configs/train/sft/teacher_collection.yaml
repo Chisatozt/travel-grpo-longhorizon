@@ -1,0 +1,31 @@
+teacher:
+  backend: openai_compatible
+  model: deepseek-v4-flash
+  model_env: TEACHER_MODEL
+  base_url_env: TEACHER_BASE_URL
+  api_key_env: TEACHER_API_KEY
+  thinking_env: TEACHER_THINKING
+  temperature: 0.0
+  max_tokens: 4096
+  thought_max_chars: 200
+  protocol_retries: 2
+  action_retries: 2
+
+simulator:
+  config_path: configs/interaction_config/simulator_collection.yaml
+  model: deepseek-v4-flash
+
+collection:
+  train_tasks: data/sft/tasks_train.jsonl
+  validation_tasks: data/sft/tasks_validation.jsonl
+  frozen_evaluation_tasks: data/evaluation/tasks.jsonl
+  output_root: outputs/teacher_trajectories
+  max_steps: 20
+  default_concurrency: 1
+  trajectory_attempts: 3
+  strict_filter: true
+  capture_upstream_diagnostics: true
+  artifacts:
+    accepted: "*.accepted.jsonl"
+    rejected: "*.rejected.jsonl"
+    diagnostics: "*.diagnostics.jsonl"

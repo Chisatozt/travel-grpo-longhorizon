@@ -39,20 +39,54 @@ def test_embedded_source_commit_and_license_are_pinned():
 
 def test_simulator_repr_hides_api_key_and_process_rejects_mixing():
     _reset_user_simulator_binding_for_tests()
-    train = UserSimulatorRuntime(
-        SimulatorRole.TRAIN, "train-model", "http://train/v1", "top-secret"
+    grpo = UserSimulatorRuntime(
+        SimulatorRole.GRPO, "deepseek-v4-flash", "http://grpo/v1", "top-secret"
     )
     evaluation = UserSimulatorRuntime(
         SimulatorRole.EVAL, "eval-model", "http://eval/v1", "other-secret"
     )
     environment = {}
-    assert "top-secret" not in repr(train)
-    bind_user_simulator_process(train, environ=environment)
-    bind_user_simulator_process(train, environ=environment)
-    assert environment["OPENAI_BASE_URL"] == "http://train/v1"
+    assert "top-secret" not in repr(grpo)
+    bind_user_simulator_process(grpo, environ=environment)
+    bind_user_simulator_process(grpo, environ=environment)
+    assert environment["OPENAI_BASE_URL"] == "http://grpo/v1"
     with pytest.raises(SimulatorBoundaryError, match="already bound"):
         bind_user_simulator_process(evaluation, environ=environment)
     _reset_user_simulator_binding_for_tests()
+
+
+@pytest.mark.parametrize(
+    "role,prefix",
+    [
+        (SimulatorRole.COLLECTION, "COLLECTION_USER_SIM"),
+        (SimulatorRole.GRPO, "GRPO_USER_SIM"),
+    ],
+)
+def test_deepseek_simulator_roles_load_from_separate_variables(role, prefix):
+    runtime = UserSimulatorRuntime.from_environment(
+        role,
+        {
+            f"{prefix}_MODEL": "deepseek-v4-flash",
+            f"{prefix}_BASE_URL": "https://provider.example/v1",
+            f"{prefix}_API_KEY": "secret",
+        },
+    )
+    assert runtime.role is role
+    assert runtime.model == "deepseek-v4-flash"
+    assert runtime.timeout == 60.0
+    assert "secret" not in repr(runtime)
+
+
+def test_grpo_simulator_rejects_a_different_model():
+    with pytest.raises(SimulatorBoundaryError, match="must be"):
+        UserSimulatorRuntime.from_environment(
+            SimulatorRole.GRPO,
+            {
+                "GRPO_USER_SIM_MODEL": "some-other-model",
+                "GRPO_USER_SIM_BASE_URL": "https://provider.example/v1",
+                "GRPO_USER_SIM_API_KEY": "secret",
+            },
+        )
 
 
 def test_concurrent_contexts_keep_task_and_raw_rewards_isolated():

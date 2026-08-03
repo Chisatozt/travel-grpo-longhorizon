@@ -33,6 +33,23 @@ def select_post_tool_state(default_state: Any, terminated_state: Any) -> Any:
     return terminated_state if session_requests_termination() else default_state
 
 
+def reject_parallel_tool_calls(state: Any) -> bool:
+    """Record and reject a multi-call actor turn before any tool reaches UserBench."""
+
+    tool_calls = getattr(state, "tool_calls", None)
+    if not isinstance(tool_calls, (list, tuple)) or len(tool_calls) <= 1:
+        return False
+    session = get_current_session()
+    if session is None:
+        raise RuntimeError(
+            "parallel tool calls were emitted without a UserBench session"
+        )
+    session.invalid_actions += len(tool_calls)
+    session.protocol_error = "parallel_tool_calls"
+    session.termination_reason = "parallel_tool_calls"
+    return True
+
+
 class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
     """Close each trajectory reliably and prevent a post-terminal actor turn."""
 
@@ -41,6 +58,8 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         super().__init__(*args, **kwargs)
 
     async def _handle_processing_tools_state(self, state: Any) -> Any:
+        if reject_parallel_tool_calls(state):
+            return AgentState.TERMINATED
         next_state = await super()._handle_processing_tools_state(state)
         return select_post_tool_state(next_state, AgentState.TERMINATED)
 

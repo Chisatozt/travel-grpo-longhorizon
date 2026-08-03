@@ -3,6 +3,7 @@
 import asyncio
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -14,6 +15,7 @@ from travel_grpo.envs.userbench_context import (
     set_current_session,
 )
 from travel_grpo.training.grpo.adapter.agent_loop import (
+    reject_parallel_tool_calls,
     select_post_tool_state,
     session_requests_termination,
 )
@@ -96,6 +98,26 @@ def test_malformed_tool_call_returns_stable_error_without_stepping_env():
     asyncio.run(scenario())
 
 
+def test_parallel_tool_calls_terminate_before_environment_step():
+    observation = UserBenchObservation("unused", 0, False, 0.0, {})
+    wrapper = FakeWrapper(
+        "task-1", UserBenchStepResult("task-1", observation, 0.0, False, False, {})
+    )
+    session = UserBenchSessionState("request-1", "task-1", wrapper)
+    set_current_session(session)
+    try:
+        assert reject_parallel_tool_calls(
+            SimpleNamespace(tool_calls=[object(), object()])
+        )
+        assert wrapper.calls == 0
+        assert session.protocol_error == "parallel_tool_calls"
+        assert session.termination_reason == "parallel_tool_calls"
+        assert session.invalid_actions == 2
+        assert session.metrics()["termination_reason"] == "parallel_tool_calls"
+    finally:
+        clear_current_session()
+
+
 def test_verl_yaml_paths_and_simulator_roles_are_consistent():
     config_root = ROOT / "configs"
     grpo = yaml.safe_load(
@@ -131,5 +153,16 @@ def test_verl_yaml_paths_and_simulator_roles_are_consistent():
             encoding="utf-8"
         )
     )
-    assert train["simulator"]["role"] == "train"
+    collection = yaml.safe_load(
+        (config_root / "interaction_config/simulator_collection.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert train["simulator"]["role"] == "grpo"
+    assert train["simulator"]["model_env"] == "GRPO_USER_SIM_MODEL"
+    assert collection["simulator"]["role"] == "collection"
+    assert collection["simulator"]["model_env"] == "COLLECTION_USER_SIM_MODEL"
     assert evaluation["simulator"]["role"] == "eval"
+    assert grpo["actor_rollout_ref"]["model"]["path"] == (
+        "${oc.env:GRPO_ACTOR_MODEL,Qwen/Qwen3.5-2B}"
+    )

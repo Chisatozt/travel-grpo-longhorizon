@@ -2,7 +2,7 @@
 
 A UserBench-based post-training and evaluation project for long-horizon travel-assistant agents.
 
-> Status: **early development**. The pinned UserBench snapshot, reproducible task partitioning, environment wrapper, and veRL 0.6.1 adapter are implemented. Teacher collection, SFT/GRPO launchers, model serving, and final rollouts remain scaffolds.
+> Status: **early development**. The pinned UserBench snapshot, reproducible task partitioning, environment wrapper, teacher API trajectory collector, and veRL 0.6.1 adapter are implemented. Action-only SFT/GRPO launchers and final evaluation rollouts remain scaffolds.
 
 ## Intended pipeline
 
@@ -25,7 +25,7 @@ pip install -e environments/UserBench
 pip install -e /path/to/verl
 ```
 
-The actor sees one tool, `interact_with_env(thought, choice, content)`, with `search`, `action`, and `answer` choices. Training reads `TRAIN_USER_SIM_*`; formal evaluation reads `EVAL_USER_SIM_*`. The pinned UserBench reads its OpenAI endpoint through process environment variables, so training and evaluation simulator roles must run in separate processes. See `docs/training/grpo.md`.
+The actor sees one tool, `interact_with_env(thought, choice, content)`, with `search`, `action`, and `answer` choices. Teacher collection uses separate `TEACHER_*` and `COLLECTION_USER_SIM_*` API settings, both pinned to `deepseek-v4-flash`. GRPO loads `Qwen/Qwen3.5-2B` as the actor and reads its UserBench simulator from `GRPO_USER_SIM_*`. Formal evaluation continues to use `EVAL_USER_SIM_*`. The pinned UserBench reads its OpenAI endpoint through process environment variables, so simulator roles must run in separate processes. See `docs/training/sft.md` and `docs/training/grpo.md`.
 
 ## Dataset splits
 

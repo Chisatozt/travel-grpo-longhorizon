@@ -2,7 +2,7 @@
 
 面向长程旅游助手 Agent 的 UserBench 后训练与评测项目。
 
-> 当前状态：**早期开发**。固定版本的 UserBench 快照、可复现任务划分、环境包装和 veRL 0.6.1 适配层已经实现；教师轨迹采集、SFT/GRPO 训练启动、模型服务和最终 rollout 尚未实现。
+> 当前状态：**早期开发**。固定版本的 UserBench 快照、可复现任务划分、环境包装、教师轨迹 API 采集和 veRL 0.6.1 适配层已经实现；action-only SFT/GRPO 训练启动和最终评测 rollout 尚未实现。
 
 ## 目标流水线
 
@@ -25,7 +25,7 @@ pip install -e environments/UserBench
 pip install -e /path/to/verl
 ```
 
-Actor 只使用单一工具 `interact_with_env(thought, choice, content)`，其中 `choice` 为 `search`、`action` 或 `answer`。训练模拟器读取 `TRAIN_USER_SIM_*`，正式评测模拟器读取 `EVAL_USER_SIM_*`；由于固定 UserBench 通过进程环境读取 OpenAI endpoint，两种角色必须运行在不同进程。详见 `docs/training/grpo.md`。
+Actor 只使用单一工具 `interact_with_env(thought, choice, content)`，其中 `choice` 为 `search`、`action` 或 `answer`。教师轨迹采集使用 `TEACHER_*` 和 `COLLECTION_USER_SIM_*` 两套独立的 `deepseek-v4-flash` API 配置；GRPO Actor 使用 `Qwen/Qwen3.5-2B`，其 UserBench 模拟器读取 `GRPO_USER_SIM_*`。正式评测继续使用独立的 `EVAL_USER_SIM_*`。由于固定 UserBench 通过进程环境读取 OpenAI endpoint，不同模拟器角色必须运行在不同进程。详见 `docs/training/sft.md` 和 `docs/training/grpo.md`。
 
 ## 数据划分
 

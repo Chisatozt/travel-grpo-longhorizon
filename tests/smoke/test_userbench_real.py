@@ -34,8 +34,8 @@ def test_real_userbench_without_network(monkeypatch):
     monkeypatch.setattr(travel_env, "async_evaluate_action", fake_async_evaluator)
     _reset_user_simulator_binding_for_tests()
     runtime = UserSimulatorRuntime(
-        SimulatorRole.TRAIN,
-        "offline-model",
+        SimulatorRole.GRPO,
+        "deepseek-v4-flash",
         "http://127.0.0.1:9/v1",
         "offline-key",
     )

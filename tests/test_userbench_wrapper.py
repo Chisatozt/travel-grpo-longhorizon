@@ -71,17 +71,18 @@ def reset_process_binding():
 
 def runtime():
     return UserSimulatorRuntime(
-        role=SimulatorRole.TRAIN,
-        model="fake-user",
+        role=SimulatorRole.GRPO,
+        model="deepseek-v4-flash",
         base_url="http://127.0.0.1:9999/v1",
         api_key="secret",
     )
 
 
-def build_wrapper(fake):
+def build_wrapper(fake, config=None):
     return UserBenchWrapper(
         "task-1",
         runtime(),
+        config,
         environment_factory=lambda *_: fake,
     )
 
@@ -121,6 +122,32 @@ def test_async_step_uses_the_async_environment_path():
         wrapper.close()
 
     asyncio.run(scenario())
+
+
+def test_collection_mode_captures_upstream_fallback_without_raw_stdout(capsys):
+    class PrintingTravelEnv(FakeTravelEnv):
+        async def step_async(self, action_input):
+            print(
+                "[TravelGym - Async Judging Conversation] Invalid judgment: None; "
+                "By default turn to normal conversation"
+            )
+            return await super().step_async(action_input)
+
+    async def scenario():
+        fake = PrintingTravelEnv("task-1", rewards=(0.0,))
+        wrapper = build_wrapper(
+            fake, UserBenchEnvironmentConfig(capture_upstream_diagnostics=True)
+        )
+        wrapper.reset()
+        result = await wrapper.astep(
+            {"thought": "ask", "choice": "action", "content": "Kitchen?"}
+        )
+        wrapper.close()
+        return result
+
+    result = asyncio.run(scenario())
+    assert result.diagnostics["userbench_judgment_fallbacks"] == 1
+    assert "Invalid judgment" not in capsys.readouterr().out
 
 
 def test_step_before_reset_and_step_after_close_fail_loudly():

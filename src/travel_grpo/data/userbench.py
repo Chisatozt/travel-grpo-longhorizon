@@ -15,10 +15,14 @@ import hashlib
 import json
 import os
 import tempfile
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 compatibility.
+    import tomli as tomllib
 
 SOURCE_COLUMNS = (
     "data_source",
@@ -118,14 +122,18 @@ def _require_pyarrow():
 def _require_string(mapping: Mapping[str, Any], key: str) -> str:
     value = mapping.get(key)
     if not isinstance(value, str) or not value:
-        raise DatasetSplitError(f"configuration field {key!r} must be a non-empty string")
+        raise DatasetSplitError(
+            f"configuration field {key!r} must be a non-empty string"
+        )
     return value
 
 
 def _require_non_negative_int(mapping: Mapping[str, Any], key: str) -> int:
     value = mapping.get(key)
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-        raise DatasetSplitError(f"configuration field {key!r} must be a non-negative integer")
+        raise DatasetSplitError(
+            f"configuration field {key!r} must be a non-negative integer"
+        )
     return value
 
 
@@ -137,18 +145,27 @@ def load_split_spec(path: str | Path) -> SplitSpec:
         raw = tomllib.load(handle)
 
     names = raw.get("compositions")
-    if not isinstance(names, list) or not names or not all(isinstance(v, str) for v in names):
+    if (
+        not isinstance(names, list)
+        or not names
+        or not all(isinstance(v, str) for v in names)
+    ):
         raise DatasetSplitError("compositions must be a non-empty list of strings")
     if len(set(names)) != len(names):
         raise DatasetSplitError("compositions contains duplicates")
 
     raw_ratios = raw.get("target_ratios")
-    if not isinstance(raw_ratios, Mapping) or set(raw_ratios) != set(TRAIN_PROJECT_SPLITS):
+    if not isinstance(raw_ratios, Mapping) or set(raw_ratios) != set(
+        TRAIN_PROJECT_SPLITS
+    ):
         raise DatasetSplitError(
             f"target_ratios must contain exactly {', '.join(TRAIN_PROJECT_SPLITS)}"
         )
     ratios = {key: float(raw_ratios[key]) for key in TRAIN_PROJECT_SPLITS}
-    if any(value < 0.0 for value in ratios.values()) or abs(sum(ratios.values()) - 1.0) > 1e-12:
+    if (
+        any(value < 0.0 for value in ratios.values())
+        or abs(sum(ratios.values()) - 1.0) > 1e-12
+    ):
         raise DatasetSplitError("target_ratios must be non-negative and sum to 1.0")
 
     raw_compositions = raw.get("composition")
@@ -243,7 +260,9 @@ def _validate_source_row(
         raise DatasetSplitError(f"{context} has unexpected ability")
 
     prompt = row.get("prompt")
-    if not isinstance(prompt, list) or not all(isinstance(message, Mapping) for message in prompt):
+    if not isinstance(prompt, list) or not all(
+        isinstance(message, Mapping) for message in prompt
+    ):
         raise DatasetSplitError(f"{context} prompt must be a list of message mappings")
     if [message.get("role") for message in prompt] != ["system", "user"]:
         raise DatasetSplitError(f"{context} prompt roles must be exactly system,user")
@@ -251,12 +270,17 @@ def _validate_source_row(
         not isinstance(message, Mapping) or not isinstance(message.get("content"), str)
         for message in prompt
     ):
-        raise DatasetSplitError(f"{context} prompt messages must contain string content")
+        raise DatasetSplitError(
+            f"{context} prompt messages must contain string content"
+        )
 
     reward_model = row.get("reward_model")
     if not isinstance(reward_model, Mapping):
         raise DatasetSplitError(f"{context} reward_model must be a mapping")
-    if reward_model.get("env_name") != "TravelGym" or reward_model.get("style") != "rule":
+    if (
+        reward_model.get("env_name") != "TravelGym"
+        or reward_model.get("style") != "rule"
+    ):
         raise DatasetSplitError(f"{context} has an unexpected reward_model contract")
     task_id = reward_model.get("id")
     if not isinstance(task_id, str) or not task_id:
@@ -276,19 +300,27 @@ def _validate_source_row(
         context=context,
     )
     if tool_task_id != task_id:
-        raise DatasetSplitError(f"{context} task ID does not match tools_kwargs create ID")
+        raise DatasetSplitError(
+            f"{context} task ID does not match tools_kwargs create ID"
+        )
 
     scenario = task_data.get(task_id)
     if not isinstance(scenario, Mapping):
-        raise DatasetSplitError(f"{context} task ID {task_id!r} is absent from task data")
+        raise DatasetSplitError(
+            f"{context} task ID {task_id!r} is absent from task data"
+        )
     dimensions = scenario.get("dimensions")
     if not isinstance(dimensions, list) or not dimensions:
         raise DatasetSplitError(f"{context} task dimensions must be a non-empty list")
     try:
         ground_truth = ast.literal_eval(str(reward_model.get("ground_truth")))
     except (SyntaxError, ValueError) as exc:
-        raise DatasetSplitError(f"{context} ground_truth is not a Python string list") from exc
-    if not isinstance(ground_truth, list) or not all(isinstance(value, str) for value in ground_truth):
+        raise DatasetSplitError(
+            f"{context} ground_truth is not a Python string list"
+        ) from exc
+    if not isinstance(ground_truth, list) or not all(
+        isinstance(value, str) for value in ground_truth
+    ):
         raise DatasetSplitError(f"{context} ground_truth must be a list of strings")
     expected_best = []
     for dimension in dimensions:
@@ -298,14 +330,18 @@ def _validate_source_row(
         ):
             raise DatasetSplitError(f"{context} is missing best_id for {dimension!r}")
         expected_best.append(dimension_data["best_id"])
-    if len(ground_truth) != len(expected_best) or set(ground_truth) != set(expected_best):
+    if len(ground_truth) != len(expected_best) or set(ground_truth) != set(
+        expected_best
+    ):
         raise DatasetSplitError(
             f"{context} ground_truth does not match the scenario best IDs"
         )
 
     difficulty = scenario.get("difficulty")
     if not isinstance(difficulty, str) or not difficulty:
-        raise DatasetSplitError(f"{context} scenario difficulty must be a non-empty string")
+        raise DatasetSplitError(
+            f"{context} scenario difficulty must be a non-empty string"
+        )
 
     # Keep this insertion order aligned with data/example.jsonl.  The project
     # split is represented by the artifact path; source_split intentionally
@@ -333,8 +369,10 @@ def load_onechoice_tasks(
         raise DatasetSplitError("upstream_split must be 'train' or 'test'")
     _, pq = _require_pyarrow()
     source_root = Path(source_root)
-    relative = Path("data") / f"travel{composition}_multiturn_onechoice" / (
-        f"{upstream_split}.parquet"
+    relative = (
+        Path("data")
+        / f"travel{composition}_multiturn_onechoice"
+        / (f"{upstream_split}.parquet")
     )
     source_file = source_root / relative.relative_to("data")
     if not source_file.is_file():
@@ -349,8 +387,11 @@ def load_onechoice_tasks(
             f"{source_file} contains {table.num_rows} rows, expected {expected_count}"
         )
 
-    task_data_file = source_root.parent / "travelgym" / "data" / (
-        f"travelgym_data_{composition}.json"
+    task_data_file = (
+        source_root.parent
+        / "travelgym"
+        / "data"
+        / (f"travelgym_data_{composition}.json")
     )
     if not task_data_file.is_file():
         raise DatasetSplitError(f"missing task data JSON: {task_data_file}")
@@ -373,7 +414,9 @@ def load_onechoice_tasks(
         )
         task_id = record["task_id"]
         if task_id in seen_ids:
-            raise DatasetSplitError(f"{source_file} contains duplicate task ID {task_id!r}")
+            raise DatasetSplitError(
+                f"{source_file} contains duplicate task ID {task_id!r}"
+            )
         seen_ids.add(task_id)
         records.append(record)
 
@@ -395,7 +438,9 @@ def _as_output_record(record: Mapping[str, Any]) -> dict[str, Any]:
     return {column: record[column] for column in OUTPUT_COLUMNS}
 
 
-def _pairwise_intersections(records: Mapping[str, Sequence[Mapping[str, Any]]]) -> dict[str, int]:
+def _pairwise_intersections(
+    records: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> dict[str, int]:
     result = {}
     names = list(ALL_PROJECT_SPLITS)
     id_sets = {name: {row["task_id"] for row in records[name]} for name in names}
@@ -471,7 +516,10 @@ def build_dataset_splits(spec: SplitSpec, source_root: str | Path) -> SplitBundl
 
         ordered_train = sorted(
             train.records,
-            key=lambda row: (_stable_task_key(row["task_id"], spec.hash_seed), row["task_id"]),
+            key=lambda row: (
+                _stable_task_key(row["task_id"], spec.hash_seed),
+                row["task_id"],
+            ),
         )
         cursor = 0
         composition_counts = {}
@@ -479,14 +527,18 @@ def build_dataset_splits(spec: SplitSpec, source_root: str | Path) -> SplitBundl
             count = composition.quotas[project_split]
             selected = ordered_train[cursor : cursor + count]
             cursor += count
-            output[project_split].extend(_as_output_record(record) for record in selected)
+            output[project_split].extend(
+                _as_output_record(record) for record in selected
+            )
             composition_counts[project_split] = len(selected)
         if cursor != len(ordered_train):
             raise DatasetSplitError(
                 f"composition {composition.name} consumed {cursor} train tasks, "
                 f"expected {len(ordered_train)}"
             )
-        output["evaluation"].extend(_as_output_record(record) for record in test.records)
+        output["evaluation"].extend(
+            _as_output_record(record) for record in test.records
+        )
         composition_counts["evaluation"] = len(test.records)
         by_composition[composition.name] = composition_counts
 
@@ -653,9 +705,13 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
             try:
                 record = json.loads(line)
             except json.JSONDecodeError as exc:
-                raise DatasetSplitError(f"invalid JSON in {path} line {line_number}") from exc
+                raise DatasetSplitError(
+                    f"invalid JSON in {path} line {line_number}"
+                ) from exc
             if not isinstance(record, dict):
-                raise DatasetSplitError(f"{path} line {line_number} is not a JSON object")
+                raise DatasetSplitError(
+                    f"{path} line {line_number} is not a JSON object"
+                )
             records.append(record)
     return records
 
@@ -665,7 +721,9 @@ def _safe_artifact_path(output_root: Path, relative: str) -> Path:
     try:
         candidate.relative_to(output_root.resolve())
     except ValueError as exc:
-        raise DatasetSplitError(f"artifact path escapes output root: {relative!r}") from exc
+        raise DatasetSplitError(
+            f"artifact path escapes output root: {relative!r}"
+        ) from exc
     return candidate
 
 
@@ -697,11 +755,15 @@ def verify_dataset_splits(
         "checks",
     ):
         if manifest.get(key) != expected.manifest_base.get(key):
-            raise DatasetSplitError(f"manifest field {key!r} does not match source data")
+            raise DatasetSplitError(
+                f"manifest field {key!r} does not match source data"
+            )
 
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, Mapping) or set(artifacts) != set(ALL_PROJECT_SPLITS):
-        raise DatasetSplitError("manifest artifacts do not cover exactly the five project splits")
+        raise DatasetSplitError(
+            "manifest artifacts do not cover exactly the five project splits"
+        )
 
     verified: dict[str, tuple[dict[str, Any], ...]] = {}
     for project_split in ALL_PROJECT_SPLITS:
@@ -717,7 +779,9 @@ def verify_dataset_splits(
                 raise DatasetSplitError(
                     f"manifest artifact {project_split}.{format_name} is invalid"
                 )
-            artifact_path = _safe_artifact_path(output_root, str(format_details.get("path")))
+            artifact_path = _safe_artifact_path(
+                output_root, str(format_details.get("path"))
+            )
             if not artifact_path.is_file():
                 raise DatasetSplitError(f"missing split artifact: {artifact_path}")
             if _sha256_file(artifact_path) != format_details.get("sha256"):
@@ -733,11 +797,15 @@ def verify_dataset_splits(
 
         jsonl_canonical = [_canonical_json(row) for row in format_records["jsonl"]]
         parquet_canonical = [_canonical_json(row) for row in format_records["parquet"]]
-        expected_canonical = [_canonical_json(row) for row in expected.records[project_split]]
+        expected_canonical = [
+            _canonical_json(row) for row in expected.records[project_split]
+        ]
         if jsonl_canonical != parquet_canonical:
             raise DatasetSplitError(f"JSONL and Parquet differ for {project_split}")
         if jsonl_canonical != expected_canonical:
-            raise DatasetSplitError(f"saved records differ from source split for {project_split}")
+            raise DatasetSplitError(
+                f"saved records differ from source split for {project_split}"
+            )
         verified[project_split] = tuple(format_records["jsonl"])
 
     intersections = _pairwise_intersections(verified)

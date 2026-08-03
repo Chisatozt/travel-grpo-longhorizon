@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import copy
 import importlib
+import io
 import math
+from contextlib import redirect_stdout
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Protocol, Self, cast
+from typing import Any, Protocol, cast
 
 from travel_grpo.envs.observation import UserBenchObservation, UserBenchStepResult
 from travel_grpo.envs.userbench_context import (
@@ -32,6 +34,20 @@ class UserBenchLifecycleError(RuntimeError):
     """Raised when reset/step/close are called in an invalid order."""
 
 
+_UPSTREAM_STDOUT_LOCK = asyncio.Lock()
+
+
+def _classify_upstream_stdout(output: str) -> dict[str, int]:
+    """Convert known pinned-UserBench fallback prints into safe counters."""
+
+    return {
+        "userbench_judgment_fallbacks": output.count(
+            "By default turn to normal conversation"
+        ),
+        "userbench_search_fallbacks": output.count("By default will return N/A"),
+    }
+
+
 @dataclass(frozen=True)
 class UserBenchEnvironmentConfig:
     """Pinned one-choice environment defaults used by training and evaluation."""
@@ -50,6 +66,7 @@ class UserBenchEnvironmentConfig:
     wrong_choice_penalty: float = 0.0
     normalize_rewards: bool = False
     verbose: bool = False
+    capture_upstream_diagnostics: bool = False
 
     def __post_init__(self) -> None:
         fixed_values = {
@@ -203,9 +220,21 @@ class UserBenchWrapper:
     ) -> UserBenchStepResult:
         normalized = self._prepare_step(action)
         rendered = normalized.to_environment_action()
+        captured = ""
         try:
             async_step = getattr(self._environment, "step_async", None)
-            if callable(async_step):
+            if self.config.capture_upstream_diagnostics:
+                buffer = io.StringIO()
+                async with _UPSTREAM_STDOUT_LOCK:
+                    with redirect_stdout(buffer):
+                        if callable(async_step):
+                            transition = await async_step(rendered)
+                        else:
+                            transition = await asyncio.to_thread(
+                                self._environment.step, rendered
+                            )
+                captured = buffer.getvalue()
+            elif callable(async_step):
                 transition = await async_step(rendered)
             else:
                 transition = await asyncio.to_thread(self._environment.step, rendered)
@@ -213,7 +242,15 @@ class UserBenchWrapper:
             raise UserBenchEnvironmentError(
                 f"TravelGym async step failed for task {self.task_id!r}"
             ) from exc
-        return self._project_transition(transition)
+        result = self._project_transition(transition)
+        if captured:
+            counters = _classify_upstream_stdout(captured)
+            if any(counters.values()):
+                result = replace(
+                    result,
+                    diagnostics={**dict(result.diagnostics), **counters},
+                )
+        return result
 
     def close(self) -> None:
         if self._closed:
@@ -278,7 +315,7 @@ class UserBenchWrapper:
         if self._closed:
             raise UserBenchLifecycleError("UserBench environment is closed")
 
-    def __enter__(self) -> Self:
+    def __enter__(self) -> UserBenchWrapper:
         self._require_open()
         return self
 

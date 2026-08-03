@@ -1,1 +1,9 @@
-# Placeholder for action-only LoRA SFT configuration.
+model:
+  base: Qwen/Qwen3.5-2B
+
+data:
+  train_trajectories: outputs/teacher_trajectories/sft_train.accepted.jsonl
+  validation_trajectories: outputs/teacher_trajectories/sft_validation.accepted.jsonl
+  assistant_loss: action_only
+
+# Optimizer, LoRA, batching, and checkpoint settings remain unimplemented.

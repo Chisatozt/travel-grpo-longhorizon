@@ -15,8 +15,8 @@ The layout follows the stage-oriented organization of
   settings.
 - `src/travel_grpo/envs/` owns project integration code around the pinned
   UserBench snapshot; it must not modify `environments/UserBench/`.
-- `src/travel_grpo/models/` owns actor inference clients only. Simulator clients
-  stay in the environment interaction boundary.
+- `src/travel_grpo/models/` owns actor inference and external teacher clients.
+  Simulator clients stay in the environment interaction boundary.
 - `scripts/` contains thin, stage-grouped launchers. Reusable logic belongs in
   `src/travel_grpo/`.
 - `experiments/` is reserved for small, auditable summaries and configurations.
@@ -28,5 +28,6 @@ The deterministic task-splitting implementation lives in
 `src/travel_grpo/data/`, with its entry point under `scripts/data/`. The
 project-owned UserBench lifecycle wrapper lives in `src/travel_grpo/envs/`, and
 the optional veRL 0.6.1 adapter lives in
-`src/travel_grpo/training/grpo/adapter/`. Model training, serving, teacher
-collection, and final-evaluation launchers remain explicit placeholders.
+`src/travel_grpo/training/grpo/adapter/`. The DeepSeek teacher collector lives
+in `src/travel_grpo/training/sft_collection.py`. Model training and
+final-evaluation launchers remain explicit placeholders.

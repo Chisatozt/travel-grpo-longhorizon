@@ -148,13 +148,25 @@ class UserBenchInteraction(BaseInteraction):  # type: ignore[misc]
             _resolve_project_path(source_root) if source_root is not None else None
         )
         role = SimulatorRole(_non_empty(simulator.get("role"), "simulator.role"))
-        prefix = "TRAIN_USER_SIM" if role is SimulatorRole.TRAIN else "EVAL_USER_SIM"
+        prefix = {
+            SimulatorRole.COLLECTION: "COLLECTION_USER_SIM",
+            SimulatorRole.GRPO: "GRPO_USER_SIM",
+            SimulatorRole.EVAL: "EVAL_USER_SIM",
+        }[role]
         expected_simulator_fields = {
             "model_env": f"{prefix}_MODEL",
             "base_url_env": f"{prefix}_BASE_URL",
             "api_key_env": f"{prefix}_API_KEY",
         }
         for key, expected in expected_simulator_fields.items():
+            if simulator.get(key) != expected:
+                raise ValueError(f"simulator.{key} must be {expected!r}")
+        expected_decoding = {
+            "temperature": 0.0,
+            "max_tokens": 2048,
+            "timeout": 60.0,
+        }
+        for key, expected in expected_decoding.items():
             if simulator.get(key) != expected:
                 raise ValueError(f"simulator.{key} must be {expected!r}")
         self.runtime = UserSimulatorRuntime.from_environment(role)

@@ -268,6 +268,33 @@ def semantic_action_signature(
     return next(iter(matches)) if len(matches) == 1 else None
 
 
+def action_query_issue(
+    action: UserBenchAction, task_dimensions: Sequence[str]
+) -> str | None:
+    """Classify preference questions that are bundled or too vague to ground."""
+
+    if action.choice is not ActionChoice.ACTION:
+        return None
+    dimensions = {value for value in task_dimensions if value in FIELD_QUERY_HINTS}
+    query = " ".join(action.content.casefold().replace("_", " ").split())
+    explicit = {
+        aspect
+        for aspect in dimensions
+        if any(_contains_hint(query, hint) for hint in ASPECT_QUERY_HINTS[aspect])
+    }
+    matches = {
+        (aspect, field)
+        for aspect in (explicit or dimensions)
+        for field, hints in FIELD_QUERY_HINTS[aspect].items()
+        if any(_contains_hint(query, hint) for hint in hints)
+    }
+    if len(explicit) > 1 or len(matches) > 1:
+        return "bundled"
+    if len(matches) == 0:
+        return "vague"
+    return None
+
+
 def aspect_from_option_id(option_id: object) -> str | None:
     """Map an official answer option such as ``H3`` to its travel aspect."""
 

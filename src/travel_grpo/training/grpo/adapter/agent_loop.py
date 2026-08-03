@@ -44,7 +44,8 @@ def reject_parallel_tool_calls(state: Any) -> bool:
         raise RuntimeError(
             "parallel tool calls were emitted without a UserBench session"
         )
-    session.invalid_actions += len(tool_calls)
+    session.invalid_actions += 1
+    session.parallel_tool_calls = True
     session.protocol_error = "parallel_tool_calls"
     session.termination_reason = "parallel_tool_calls"
     return True
@@ -71,12 +72,18 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         try:
             parameters = json.loads(tool_call.arguments)
         except (json.JSONDecodeError, TypeError) as exc:
+            session = get_current_session()
+            if session is not None:
+                session.invalid_actions += 1
             return (
                 ToolResponse(text=f"Error: invalid tool arguments: {exc}"),
                 0.0,
                 {"validation_error": str(exc)},
             )
         if tool_call.name not in self.tools:
+            session = get_current_session()
+            if session is not None:
+                session.invalid_actions += 1
             return (
                 ToolResponse(text=f"Error: unknown tool {tool_call.name!r}"),
                 0.0,
@@ -123,6 +130,9 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 session.protocol_error = (
                     "rollout ended without interact_with_env output"
                 )
+                session.termination_reason = "no_tool_output"
+            elif not session.done and session.termination_reason is None:
+                session.termination_reason = "actor_stopped"
 
             interaction = self.interaction_map.get("userbench")
             if interaction is None:

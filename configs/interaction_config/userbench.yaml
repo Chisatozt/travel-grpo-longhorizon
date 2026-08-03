@@ -14,3 +14,26 @@ environment:
   wrong_choice_penalty: 0.0
   normalize_rewards: false
   verbose: false
+  capture_upstream_diagnostics: false
+reward:
+  version: userbench-travel-reward-v2
+  terminal_only: true
+  range: [-1.0, 1.0]
+  weights:
+    grounded_quality: 0.75
+    active_preference_coverage: 0.15
+    efficiency: 0.10
+    passive_preference_coverage: -0.10
+    incomplete_aspects: -0.40
+  policy_penalties:
+    invalid_action: {per_event: 0.10, cap: 0.30}
+    parallel_tool_calls: {fixed: 0.25}
+    exact_repeat: {per_event: 0.05, cap: 0.15}
+    semantic_repeat: {per_event: 0.05, cap: 0.15}
+    ambiguous_action: {per_event: 0.05, cap: 0.15}
+    unsearched_answer: {per_aspect: 0.10, cap: 0.30}
+    wrong_answer: {per_aspect: 0.15, cap: 0.45}
+    no_tool_output: {fixed: 0.15}
+    max_steps: {fixed: 0.15}
+    total_cap: 0.75
+  infrastructure_invalid_score: 0.0

@@ -10,7 +10,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from travel_grpo.envs.observation import UserBenchStepResult
-from travel_grpo.envs.reward import RawRewardTrace
+from travel_grpo.envs.reward import (
+    RawRewardTrace,
+    TravelRewardTask,
+    UserBenchRewardSnapshot,
+    compute_travel_reward,
+)
+from travel_grpo.envs.userbench_tools import (
+    ActionChoice,
+    UserBenchAction,
+    action_query_issue,
+    aspect_from_option_id,
+    normalized_action_signature,
+    semantic_action_signature,
+)
 
 if TYPE_CHECKING:
     from travel_grpo.envs.userbench_wrapper import UserBenchWrapper
@@ -110,12 +123,32 @@ class UserBenchSessionState:
     protocol_error: str | None = None
     invalid_actions: int = 0
     termination_reason: str | None = None
+    reward_task: TravelRewardTask | None = None
+    reward_snapshot: UserBenchRewardSnapshot | None = None
+    active_preference_ids: set[str] = field(default_factory=set)
+    passive_preference_ids: set[str] = field(default_factory=set)
+    searched_aspects: set[str] = field(default_factory=set)
+    answers: dict[str, str] = field(default_factory=dict)
+    exact_repeats: int = 0
+    semantic_repeats: int = 0
+    ambiguous_actions: int = 0
+    unsearched_answers: int = 0
+    wrong_answers: int = 0
+    parallel_tool_calls: bool = False
+    infrastructure_errors: list[str] = field(default_factory=list)
+    _action_signatures: set[str] = field(default_factory=set, repr=False)
+    _semantic_signatures: set[tuple[str, str]] = field(default_factory=set, repr=False)
 
     @property
     def done(self) -> bool:
         return self.terminated or self.truncated
 
-    def record_step(self, result: UserBenchStepResult) -> None:
+    def record_step(
+        self,
+        result: UserBenchStepResult,
+        action: UserBenchAction | None = None,
+        snapshot: UserBenchRewardSnapshot | None = None,
+    ) -> None:
         if result.task_id != self.task_id:
             raise UserBenchSessionError(
                 f"step task ID {result.task_id!r} does not match session {self.task_id!r}"
@@ -124,17 +157,133 @@ class UserBenchSessionState:
         self.num_tool_calls += 1
         self.terminated = result.terminated
         self.truncated = result.truncated
+        if result.terminated and self.termination_reason is None:
+            self.termination_reason = "environment_terminated"
+        if result.truncated:
+            self.termination_reason = "max_steps"
+
+        repeated_exactly = False
+        if action is not None:
+            signature = normalized_action_signature(action)
+            repeated_exactly = signature in self._action_signatures
+            if repeated_exactly:
+                self.exact_repeats += 1
+            self._action_signatures.add(signature)
+        if self.reward_task is not None and action is not None:
+            semantic = semantic_action_signature(action, self.reward_task.aspects)
+            if semantic is not None and not repeated_exactly:
+                if semantic in self._semantic_signatures:
+                    self.semantic_repeats += 1
+                self._semantic_signatures.add(semantic)
+            if action_query_issue(action, self.reward_task.aspects) is not None:
+                self.ambiguous_actions += 1
+
+        before = self.reward_snapshot
+        if before is None or snapshot is None or self.reward_task is None:
+            if "missing_reward_evidence" not in self.infrastructure_errors:
+                self.infrastructure_errors.append("missing_reward_evidence")
+            self.reward_snapshot = snapshot
+            return
+
+        newly_elicited = sorted(
+            before.remaining_preference_ids - snapshot.remaining_preference_ids,
+            key=lambda value: int(value[1:]) if value[1:].isdigit() else value,
+        )
+        active_delta = max(
+            0, snapshot.active_elicited_count - before.active_elicited_count
+        )
+        passive_delta = max(
+            0, snapshot.passive_elicited_count - before.passive_elicited_count
+        )
+        self.active_preference_ids.update(newly_elicited[:active_delta])
+        self.passive_preference_ids.update(
+            newly_elicited[active_delta : active_delta + passive_delta]
+        )
+        self.searched_aspects.update(
+            before.remaining_search_aspects - snapshot.remaining_search_aspects
+        )
+
+        if action is not None and action.choice is ActionChoice.ANSWER:
+            newly_chosen = snapshot.choice_initials - before.choice_initials
+            feedback = result.observation.feedback
+            if (
+                "Invalid option ID format" in feedback
+                or "already recommended an option" in feedback
+            ):
+                self.invalid_actions += 1
+            for option_id in (value.strip() for value in action.content.split(",")):
+                aspect = aspect_from_option_id(option_id)
+                if aspect is None or option_id[:1] not in newly_chosen:
+                    continue
+                self.answers.setdefault(aspect, option_id)
+                if aspect not in self.searched_aspects:
+                    self.unsearched_answers += 1
+                if option_id not in self.reward_task.correct_ids.get(aspect, frozenset()):
+                    self.wrong_answers += 1
+
+        for name in (
+            "userbench_judgment_fallbacks",
+            "userbench_response_fallbacks",
+            "userbench_search_fallbacks",
+        ):
+            value = result.diagnostics.get(name, 0)
+            if isinstance(value, int) and value > 0:
+                self.infrastructure_errors.append(name)
+        self.reward_snapshot = snapshot
+
+    def reward_report(self) -> dict[str, Any]:
+        if self.reward_task is None:
+            return {
+                "reward_version": "userbench-travel-reward-v2",
+                "reward_valid": False,
+                "terminal_reward": 0.0,
+                "termination_reason": self.termination_reason,
+                "infrastructure_invalid": True,
+                "infrastructure_errors": ["missing_reward_task"],
+            }
+        no_tool_output = self.termination_reason == "no_tool_output"
+        report = compute_travel_reward(
+            task=self.reward_task,
+            answers=self.answers,
+            active_preference_ids=self.active_preference_ids,
+            passive_preference_ids=self.passive_preference_ids,
+            searched_aspects=self.searched_aspects,
+            steps=self.num_tool_calls,
+            max_steps=20,
+            invalid_actions=self.invalid_actions,
+            exact_repeats=self.exact_repeats,
+            semantic_repeats=self.semantic_repeats,
+            ambiguous_actions=self.ambiguous_actions,
+            unsearched_answers=self.unsearched_answers,
+            wrong_answers=self.wrong_answers,
+            parallel_tool_calls=self.parallel_tool_calls,
+            no_tool_output=no_tool_output,
+            max_steps_reached=self.truncated,
+            reward_valid=not self.infrastructure_errors,
+            termination_reason=self.termination_reason,
+        )
+        report["infrastructure_errors"] = list(self.infrastructure_errors)
+        return report
 
     def metrics(self) -> dict[str, Any]:
+        report = self.reward_report()
         return {
             "task_id": self.task_id,
+            "reward_version": report["reward_version"],
+            "reward_valid": report["reward_valid"],
+            "terminal_reward": report["terminal_reward"],
+            "reward_breakdown": report,
             "step_rewards": list(self.rewards.values),
+            "raw_cumulative_reward": self.rewards.total,
             "cumulative_reward": self.rewards.total,
             "num_tool_calls": self.num_tool_calls,
             "terminated": self.terminated,
             "truncated": self.truncated,
             "protocol_error": self.protocol_error,
             "invalid_actions": self.invalid_actions,
+            "exact_repeats": self.exact_repeats,
+            "semantic_repeats": self.semantic_repeats,
+            "ambiguous_actions": self.ambiguous_actions,
             "termination_reason": self.termination_reason,
         }
 

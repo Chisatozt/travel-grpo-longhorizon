@@ -47,6 +47,7 @@ async def execute_userbench_action(
     try:
         action = UserBenchAction.from_parameters(parameters)
     except UserBenchActionError as exc:
+        session.invalid_actions += 1
         return UserBenchToolExecution(
             text=f"Error: invalid {TOOL_NAME} call: {exc}",
             reward=0.0,
@@ -54,14 +55,21 @@ async def execute_userbench_action(
         )
 
     result = await session.wrapper.astep(action)
-    session.record_step(result)
+    try:
+        snapshot = session.wrapper.reward_snapshot()
+    except AttributeError:
+        snapshot = None
+    session.record_step(result, action, snapshot)
+    report = session.reward_report()
     return UserBenchToolExecution(
         text=result.observation.to_tool_text(),
         reward=0.0,
         metadata={
             "task_id": session.task_id,
             "raw_reward": result.reward,
-            "cumulative_reward": session.rewards.total,
+            "raw_cumulative_reward": session.rewards.total,
+            "terminal_reward_preview": report["terminal_reward"],
+            "reward_valid": report["reward_valid"],
             "step_count": result.observation.step_count,
             "terminated": result.terminated,
             "truncated": result.truncated,

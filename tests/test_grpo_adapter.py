@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from travel_grpo.envs.observation import UserBenchObservation, UserBenchStepResult
+from travel_grpo.envs.reward import TravelRewardTask, UserBenchRewardSnapshot
 from travel_grpo.envs.userbench_context import (
     UserBenchSessionState,
     clear_current_session,
@@ -30,15 +31,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeWrapper:
-    def __init__(self, task_id, result):
+    def __init__(self, task_id, result, snapshot=None):
         self.task_id = task_id
         self.result = result
         self.calls = 0
         self.closed = False
+        self.snapshot = snapshot
 
     async def astep(self, action):
         self.calls += 1
         return self.result
+
+    def reward_snapshot(self):
+        return self.snapshot
 
     def close(self):
         self.closed = True
@@ -52,24 +57,33 @@ def test_rollout_extra_info_duplicates_and_validates_task_id():
         validate_rollout_extra_info(extra)
 
 
-def test_tool_returns_zero_tool_reward_and_raw_reward_metadata():
+def test_tool_returns_zero_tool_reward_and_terminal_reward_v2():
     async def scenario():
         observation = UserBenchObservation("accepted", 1, True, 0.8, {})
+        before = UserBenchRewardSnapshot(frozenset(), 1, 0, frozenset(), frozenset())
+        after = UserBenchRewardSnapshot(frozenset(), 1, 0, frozenset(), frozenset({"F"}))
         wrapper = FakeWrapper(
-            "task-1", UserBenchStepResult("task-1", observation, 0.8, True, False, {})
+            "task-1", UserBenchStepResult("task-1", observation, 0.8, True, False, {}), after
         )
-        state = UserBenchSessionState("request-1", "task-1", wrapper)
+        task = TravelRewardTask(
+            "task-1", ("flight",), {"flight": "F1"},
+            {"flight": frozenset({"F1"})}, {"flight": frozenset({"P1"})}
+        )
+        state = UserBenchSessionState(
+            "request-1", "task-1", wrapper, reward_task=task, reward_snapshot=before,
+            active_preference_ids={"P1"}, searched_aspects={"flight"}
+        )
         set_current_session(state)
         try:
             result = await execute_userbench_action(
-                {"thought": "done", "choice": "answer", "content": "hotel-1"}
+                {"thought": "done", "choice": "answer", "content": "F1"}
             )
             assert result.text == "accepted"
             assert result.reward == 0.0
             assert result.metadata["raw_reward"] == 0.8
-            assert result.metadata["cumulative_reward"] == 0.8
+            assert result.metadata["raw_cumulative_reward"] == 0.8
             assert state.rewards.total == 0.8
-            assert calculate_current_session_score() == 0.8
+            assert calculate_current_session_score() == 1.0
             assert session_requests_termination()
             assert select_post_tool_state("generate", "terminate") == "terminate"
         finally:
@@ -112,7 +126,8 @@ def test_parallel_tool_calls_terminate_before_environment_step():
         assert wrapper.calls == 0
         assert session.protocol_error == "parallel_tool_calls"
         assert session.termination_reason == "parallel_tool_calls"
-        assert session.invalid_actions == 2
+        assert session.invalid_actions == 1
+        assert session.parallel_tool_calls is True
         assert session.metrics()["termination_reason"] == "parallel_tool_calls"
     finally:
         clear_current_session()
@@ -136,6 +151,12 @@ def test_verl_yaml_paths_and_simulator_roles_are_consistent():
     )["interaction"][0]
     module_name, class_name = interaction["class_name"].rsplit(".", 1)
     assert hasattr(importlib.import_module(module_name), class_name)
+
+    environment = yaml.safe_load(
+        (config_root / "interaction_config/userbench.yaml").read_text(encoding="utf-8")
+    )
+    assert environment["reward"]["version"] == "userbench-travel-reward-v2"
+    assert environment["reward"]["terminal_only"] is True
 
     loop = yaml.safe_load(
         (config_root / "interaction_config/agent_loop.yaml").read_text(encoding="utf-8")

@@ -16,6 +16,7 @@ from travel_grpo.envs.userbench_context import (
     set_current_session,
 )
 from travel_grpo.envs.userbench_interaction import SimulatorRole, UserSimulatorRuntime
+from travel_grpo.envs.reward import REWARD_VERSION
 from travel_grpo.envs.userbench_wrapper import (
     UserBenchEnvironmentConfig,
     UserBenchWrapper,
@@ -88,9 +89,9 @@ def validate_rollout_extra_info(extra_info: Mapping[str, Any]) -> str:
 
 
 def calculate_current_session_score() -> float:
-    """Return the exact sum of upstream rewards for the active trajectory."""
+    """Return the deterministic Travel Reward v2 terminal score."""
 
-    return require_current_session().rewards.total
+    return float(require_current_session().reward_report()["terminal_reward"])
 
 
 def _load_yaml_mapping(path: str | Path) -> Mapping[str, Any]:
@@ -120,7 +121,7 @@ WrapperFactory = Callable[..., UserBenchWrapper]
 
 
 class UserBenchInteraction(BaseInteraction):  # type: ignore[misc]
-    """veRL interaction whose score is the unmodified sum of TravelGym rewards."""
+    """veRL interaction scored once with deterministic Travel Reward v2."""
 
     def __init__(self, config: Mapping[str, Any]) -> None:
         require_verl_061()
@@ -134,9 +135,16 @@ class UserBenchInteraction(BaseInteraction):  # type: ignore[misc]
         environment_document = _load_yaml_mapping(environment_path)
         simulator_document = _load_yaml_mapping(simulator_path)
         environment = environment_document.get("environment", environment_document)
+        reward = environment_document.get("reward")
         simulator = simulator_document.get("simulator", simulator_document)
         if not isinstance(environment, Mapping) or not isinstance(simulator, Mapping):
             raise TypeError("invalid UserBench environment or simulator configuration")
+        if not isinstance(reward, Mapping):
+            raise TypeError("UserBench environment configuration is missing reward")
+        if reward.get("version") != REWARD_VERSION:
+            raise ValueError(f"reward.version must be {REWARD_VERSION!r}")
+        if reward.get("terminal_only") is not True or reward.get("range") != [-1.0, 1.0]:
+            raise ValueError("Travel Reward v2 must be terminal-only with range [-1, 1]")
 
         allowed_config = set(UserBenchEnvironmentConfig.__dataclass_fields__)
         environment_values = {
@@ -189,12 +197,18 @@ class UserBenchInteraction(BaseInteraction):  # type: ignore[misc]
         )
         try:
             wrapper.reset()
+            reward_task = wrapper.reward_task()
+            reward_snapshot = wrapper.reward_snapshot()
         except Exception:
             wrapper.close()
             raise
         set_current_session(
             UserBenchSessionState(
-                request_id=request_id, task_id=task_id, wrapper=wrapper
+                request_id=request_id,
+                task_id=task_id,
+                wrapper=wrapper,
+                reward_task=reward_task,
+                reward_snapshot=reward_snapshot,
             )
         )
         return request_id
@@ -206,6 +220,7 @@ class UserBenchInteraction(BaseInteraction):  # type: ignore[misc]
         if session.done:
             return True, "", 0.0, session.metrics()
         session.protocol_error = "actor produced no interact_with_env tool call"
+        session.termination_reason = "no_tool_output"
         return True, "", 0.0, session.metrics()
 
     async def calculate_score(

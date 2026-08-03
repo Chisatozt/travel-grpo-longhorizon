@@ -15,6 +15,7 @@ from types import TracebackType
 from typing import Any, Protocol, cast
 
 from travel_grpo.envs.observation import UserBenchObservation, UserBenchStepResult
+from travel_grpo.envs.reward import TravelRewardTask, UserBenchRewardSnapshot
 from travel_grpo.envs.userbench_context import (
     EmbeddedUserBench,
     validate_embedded_userbench,
@@ -103,6 +104,32 @@ class TravelEnvProtocol(Protocol):
     ) -> Awaitable[tuple[Any, float, bool, bool, Any]]: ...
 
     def close(self) -> None: ...
+
+
+def _fallback_diagnostics(observation: Any, info: Mapping[str, Any]) -> dict[str, int]:
+    """Detect pinned-UserBench fallback paths without capturing process stdout."""
+
+    feedback = observation.get("feedback", "") if isinstance(observation, Mapping) else ""
+    history = info.get("conversation_history", ())
+    latest_agent: Mapping[str, Any] | None = None
+    if isinstance(history, list):
+        for entry in reversed(history):
+            if isinstance(entry, Mapping) and entry.get("role") == "agent":
+                latest_agent = entry
+                break
+    note = str(latest_agent.get("note", "")) if latest_agent else ""
+    return {
+        "userbench_judgment_fallbacks": int(
+            note.startswith("Judging of agent's latest utterance failed")
+        ),
+        "userbench_response_fallbacks": int(
+            note.startswith("Responding system met some issues")
+            or "not sure how to respond to your latest utterance" in str(feedback)
+        ),
+        "userbench_search_fallbacks": int(
+            "searching backend is experiencing some issues" in str(feedback)
+        ),
+    }
 
 
 EnvironmentFactory = Callable[
@@ -205,6 +232,52 @@ class UserBenchWrapper:
         self._done = projected.episode_complete
         return projected
 
+    def reward_task(self) -> TravelRewardTask:
+        """Return only frozen labels required by the internal terminal reward."""
+
+        self._require_open()
+        task = getattr(self._environment, "current_task", None)
+        if not isinstance(task, Mapping):
+            raise UserBenchEnvironmentError(
+                "TravelGym does not expose current_task for reward verification"
+            )
+        reward_task = TravelRewardTask.from_upstream(task)
+        if reward_task.task_id != self.task_id:
+            raise UserBenchEnvironmentError(
+                f"reward task ID {reward_task.task_id!r} does not match {self.task_id!r}"
+            )
+        return reward_task
+
+    def reward_snapshot(self) -> UserBenchRewardSnapshot:
+        """Sample hidden evidence for the reward ledger; never returned to the Actor."""
+
+        self._require_open()
+        if not self._reset:
+            raise UserBenchLifecycleError("reset() must be called before reward_snapshot()")
+        remaining = getattr(self._environment, "remaining_preferences", None)
+        state = getattr(self._environment, "state_list", None)
+        if not isinstance(remaining, list) or not isinstance(state, Mapping):
+            raise UserBenchEnvironmentError(
+                "TravelGym does not expose the state required by Travel Reward v2"
+            )
+        try:
+            remaining_ids = frozenset(str(pref["id"]) for pref in remaining)
+            return UserBenchRewardSnapshot(
+                remaining_preference_ids=remaining_ids,
+                active_elicited_count=int(state["active_elicited_preferences"]),
+                passive_elicited_count=int(state["passive_elicited_preferences"]),
+                remaining_search_aspects=frozenset(
+                    str(value) for value in state["search_arguments"]
+                ),
+                choice_initials=frozenset(
+                    str(value) for value in state["choice_initials"]
+                ),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise UserBenchEnvironmentError(
+                "TravelGym reward state violates the pinned snapshot contract"
+            ) from exc
+
     def step(self, action: UserBenchAction | Mapping[str, Any]) -> UserBenchStepResult:
         normalized = self._prepare_step(action)
         try:
@@ -294,13 +367,15 @@ class UserBenchWrapper:
         self._validate_info_task_id(info)
         projected = UserBenchObservation.from_upstream(observation)
         self._done = terminated or truncated
+        diagnostics = copy.deepcopy(dict(info))
+        diagnostics.update(_fallback_diagnostics(observation, info))
         return UserBenchStepResult(
             task_id=self.task_id,
             observation=projected,
             reward=float(reward),
             terminated=terminated,
             truncated=truncated,
-            diagnostics=copy.deepcopy(dict(info)),
+            diagnostics=diagnostics,
         )
 
     def _validate_info_task_id(self, info: Any) -> None:

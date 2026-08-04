@@ -468,6 +468,157 @@ def load_teacher_task_pool(
     return tuple(records)
 
 
+def _largest_remainder_quota(
+    counts: Mapping[str, int], target: int
+) -> dict[str, int]:
+    """Allocate an integer target proportionally, deterministically."""
+
+    if target <= 0:
+        raise TeacherCollectionError("stratified target must be positive")
+    total = sum(int(value) for value in counts.values())
+    if total <= 0:
+        raise TeacherCollectionError("cannot stratify an empty task pool")
+    if target > total:
+        raise TeacherCollectionError(
+            f"stratified target {target} exceeds task pool size {total}"
+        )
+    quotas = {
+        str(key): target * int(value) // total for key, value in counts.items()
+    }
+    remainder = target - sum(quotas.values())
+    ranked = sorted(
+        (str(key) for key in counts),
+        key=lambda key: (
+            -(target * int(counts[key]) % total),
+            key,
+        ),
+    )
+    for key in ranked[:remainder]:
+        quotas[key] += 1
+    return quotas
+
+
+def build_stratified_task_plan(
+    tasks: Sequence[Mapping[str, Any]],
+    *,
+    target: int,
+    field: str = "composition",
+    seed: str = "sft-stratified-v1",
+) -> tuple[tuple[dict[str, Any], ...], dict[str, int]]:
+    """Build a reproducible, composition-stratified candidate order.
+
+    The returned order is grouped by ``field`` and deterministically shuffled
+    within each group.  The quota is the exact largest-remainder allocation
+    for ``target`` tasks; rejected tasks remain in the candidate order so a
+    later wave can refill the same stratum without changing other strata.
+    """
+
+    if not isinstance(field, str) or not field:
+        raise TeacherCollectionError("stratification field must be non-empty")
+    if not isinstance(seed, str) or not seed:
+        raise TeacherCollectionError("stratification seed must be non-empty")
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for task in tasks:
+        value = task.get(field)
+        if not isinstance(value, str) or not value:
+            raise TeacherCollectionError(
+                f"task {task.get('task_id', '<unknown>')!r} is missing stratification field {field!r}"
+            )
+        task_id = task.get("task_id")
+        if not isinstance(task_id, str) or not task_id:
+            raise TeacherCollectionError("stratified task is missing task_id")
+        groups.setdefault(value, []).append(dict(task))
+    counts = {key: len(value) for key, value in groups.items()}
+    quotas = _largest_remainder_quota(counts, target)
+    ordered: list[dict[str, Any]] = []
+    for value in sorted(groups):
+        ordered.extend(
+            sorted(
+                groups[value],
+                key=lambda task: (
+                    hashlib.sha256(
+                        f"{seed}\0{task['task_id']}".encode("utf-8")
+                    ).hexdigest(),
+                    str(task["task_id"]),
+                ),
+            )
+        )
+    return tuple(ordered), quotas
+
+
+def select_stratified_task_wave(
+    tasks: Sequence[Mapping[str, Any]],
+    *,
+    quotas: Mapping[str, int],
+    attempted_task_ids: set[str],
+    accepted_task_ids: set[str],
+    field: str = "composition",
+    wave_size: int = 32,
+) -> tuple[dict[str, Any], ...]:
+    """Select the next wave, proportional to each stratum's remaining deficit.
+
+    Accepted means Gold or Silver.  Rejected and infrastructure-invalid tasks
+    are only marked attempted, so the next call naturally refills that same
+    stratum from its remaining candidates.
+    """
+
+    if wave_size <= 0:
+        raise TeacherCollectionError("stratified wave size must be positive")
+    groups: dict[str, list[dict[str, Any]]] = {}
+    accepted_by_stratum: Counter[str] = Counter()
+    for task in tasks:
+        task_id = str(task["task_id"])
+        value = str(task[field])
+        if task_id not in attempted_task_ids:
+            groups.setdefault(value, []).append(dict(task))
+        if task_id in accepted_task_ids:
+            accepted_by_stratum[value] += 1
+    deficits = {
+        value: max(int(quotas.get(value, 0)) - accepted_by_stratum[value], 0)
+        for value in quotas
+    }
+    capacities = {
+        value: min(deficits[value], len(groups.get(value, ())))
+        for value in deficits
+        if deficits[value] > 0 and groups.get(value)
+    }
+    if not capacities:
+        return ()
+    total = min(wave_size, sum(capacities.values()))
+    allocations = {value: 0 for value in capacities}
+    # D'Hondt allocation gives an integer proportional split and handles a
+    # stratum whose remaining candidate pool is smaller than its quota.
+    for _ in range(total):
+        available = [
+            value for value in sorted(capacities) if allocations[value] < capacities[value]
+        ]
+        if not available:
+            break
+        value = max(
+            available,
+            key=lambda item: (
+                capacities[item] / (allocations[item] + 1),
+                capacities[item],
+                item,
+            ),
+        )
+        allocations[value] += 1
+    selected: list[dict[str, Any]] = []
+    for value in sorted(allocations):
+        selected.extend(groups[value][: allocations[value]])
+    return tuple(selected)
+
+
+def write_stratified_selection_manifest(
+    path: str | Path, document: Mapping[str, Any]
+) -> Path:
+    """Atomically persist a credential-free adaptive sampling manifest."""
+
+    destination = Path(path)
+    _atomic_json_record(document, destination)
+    return destination
+
+
 def assert_disjoint_from_evaluation(
     tasks: Sequence[Mapping[str, Any]], evaluation_path: str | Path
 ) -> None:

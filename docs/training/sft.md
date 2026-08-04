@@ -45,6 +45,21 @@ Collection policy `teacher-state-machine-v2` controls each aspect through `ELICI
 
 Collection has two accepted quality tiers. `gold` satisfies the strict gate and is written to `*.accepted.jsonl`. `silver` is accepted separately when the trajectory still terminates with a correct, fully answered itinerary and zero policy/answer errors, but contains one explicitly bounded recovery: one search repair, one vague-action repair, or one simulator judgment fallback. Repaired turns are retained for context and marked `loss_mask=true`; silver with an infrastructure fallback keeps `reward_valid=false` and is never counted as gold. Formal SFT reloads both tier files, ignores the serialized tier as authority, and reruns the Gold/Silver gates. A Silver judgment fallback without a masked assistant repair is rejected.
 
+For a fixed-size, composition-proportional train collection, use adaptive stratification instead of `--limit`. `--target-accepted` counts unique Gold plus Silver trajectories; rejected tasks are checkpointed and replaced by the next task from the same composition. The candidate order, largest-remainder quotas, wave history, and source SHA-256 are recorded in `selection_manifest.json`.
+
+```bash
+python scripts/train/sft/collect_sft_data.py \
+  --input data/sft/tasks_train.jsonl \
+  --target-accepted 400 \
+  --stratify-by composition \
+  --stratified-wave-size 32 \
+  --sampling-seed sft-train-composition-v1 \
+  --run-dir outputs/teacher_trajectories/runs/sft-train-composition-v1 \
+  --output outputs/teacher_trajectories/sft_train.accepted.jsonl
+```
+
+The command stops only when every composition reaches its quota. For the current 716-task train pool, the quotas are `22=86`, `2222=15`, `233=51`, `33=74`, `333=45`, `334=40`, `44=57`, and `444=32`. Resume the same adaptive run with the identical arguments plus `--resume`; do not add `--limit` or change the seed.
+
 Request-local retries become progressively stricter: natural phase guidance, a field-specific instruction with forbidden alternatives, and finally a canonical content allowlist in the temporary request schema. Search is keyed by aspect rather than query wording, and answer IDs must come from visible search output. Response fallback, invalid feedback, wrong answers, and unrecorded answer transitions abort the attempt immediately. A single judgment fallback or recoverable vague/search transition is retained as silver only when the final hard correctness checks pass; a second fallback/repair remains fail-loud.
 
 Each completed task is atomically checkpointed under a run directory before the batch finishes. Resume a stopped run without recollecting completed tasks:

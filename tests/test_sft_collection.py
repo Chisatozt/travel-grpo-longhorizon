@@ -21,11 +21,13 @@ from travel_grpo.envs.userbench_tools import FIELD_QUERY_HINTS
 from travel_grpo.training.sft_collection import (
     TeacherCollectionError,
     assert_disjoint_from_evaluation,
+    build_stratified_task_plan,
     collect_teacher_trajectory,
     collect_teacher_task_with_retries,
     initialize_teacher_run,
     load_teacher_outcome_checkpoints,
     load_teacher_task_pool,
+    select_stratified_task_wave,
     validate_teacher_collection_config,
     trajectory_rejection_reasons,
     write_teacher_collection_artifacts,
@@ -125,7 +127,148 @@ def test_collection_cli_checkpoints_and_resumes_without_recollecting(
     assert resumed["new_tasks"] == 0
 
 
+def test_adaptive_collection_reaches_per_composition_quota_in_waves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script_path = ROOT / "scripts/train/sft/collect_sft_data.py"
+    spec = importlib.util.spec_from_file_location("collect_stratified_script", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    train = tmp_path / "train.jsonl"
+    evaluation = tmp_path / "evaluation.jsonl"
+    train_tasks = [
+        {**task(f"hotel:2-{index}"), "composition": composition}
+        for composition, indexes in (("22", (1, 2, 3)), ("33", (4, 5, 6)))
+        for index in indexes
+    ]
+    write_pool(train, train_tasks)
+    write_pool(evaluation, [{**task("hotel:2-99"), "source_split": "test"}])
+    for name, value in {
+        "TEACHER_MODEL": "deepseek-v4-flash",
+        "TEACHER_BASE_URL": "https://teacher.example/v1",
+        "TEACHER_API_KEY": "test-only",
+        "COLLECTION_USER_SIM_MODEL": "deepseek-v4-flash",
+        "COLLECTION_USER_SIM_BASE_URL": "https://simulator.example/v1",
+        "COLLECTION_USER_SIM_API_KEY": "test-only",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(module, "OpenAICompatibleTeacherClient", lambda runtime: FakeTeacher())
+
+    async def collect(tasks, *, teacher, simulator, on_outcome, **kwargs):
+        values = []
+        for value in tasks:
+            outcome = await collect_teacher_task_with_retries(
+                value,
+                teacher=teacher,
+                simulator=simulator,
+                wrapper_factory=FakeWrapper,
+                max_attempts=1,
+            )
+            on_outcome(outcome)
+            values.append(outcome)
+        return tuple(values)
+
+    monkeypatch.setattr(module, "collect_teacher_outcomes", collect)
+    output = tmp_path / "accepted.jsonl"
+    run_dir = tmp_path / "run"
+    args = module.build_parser().parse_args(
+        [
+            "--input",
+            str(train),
+            "--evaluation-tasks",
+            str(evaluation),
+            "--output",
+            str(output),
+            "--run-dir",
+            str(run_dir),
+            "--target-accepted",
+            "4",
+            "--stratified-wave-size",
+            "2",
+            "--sampling-seed",
+            "test-seed",
+            "--attempts",
+            "1",
+        ]
+    )
+    summary = asyncio.run(module.run(args))
+    assert summary["accepted"] == 4
+    assert summary["gold"] == 4
+    assert summary["stratified_complete"] is True
+    assert summary["waves"] == 2
+    manifest = json.loads(
+        (run_dir / "selection_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["status"] == "complete"
+    assert manifest["quotas"] == {"22": 2, "33": 2}
+    assert manifest["accepted_by_stratum"] == {"22": 2, "33": 2}
+    assert len(output.read_text(encoding="utf-8").splitlines()) == 4
+
+
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_stratified_plan_uses_largest_remainder_and_stable_order() -> None:
+    tasks = [
+        {"task_id": f"{composition}:{index}", "composition": composition}
+        for composition, count in (("22", 4), ("33", 3), ("44", 3))
+        for index in range(count)
+    ]
+    first, quotas = build_stratified_task_plan(
+        tasks, target=6, field="composition", seed="test-seed"
+    )
+    second, second_quotas = build_stratified_task_plan(
+        list(reversed(tasks)), target=6, field="composition", seed="test-seed"
+    )
+    assert quotas == {"22": 2, "33": 2, "44": 2}
+    assert second_quotas == quotas
+    assert [task["task_id"] for task in first] == [
+        task["task_id"] for task in second
+    ]
+    assert [task["composition"] for task in first] == [
+        "22",
+        "22",
+        "22",
+        "22",
+        "33",
+        "33",
+        "33",
+        "44",
+        "44",
+        "44",
+    ]
+
+
+def test_stratified_wave_refills_rejected_stratum_without_repeating_tasks() -> None:
+    tasks = [
+        {"task_id": f"{composition}:{index}", "composition": composition}
+        for composition in ("22", "33")
+        for index in range(5)
+    ]
+    first = select_stratified_task_wave(
+        tasks,
+        quotas={"22": 3, "33": 3},
+        attempted_task_ids=set(),
+        accepted_task_ids=set(),
+        wave_size=4,
+    )
+    assert len(first) == 4
+    assert {task["composition"] for task in first} == {"22", "33"}
+    attempted = {str(task["task_id"]) for task in first}
+    accepted = {str(first[0]["task_id"])}
+    second = select_stratified_task_wave(
+        tasks,
+        quotas={"22": 3, "33": 3},
+        attempted_task_ids=attempted,
+        accepted_task_ids=accepted,
+        wave_size=3,
+    )
+    assert len(second) == 3
+    assert not attempted & {str(task["task_id"]) for task in second}
+    assert sum(task["composition"] == "22" for task in second) == 1
+    assert sum(task["composition"] == "33" for task in second) == 2
 
 
 def test_collection_script_runs_from_source_checkout() -> None:

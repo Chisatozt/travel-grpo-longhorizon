@@ -16,13 +16,14 @@ from travel_grpo.envs.userbench_tools import (
     UserBenchAction,
     action_field_matches,
     action_mentions_aspect,
+    semantic_action_signature,
 )
 
 if TYPE_CHECKING:
     from travel_grpo.envs.userbench_context import UserBenchSessionState
 
 
-POLICY_VERSION = "teacher-state-machine-v2"
+POLICY_VERSION = "teacher-state-machine-v4"
 _OPTION_ID = re.compile(r"(?<![A-Z0-9])([ACFHR]\d+)(?![A-Z0-9])")
 _PREFIX_BY_ASPECT = {value: key for key, value in ASPECT_BY_OPTION_PREFIX.items()}
 _GENERIC_FIELD_QUESTION = re.compile(
@@ -74,40 +75,212 @@ _ASPECT_LABEL = {
 
 _CANONICAL_QUESTIONS = {
     "flight": {
-        "company": "Which specific airline brand or carrier do you prefer for the flight?",
-        "path": "Do you prefer a direct flight or are connections acceptable?",
-        "time": "Do you prefer a shorter flight duration, a longer layover duration, or a particular departure or arrival time?",
-        "amenities": "Do you need a flight carry-on baggage allowance, Wi-Fi, meal service, entertainment, or power outlets?",
-        "service": "Do you need checked baggage, carry-on baggage, business class, priority boarding, or another specific flight service?",
+        "company": "Do you prefer a specific airline, the same carrier across flight legs, or different carriers across legs?",
+        "path": "Do you prefer a direct flight, exactly one connection, or a particular layover city?",
+        "time": "Do you prefer shorter individual flight legs, minimum total travel time, or a longer or reasonable layover duration?",
+        "amenities": "Do you need flight Wi-Fi, meal service, lounge access, or a carry-on baggage allowance?",
+        "service": "Do you need checked baggage or business class for the flight?",
     },
     "hotel": {
         "name": "Do you prefer a specific hotel name, brand, platform, or property?",
         "room": "What hotel room, suite, bedroom, bathroom, bed, or guest-capacity configuration do you need?",
-        "amenities": "Do you need hotel Wi-Fi, air conditioning, parking, a kitchen, a pool, a gym, an elevator, business workspace, pet-friendly access, or another specific amenity?",
-        "service": "Do you need hotel breakfast, parking service, cleaning, early check-in, late checkout, barrier-free access, or another specific service?",
-        "rating": "What minimum hotel rating do you prefer?",
+        "amenities": "Do you need hotel Wi-Fi, air conditioning, a gym, business workspace, a city, ocean, or mountain view, pet-friendly access, or a washer and dryer?",
+        "service": "Do you need hotel breakfast, parking service, or barrier-free accessibility?",
+        "rating": "What hotel rating or rating range do you prefer?",
     },
     "apartment": {
         "name": "Do you prefer a specific apartment name, brand, platform, or property?",
         "room": "How many bedrooms or bathrooms, and what guest capacity, do you need for the apartment?",
-        "amenities": "Do you need apartment Wi-Fi, air conditioning, parking, a kitchen, a washer, a dryer, pet access, an elevator, or another specific amenity?",
-        "service": "Do you need apartment breakfast, parking service, cleaning, early check-in, late checkout, barrier-free access, or another specific service?",
-        "rating": "What minimum apartment rating do you prefer?",
+        "amenities": "Do you need apartment Wi-Fi, air conditioning, parking, a kitchen, a washer and dryer, pet access, an elevator, or a garden?",
+        "service": "Do you need apartment daily cleaning, early check-in, or late checkout?",
+        "rating": "What apartment rating or rating range do you prefer?",
     },
     "rental_car": {
         "brand": "Which rental car brand or company do you prefer?",
-        "model": "Which rental car model or vehicle type do you prefer, such as an electric, hybrid, gasoline, compact, sedan, or SUV vehicle?",
+        "model": "Do you prefer a specific rental car model, or an economy, electric, gasoline, or SUV vehicle?",
         "seats": "How many seats do you need in the rental car?",
-        "insurance": "Which rental car insurance coverage do you prefer?",
-        "service": "Do you need a child seat, an additional driver, GPS navigation, an underage-driver service, or another specific rental-car service?",
+        "insurance": "Do you need a damage waiver, liability coverage, personal accident protection, or personal belongings insurance for the rental car?",
+        "service": "Do you need a child seat, an additional driver, or an underage-driver service for the rental car?",
     },
     "restaurant": {
-        "cuisine": "Which restaurant cuisine do you prefer?",
-        "tags": "Do you prefer restaurant delivery, outdoor seating, a quiet atmosphere, family-friendly dining, or another specific restaurant setting?",
-        "rating": "Do you prefer a minimum restaurant rating or avoiding restaurants with any one-star reviews?",
+        "cuisine": "Do you prefer a country-specific cuisine, vegetarian food, fast food, seafood or steakhouse dining, or a dessert, bakery, or cafe?",
+        "tags": "Do you need restaurant delivery, outdoor seating, business dining, late-night service, parking, pet-friendly access, reservations, or walk-in availability?",
+        "rating": "Do you prefer a restaurant rating range, zero one-star reviews, all reviews at least three-star, or more than half five-star reviews?",
         "expectation": "What restaurant price range or budget do you prefer?",
     },
 }
+
+# A failed elicitation turn remains visible in the environment transcript, so its
+# one permitted repair must be materially different from the original question.
+# Keep these templates deterministic and subject to the same single-field
+# validation contract as the primary canonical questions.
+_ELICITATION_REPAIR_QUESTIONS = {
+    "flight": {
+        "company": "For the flight, should the airline be a particular brand, stay consistent across legs, or differ between legs?",
+        "path": "For the flight route, should it be nonstop, have exactly one stop, or connect through a city you choose?",
+        "time": "For the flight, should individual legs or total travel time be minimized, or should the layover duration be longer or reasonably timed?",
+        "amenities": "For the flight, do you require Wi-Fi, meals, airport lounge access, or carry-on baggage allowance?",
+        "service": "For the flight, do you require a checked bag or a business-class seat?",
+    },
+    "hotel": {
+        "name": "For the hotel, is there a particular hotel name or property name you want?",
+        "room": "For the hotel, what room, bed, bathroom, or guest capacity would suit you?",
+        "amenities": "For the hotel, do you require Wi-Fi, air conditioning, a gym, workspace, a city, ocean, or mountain view, pets allowed, or laundry facilities?",
+        "service": "For the hotel, do you require breakfast, a parking service, or accessible barrier-free service?",
+        "rating": "For the hotel, what rating interval or review score would be acceptable?",
+    },
+    "apartment": {
+        "name": "For the apartment, is there a particular apartment name or property name you want?",
+        "room": "For the apartment, how many bedrooms, bathrooms, or guests must it accommodate?",
+        "amenities": "For the apartment, do you require Wi-Fi, air conditioning, parking, a kitchen, laundry, pets allowed, an elevator, or a garden?",
+        "service": "For the apartment, do you require daily cleaning, an early check-in, or a late checkout?",
+        "rating": "For the apartment, what rating interval or review score would be acceptable?",
+    },
+    "rental_car": {
+        "brand": "For the rental car, is there a vehicle brand or rental company you prefer?",
+        "model": "For the rental car, do you want a named model, economy, electric, gasoline, or SUV vehicle?",
+        "seats": "For the rental car, how many passenger seats do you require?",
+        "insurance": "For the rental car, do you require damage waiver, liability, personal accident, or belongings insurance?",
+        "service": "For the rental car, do you require a child seat, an additional driver, or permission for an underage driver?",
+    },
+    "restaurant": {
+        "cuisine": "For the restaurant, would you like a named national cuisine, vegetarian, fast food, seafood or steakhouse, or dessert, bakery, or cafe food?",
+        "tags": "For the restaurant, do you require business dining, outdoor seating, delivery, late-night opening, parking, pet-friendly access, reservations, or walk-ins?",
+        "rating": "For the restaurant, do you care about its rating range, one-star reviews, three-star minimum reviews, or share of five-star reviews?",
+        "expectation": "For the restaurant, what price range, cost, or budget should it fit?",
+    },
+}
+
+# Concrete option properties that may be copied into a search only after they
+# appear in the public trip request or a simulator response. This is a global
+# schema vocabulary, never task-specific hidden reward data.
+_SEARCH_PREFERENCE_CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
+    "flight": {
+        "direct": ("direct flight", "nonstop", "non-stop"),
+        "one_stop": ("one-stop", "one stop", "single connection"),
+        "layover": ("layover", "connection"),
+        "short_duration": ("shortest flight", "shorter flight", "minimum travel time"),
+        "long_layover": ("longer layover", "long layover"),
+        "wifi": ("wi-fi", "wifi", "internet"),
+        "meal": ("meal service", "meals", "meal"),
+        "lounge_access": ("lounge access", "airport lounge"),
+        "carry_on": ("carry-on baggage", "carry on baggage", "carry-on allowance"),
+        "checked_bag": ("checked baggage", "checked bag"),
+        "business_class": ("business class", "business-class"),
+    },
+    "hotel": {
+        "double_room": ("double room", "double bed"),
+        "king_room": ("king room", "king bed"),
+        "suite": ("suite",),
+        "guest_capacity": ("guest capacity", "guests", "people"),
+        "wifi": ("wi-fi", "wifi", "internet"),
+        "air_conditioning": ("air conditioning",),
+        "workspace": ("business workspace", "workspace"),
+        "view": ("city view", "ocean view", "mountain view"),
+        "gym": ("gym",),
+        "pets": ("pets allowed", "pet-friendly", "pet friendly", "dog"),
+        "laundry": ("washer and dryer", "washer", "dryer", "laundry"),
+        "breakfast": ("breakfast",),
+        "parking_service": ("parking service", "parking", "place to park"),
+        "accessibility": ("barrier-free", "barrier free", "accessible"),
+        "rating": ("rating", "review score"),
+    },
+    "apartment": {
+        "bedrooms": ("bedrooms", "bedroom"),
+        "bathrooms": ("bathrooms", "bathroom"),
+        "guest_capacity": ("guest capacity", "guests", "people"),
+        "wifi": ("wi-fi", "wifi", "internet"),
+        "air_conditioning": ("air conditioning",),
+        "parking": ("parking", "place to park"),
+        "kitchen": ("kitchen",),
+        "laundry": ("washer and dryer", "washer", "dryer", "laundry"),
+        "pets": ("pets allowed", "pet-friendly", "pet friendly", "dog"),
+        "elevator": ("elevator",),
+        "garden": ("garden", "greenery"),
+        "cleaning": ("daily cleaning", "cleaning"),
+        "early_checkin": ("early check-in", "early checkin"),
+        "late_checkout": ("late checkout", "late check-out"),
+        "rating": ("rating", "review score"),
+    },
+    "rental_car": {
+        "economy": ("economy car", "economy vehicle"),
+        "electric": ("electric car", "electric vehicle"),
+        "gasoline": ("gasoline car", "gasoline vehicle"),
+        "suv": ("suv",),
+        "seats": ("seats", "passengers"),
+        "damage_waiver": ("damage waiver",),
+        "liability": ("liability insurance", "liability coverage", "liability waiver"),
+        "accident": ("personal accident", "accident protection"),
+        "belongings": ("belongings insurance", "personal belongings"),
+        "child_seat": ("child seat", "baby seat"),
+        "additional_driver": ("additional driver", "more than one driver"),
+        "underage_driver": ("underage driver", "underage-driver"),
+    },
+    "restaurant": {
+        "vegetarian": ("vegetarian",),
+        "fast_food": ("fast food",),
+        "seafood": ("seafood",),
+        "steakhouse": ("steakhouse",),
+        "dessert": ("dessert", "bakery", "cafe"),
+        "business_dining": ("business dining",),
+        "outdoor_seating": ("outdoor seating",),
+        "delivery": ("delivery",),
+        "late_night": ("late-night", "late night", "doesn't close early", "does not close early"),
+        "parking": ("parking",),
+        "pets": ("pet-friendly", "pet friendly", "pets allowed", "dog"),
+        "reservations": ("reservations", "reservation"),
+        "walk_ins": ("walk-ins", "walk ins", "walk-in"),
+        "cheap": (
+            "cheap",
+            "cheapest",
+            "inexpensive",
+            "low price",
+            "limited budget",
+            "budget is limited",
+        ),
+        "expensive": ("expensive", "high-end", "high end"),
+        "rating": ("rating", "review score"),
+        "one_star": ("one-star", "1-star"),
+        "three_star": ("three-star", "3-star"),
+        "five_star": ("five-star", "5-star"),
+    },
+}
+_SPECULATIVE_SEARCH_PHRASES = (
+    "nice-to-have",
+    "nice to have",
+    "ideally",
+)
+_SEARCH_YEAR = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
+
+
+def _contains_public_alias(text: str, alias: str) -> bool:
+    normalized = text.casefold().replace("‑", "-").replace("–", "-")
+    return re.search(
+        rf"(?<![a-z0-9]){re.escape(alias.casefold())}(?![a-z0-9])",
+        normalized,
+    ) is not None
+
+
+def _search_query_issue(
+    content: str, aspect: str, public_context: tuple[str, ...]
+) -> str | None:
+    if not public_context:
+        return None
+    reference = "\n".join(public_context)
+    for phrase in _SPECULATIVE_SEARCH_PHRASES:
+        if _contains_public_alias(content, phrase) and not _contains_public_alias(
+            reference, phrase
+        ):
+            return "search_adds_speculative_requirement"
+    for concept, aliases in _SEARCH_PREFERENCE_CONCEPTS[aspect].items():
+        if any(_contains_public_alias(content, alias) for alias in aliases) and not any(
+            _contains_public_alias(reference, alias) for alias in aliases
+        ):
+            return f"search_invents_preference.{concept}"
+    public_years = set(_SEARCH_YEAR.findall(reference))
+    if set(_SEARCH_YEAR.findall(content)) - public_years:
+        return "search_invents_year"
+    return None
 
 
 @dataclass(frozen=True)
@@ -119,6 +292,7 @@ class TeacherTurnPlan:
     strategy: AttemptStrategy = AttemptStrategy.NATURAL
     visible_option_details: tuple[str, ...] = ()
     public_requirements: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    public_search_context: tuple[str, ...] = ()
 
     @property
     def choice(self) -> ActionChoice:
@@ -137,6 +311,13 @@ class TeacherTurnPlan:
             # its query from the visible conversation.
             return None
         return None
+
+    @property
+    def elicitation_repair_content(self) -> str | None:
+        if self.phase is not TeacherPhase.ELICIT:
+            return None
+        assert self.field is not None
+        return _ELICITATION_REPAIR_QUESTIONS[self.aspect][self.field]
 
     def instruction(self, generation_attempt: int) -> str:
         label = _ASPECT_LABEL[self.aspect]
@@ -158,12 +339,22 @@ class TeacherTurnPlan:
                 "Emit exactly one interact_with_env call with choice=`action`."
             )
         if self.phase is TeacherPhase.SEARCH:
+            evidence = ""
+            if self.public_search_context:
+                evidence = (
+                    " Public evidence allowed for this search:\n"
+                    + "\n".join(f"- {value}" for value in self.public_search_context)
+                    + "\n"
+                )
             return (
                 f"Current phase: search for {label}. Emit one search query for this aspect "
                 "that explicitly restates every relevant public trip argument (such as "
                 "locations and dates) and every preference the user has disclosed for this "
-                "aspect. Do not say only `matching the trip request`, do not invent missing "
-                "arguments, do not ask another question, and do not search any other aspect."
+                "aspect. Copy constraints only from the public evidence below: do not add "
+                "nice-to-have, ideal, inferred, or default requirements and do not invent a "
+                "year, party size, amenity, service, rating, or vehicle property. Do not say "
+                "only `matching the trip request`, do not ask another question, and do not "
+                f"search any other aspect.{evidence}"
             )
         options = ", ".join(self.available_option_ids)
         details = ""
@@ -207,7 +398,9 @@ class TeacherTurnPlan:
             normalized = action.content.casefold().replace("_", " ")
             if not any(token in normalized for token in label_tokens):
                 return "wrong_search_aspect"
-            return None
+            return _search_query_issue(
+                action.content, self.aspect, self.public_search_context
+            )
         content = action.content.strip()
         if not re.fullmatch(r"[ACFHR]\d+", content):
             return "invalid_answer_option"
@@ -354,6 +547,42 @@ class TeacherPolicyState:
             )
         )
 
+    def _public_search_context(
+        self, aspect: str, messages: list[dict]
+    ) -> tuple[str, ...]:
+        """Collect only initial user facts and simulator disclosures for an aspect."""
+
+        values = [
+            str(message.get("content") or "")[:1600]
+            for message in messages
+            if message.get("role") == "user" and message.get("content")
+        ]
+        for index, message in enumerate(messages[:-1]):
+            if message.get("role") != "assistant":
+                continue
+            calls = message.get("tool_calls")
+            if not isinstance(calls, list) or len(calls) != 1:
+                continue
+            function = calls[0].get("function") if isinstance(calls[0], dict) else None
+            if not isinstance(function, dict):
+                continue
+            try:
+                arguments = json.loads(str(function.get("arguments") or "{}"))
+                action = UserBenchAction.from_parameters(arguments)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                continue
+            semantic = semantic_action_signature(action, self.task.aspects)
+            following = messages[index + 1]
+            if (
+                semantic is None
+                or semantic[0] != aspect
+                or following.get("role") != "tool"
+                or not following.get("content")
+            ):
+                continue
+            values.append(str(following["content"])[:1600])
+        return tuple(values)
+
     def next_plan(
         self, session: "UserBenchSessionState", messages: list[dict]
     ) -> TeacherTurnPlan:
@@ -373,7 +602,12 @@ class TeacherPolicyState:
                 TeacherPhase.ELICIT, aspect, available[0], strategy=self.strategy
             )
         if aspect not in session.searched_aspects:
-            return TeacherTurnPlan(TeacherPhase.SEARCH, aspect, strategy=self.strategy)
+            return TeacherTurnPlan(
+                TeacherPhase.SEARCH,
+                aspect,
+                strategy=self.strategy,
+                public_search_context=self._public_search_context(aspect, messages),
+            )
         options = self._visible_option_ids(aspect, messages)
         if not options:
             raise RuntimeError(f"search_no_visible_options.{aspect}")

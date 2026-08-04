@@ -41,9 +41,9 @@ python scripts/train/sft/collect_sft_data.py \
   --output outputs/teacher_trajectories/sft_validation.accepted.jsonl
 ```
 
-Collection policy `teacher-state-machine-v2` controls each aspect through `ELICIT → SEARCH → ANSWER`. The hidden Reward-v2 ledger only tells the controller when active preference coverage for an aspect is complete; preference IDs, values, best IDs, coverage, and reward evidence are never inserted into Teacher messages. DeepSeek generates the official three-field tool call under a request-only phase constraint.
+Collection policy `teacher-state-machine-v4` controls each aspect through `ELICIT → SEARCH → ANSWER`. The hidden Reward-v2 ledger only tells the controller when active preference coverage for an aspect is complete; preference IDs, values, best IDs, coverage, and reward evidence are never inserted into Teacher messages. An elicitation field is committed only after the ledger reports a positive active-preference delta. If UserBench does not record an otherwise valid question, the collector retains and loss-masks that turn, retries the same field once with a distinct deterministic template, and aborts if the repair is also unrecorded. The v4 preference templates cover the complete global UserBench field taxonomy, vague/judgment recovery uses a distinct retry without colliding with duplicate detection, and search generation is constrained to public trip facts and simulator disclosures. DeepSeek generates the official three-field tool call under a request-only phase constraint.
 
-Collection has two accepted quality tiers. `gold` satisfies the strict gate and is written to `*.accepted.jsonl`. `silver` is accepted separately when the trajectory still terminates with a correct, fully answered itinerary and zero policy/answer errors, but contains one explicitly bounded recovery: one search repair, one vague-action repair, or one simulator judgment fallback. Repaired turns are retained for context and marked `loss_mask=true`; silver with an infrastructure fallback keeps `reward_valid=false` and is never counted as gold. Formal SFT reloads both tier files, ignores the serialized tier as authority, and reruns the Gold/Silver gates. A Silver judgment fallback without a masked assistant repair is rejected.
+Collection has two accepted quality tiers. `gold` satisfies the strict gate and is written to `*.accepted.jsonl`. `silver` is accepted separately when the trajectory still terminates with a correct, fully answered itinerary and zero policy/answer errors, but contains an explicitly bounded recovery: at most one search repair per aspect, one vague-action repair per field/phase, one elicitation-not-recorded repair per field, and at most one simulator judgment fallback in the trajectory. Repaired turns are retained for context and marked `loss_mask=true`; silver with an infrastructure fallback keeps `reward_valid=false` and is never counted as gold. Formal SFT reloads both tier files, ignores the serialized tier as authority, and reruns the Gold/Silver gates. A Silver judgment fallback without a masked assistant repair is rejected.
 
 For a fixed-size, composition-proportional train collection, use adaptive stratification instead of `--limit`. `--target-accepted` counts unique Gold plus Silver trajectories; rejected tasks are checkpointed and replaced by the next task from the same composition. The candidate order, largest-remainder quotas, wave history, and source SHA-256 are recorded in `selection_manifest.json`.
 
@@ -53,14 +53,14 @@ python scripts/train/sft/collect_sft_data.py \
   --target-accepted 400 \
   --stratify-by composition \
   --stratified-wave-size 32 \
-  --sampling-seed sft-train-composition-v1 \
-  --run-dir outputs/teacher_trajectories/runs/sft-train-composition-v1 \
+  --sampling-seed sft-train-composition-v4 \
+  --run-dir outputs/teacher_trajectories/runs/sft-train-composition-v4 \
   --output outputs/teacher_trajectories/sft_train.accepted.jsonl
 ```
 
 The command stops only when every composition reaches its quota. For the current 716-task train pool, the quotas are `22=86`, `2222=15`, `233=51`, `33=74`, `333=45`, `334=40`, `44=57`, and `444=32`. Resume the same adaptive run with the identical arguments plus `--resume`; do not add `--limit` or change the seed.
 
-Request-local retries become progressively stricter: natural phase guidance, a field-specific instruction with forbidden alternatives, and finally a canonical content allowlist in the temporary request schema. Search is keyed by aspect rather than query wording, and answer IDs must come from visible search output. Response fallback, invalid feedback, wrong answers, and unrecorded answer transitions abort the attempt immediately. A single judgment fallback or recoverable vague/search transition is retained as silver only when the final hard correctness checks pass; a second fallback/repair remains fail-loud.
+Request-local retries become progressively stricter: natural phase guidance, a field-specific instruction with forbidden alternatives, and finally a canonical content allowlist in the temporary request schema. Search is keyed by aspect rather than query wording, and answer IDs must come from visible search output. Response fallback, invalid feedback, wrong answers, and unrecorded answer transitions abort the attempt immediately. A single judgment fallback or recoverable vague/search/elicitation transition is retained as silver only when the final hard correctness checks pass; a second fallback/repair remains fail-loud.
 
 Each completed task is atomically checkpointed under a run directory before the batch finishes. Resume a stopped run without recollecting completed tasks:
 

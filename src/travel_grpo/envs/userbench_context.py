@@ -149,6 +149,8 @@ class UserBenchSessionState:
         result: UserBenchStepResult,
         action: UserBenchAction | None = None,
         snapshot: UserBenchRewardSnapshot | None = None,
+        *,
+        count_action_repetition: bool = True,
     ) -> None:
         if result.task_id != self.task_id:
             raise UserBenchSessionError(
@@ -165,7 +167,7 @@ class UserBenchSessionState:
 
         repeated_exactly = False
         semantic: tuple[str, str] | None = None
-        if action is not None:
+        if action is not None and count_action_repetition:
             signature = normalized_action_signature(action)
             repeated_exactly = signature in self._action_signatures
             if repeated_exactly:
@@ -173,7 +175,11 @@ class UserBenchSessionState:
             self._action_signatures.add(signature)
         if self.reward_task is not None and action is not None:
             semantic = semantic_action_signature(action, self.reward_task.aspects)
-            if semantic is not None and not repeated_exactly:
+            if (
+                count_action_repetition
+                and semantic is not None
+                and not repeated_exactly
+            ):
                 if semantic in self._semantic_signatures:
                     self.semantic_repeats += 1
                 self._semantic_signatures.add(semantic)

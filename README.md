@@ -56,8 +56,8 @@ python scripts/train/sft/collect_sft_data.py \
   --target-accepted 400 \
   --stratify-by composition \
   --stratified-wave-size 32 \
-  --sampling-seed sft-train-composition-v1 \
-  --run-dir outputs/teacher_trajectories/runs/sft-train-composition-v1 \
+  --sampling-seed sft-train-composition-v4 \
+  --run-dir outputs/teacher_trajectories/runs/sft-train-composition-v4 \
   --output outputs/teacher_trajectories/sft_train.accepted.jsonl
 python scripts/train/sft/sft_train.py --dry-run
 bash scripts/train/sft/run_sft.sh

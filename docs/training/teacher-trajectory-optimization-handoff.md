@@ -56,7 +56,7 @@ choice ∈ {search, action, answer}
 
 ### Teacher 状态机和轨迹过滤
 
-当前 Teacher 策略版本是 `teacher-state-machine-v2`：
+当前 Teacher 策略版本是 `teacher-state-machine-v4`：
 
 - 阶段固定为 `ELICIT -> SEARCH -> ANSWER`；
 - 本地控制器只把当前 aspect、field、允许的 choice 和公开对话状态传给 Teacher；

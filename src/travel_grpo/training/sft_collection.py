@@ -164,6 +164,10 @@ def validate_teacher_collection_config(path: str | Path) -> Mapping[str, Any]:
         raise TeacherCollectionError("silver allows exactly one vague repair")
     if silver.get("max_search_repairs") != 1:
         raise TeacherCollectionError("silver allows exactly one search repair")
+    if silver.get("max_elicitation_repairs_per_field") != 1:
+        raise TeacherCollectionError(
+            "silver allows exactly one elicitation repair per field"
+        )
     if silver.get("minimum_raw_terminal_reward") != 0.7:
         raise TeacherCollectionError(
             "silver minimum_raw_terminal_reward must be 0.7"
@@ -956,6 +960,7 @@ async def collect_teacher_trajectory(
     simulator_judgment_fallbacks = 0
     simulator_search_fallbacks = 0
     search_repairs: dict[str, int] = {}
+    elicitation_repair_fields: set[str] = set()
     vague_repairs: dict[str, int] = {}
     reward_state: UserBenchSessionState | None = None
     reward_breakdown: dict[str, Any] | None = None
@@ -982,6 +987,17 @@ async def collect_teacher_trajectory(
             tool_call = None
             for generation_attempt in range(1, teacher.runtime.action_retries + 2):
                 instruction = plan.instruction(generation_attempt)
+                elicitation_repair_key = f"{plan.aspect}.{plan.field}"
+                is_elicitation_repair = (
+                    plan.phase is TeacherPhase.ELICIT
+                    and elicitation_repair_key in elicitation_repair_fields
+                )
+                if is_elicitation_repair:
+                    instruction += (
+                        " The previous focused preference question was not recorded. "
+                        "Use the materially different repair wording supplied by the "
+                        "content constraint; ask about the same single field only."
+                    )
                 if plan.phase is TeacherPhase.SEARCH and search_repairs.get(plan.aspect, 0):
                     instruction += (
                         " The previous search for this aspect was not recorded. Emit a "
@@ -1000,11 +1016,15 @@ async def collect_teacher_trajectory(
                         and generation_attempt >= teacher.runtime.action_retries
                     )
                 )
-                allowed_contents = (
-                    canonical_content_for(plan)
-                    if strongest_retry or plan.phase is TeacherPhase.ANSWER
-                    else ()
-                )
+                if is_elicitation_repair:
+                    assert plan.elicitation_repair_content is not None
+                    allowed_contents = (plan.elicitation_repair_content,)
+                else:
+                    allowed_contents = (
+                        canonical_content_for(plan)
+                        if strongest_retry or plan.phase is TeacherPhase.ANSWER
+                        else ()
+                    )
                 constraint = TeacherRequestConstraint(plan.choice, allowed_contents)
                 candidate = await teacher.generate_action(
                     request_messages,
@@ -1079,25 +1099,6 @@ async def collect_teacher_trajectory(
             before_unsearched = reward_state.unsearched_answers
             result = await wrapper.astep(tool_call.action)
             after_snapshot = wrapper.reward_snapshot()
-            reward_state.record_step(result, tool_call.action, after_snapshot)
-            policy.record_committed(plan)
-            exact_signatures.add(normalized_action_signature(tool_call.action))
-            semantic = semantic_action_signature(tool_call.action, dimensions)
-            if semantic is not None:
-                semantic_signatures.add(semantic)
-            answered_aspects = set(reward_state.answers)
-
-            response_fallback = _simulator_fallback(result)
-            judgment_fallbacks = _simulator_diagnostic_count(
-                result, "userbench_judgment_fallbacks"
-            )
-            search_fallbacks = _simulator_diagnostic_count(
-                result, "userbench_search_fallbacks"
-            )
-            if response_fallback:
-                simulator_fallbacks += 1
-            simulator_judgment_fallbacks += judgment_fallbacks
-            simulator_search_fallbacks += search_fallbacks
             active_delta = (
                 0
                 if before_snapshot is None
@@ -1116,6 +1117,34 @@ async def collect_teacher_trajectory(
                     - before_snapshot.passive_elicited_count,
                 )
             )
+            elicitation_not_recorded = (
+                plan.phase is TeacherPhase.ELICIT and active_delta <= 0
+            )
+            reward_state.record_step(
+                result,
+                tool_call.action,
+                after_snapshot,
+                count_action_repetition=not elicitation_not_recorded,
+            )
+            exact_signatures.add(normalized_action_signature(tool_call.action))
+            semantic = semantic_action_signature(tool_call.action, dimensions)
+            if semantic is not None:
+                semantic_signatures.add(semantic)
+            answered_aspects = set(reward_state.answers)
+
+            response_fallback = _simulator_fallback(result)
+            judgment_fallbacks = _simulator_diagnostic_count(
+                result, "userbench_judgment_fallbacks"
+            )
+            search_fallbacks = _simulator_diagnostic_count(
+                result, "userbench_search_fallbacks"
+            )
+            if response_fallback:
+                simulator_fallbacks += 1
+            simulator_judgment_fallbacks += judgment_fallbacks
+            simulator_search_fallbacks += search_fallbacks
+            if plan.phase is not TeacherPhase.ELICIT or active_delta > 0:
+                policy.record_committed(plan)
             committed_actions.append(
                 {
                     "environment_turn": turn + 1,
@@ -1171,6 +1200,8 @@ async def collect_teacher_trajectory(
                 fail_reason = "environment.wrong_answer"
             elif reward_state.unsearched_answers > before_unsearched:
                 fail_reason = "environment.unsearched_answer"
+            elif elicitation_not_recorded:
+                fail_reason = "environment.elicitation_not_recorded"
             elif (
                 plan.phase is TeacherPhase.SEARCH
                 and plan.aspect not in reward_state.searched_aspects
@@ -1203,6 +1234,14 @@ async def collect_teacher_trajectory(
                         "attempt_strategy": strategy.value,
                     }
                 )
+                if plan.phase is TeacherPhase.ELICIT and active_delta <= 0:
+                    repair_key = f"{plan.aspect}.{plan.field}"
+                    elicitation_repair_fields.add(repair_key)
+                    exact_signatures.discard(
+                        normalized_action_signature(tool_call.action)
+                    )
+                    if semantic is not None:
+                        semantic_signatures.discard(semantic)
                 fail_reason = None
             elif fail_reason == "environment.vague_action_feedback":
                 repair_key = f"{plan.aspect}.{plan.field or plan.phase.value}"
@@ -1210,6 +1249,11 @@ async def collect_teacher_trajectory(
                     vague_repairs[repair_key] = vague_repairs.get(repair_key, 0) + 1
                     if plan.phase is TeacherPhase.ELICIT and plan.field is not None:
                         policy.asked_fields[plan.aspect].discard(plan.field)
+                        if active_delta <= 0:
+                            elicitation_repair_fields.add(repair_key)
+                    exact_signatures.discard(
+                        normalized_action_signature(tool_call.action)
+                    )
                     if semantic is not None:
                         semantic_signatures.discard(semantic)
                     messages[assistant_message_index]["loss_mask"] = True
@@ -1227,6 +1271,34 @@ async def collect_teacher_trajectory(
                     )
                     fail_reason = None
             if fail_reason is not None:
+                elicitation_repair_key = f"{plan.aspect}.{plan.field}"
+                if (
+                    fail_reason == "environment.elicitation_not_recorded"
+                    and elicitation_repair_key not in elicitation_repair_fields
+                ):
+                    elicitation_repair_fields.add(elicitation_repair_key)
+                    # The environment consumed this turn but did not credit an
+                    # active preference. Preserve it for audit/context, exclude it
+                    # from SFT loss, and retry the same uncommitted field once.
+                    if semantic is not None:
+                        semantic_signatures.discard(semantic)
+                    exact_signatures.discard(
+                        normalized_action_signature(tool_call.action)
+                    )
+                    messages[assistant_message_index]["loss_mask"] = True
+                    committed_actions[-1]["loss_mask"] = True
+                    generation_diagnostics.append(
+                        {
+                            "environment_turn": turn + 1,
+                            "generation_attempt": 0,
+                            "reason": "elicitation_repair_allowed",
+                            "phase": plan.phase.value,
+                            "aspect": plan.aspect,
+                            "field": plan.field,
+                            "attempt_strategy": strategy.value,
+                        }
+                    )
+                    continue
                 if (
                     fail_reason == "environment.search_not_recorded"
                     and search_repairs.get(plan.aspect, 0) < 1

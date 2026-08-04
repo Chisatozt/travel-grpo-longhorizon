@@ -452,6 +452,60 @@ def test_answer_validation_rejects_visible_option_missing_public_search_requirem
     assert plan.validate(action) == "answer_not_matching_public_requirement.air_conditioning"
 
 
+@pytest.mark.parametrize(
+    ("aspect", "field", "required_phrase"),
+    [
+        ("flight", "amenities", "lounge"),
+        ("apartment", "amenities", "garden"),
+        ("restaurant", "tags", "late-night"),
+        ("hotel", "amenities", "mountain view"),
+        ("rental_car", "insurance", "belongings"),
+    ],
+)
+def test_primary_and_repair_questions_cover_global_preference_taxonomy_regressions(
+    aspect, field, required_phrase
+):
+    plan = TeacherTurnPlan(TeacherPhase.ELICIT, aspect, field)
+    assert required_phrase in plan.canonical_content.casefold()
+    assert required_phrase in plan.elicitation_repair_content.casefold()
+
+
+def test_search_validation_rejects_preferences_and_years_absent_from_public_context():
+    plan = TeacherTurnPlan(
+        TeacherPhase.SEARCH,
+        "apartment",
+        public_search_context=(
+            "I will stay in Barcelona from April 15th to April 22nd.",
+            "Reliable internet is important, so I need Wi-Fi.",
+        ),
+    )
+    valid = UserBenchAction.from_parameters(
+        {
+            "thought": "search",
+            "choice": "search",
+            "content": "Search for an apartment in Barcelona from April 15 to April 22 with Wi-Fi.",
+        }
+    )
+    invented_kitchen = UserBenchAction.from_parameters(
+        {
+            "thought": "search",
+            "choice": "search",
+            "content": "Search for an apartment in Barcelona from April 15 to April 22 with Wi-Fi and a kitchen.",
+        }
+    )
+    invented_year = UserBenchAction.from_parameters(
+        {
+            "thought": "search",
+            "choice": "search",
+            "content": "Search for an apartment in Barcelona from April 15 to April 22, 2027, with Wi-Fi.",
+        }
+    )
+    assert plan.validate(valid) is None
+    assert plan.validate(invented_kitchen) == "search_invents_preference.kitchen"
+    assert plan.validate(invented_year) == "search_invents_year"
+    assert "Reliable internet" in plan.instruction(1)
+
+
 class FakeTeacher:
     def __init__(self):
         self.runtime = TeacherRuntime(
@@ -604,7 +658,7 @@ def test_collects_tool_only_messages_and_raw_rewards():
     ]
     assert record["messages"][-1]["content"] == "feedback-3"
     assert [value["phase"] for value in record.get("generation_diagnostics", [])] == []
-    assert record["policy_version"] == "teacher-state-machine-v2"
+    assert record["policy_version"] == "teacher-state-machine-v4"
     assert FakeWrapper.instances[0].closed
 
 
@@ -646,10 +700,11 @@ def test_collection_config_pins_both_deepseek_roles():
     assert config["collection"]["reward_version"] == "userbench-travel-reward-v2"
     assert config["collection"]["minimum_terminal_reward"] == 0.7
     assert config["collection"]["require_zero_policy_penalty"] is True
-    assert config["collection"]["policy_version"] == "teacher-state-machine-v2"
+    assert config["collection"]["policy_version"] == "teacher-state-machine-v4"
     assert config["collection"]["fail_fast_on_strict_violation"] is True
     assert config["collection"]["checkpoint_each_task"] is True
     assert config["collection"]["resume_safe"] is True
+    assert config["collection"]["silver"]["max_elicitation_repairs_per_field"] == 1
 
 
 def test_teacher_pool_rejects_frozen_test_rows(tmp_path):
@@ -697,6 +752,28 @@ def test_wrong_phase_choice_is_retried_without_stepping_environment():
     assert len(trajectory.step_rewards) == 3
     assert trajectory.generation_diagnostics[0]["reason"] == "wrong_phase_choice"
     assert teacher.constraints[0].choice.value == "action"
+
+
+def test_search_with_invented_preference_is_retried_before_environment_step():
+    FakeWrapper.instances.clear()
+    teacher = SequenceTeacher(
+        [
+            ("action", "Do you prefer a specific hotel name?"),
+            ("search", "Search for hotel options in Paris with parking."),
+            ("search", "Search for hotel options in Paris."),
+            ("answer", "H1"),
+        ]
+    )
+    trajectory = asyncio.run(
+        collect_teacher_trajectory(
+            task(), teacher=teacher, simulator=simulator(), wrapper_factory=FakeWrapper
+        )
+    )
+    assert trajectory.terminated
+    assert FakeWrapper.instances[-1].steps == 3
+    assert trajectory.generation_diagnostics[0]["reason"] == (
+        "search_invents_preference.parking_service"
+    )
 
 
 def test_state_machine_stops_eliciting_after_active_coverage():
@@ -1074,6 +1151,206 @@ def test_every_canonical_preference_template_satisfies_its_own_contract():
                 }
             )
             assert plan.validate(action) is None, (aspect, field, plan.canonical_content)
+
+
+def test_every_elicitation_repair_template_is_distinct_and_satisfies_contract():
+    for aspect, fields in FIELD_QUERY_HINTS.items():
+        for field in fields:
+            plan = TeacherTurnPlan(TeacherPhase.ELICIT, aspect, field)
+            action = UserBenchAction.from_parameters(
+                {
+                    "thought": "repair",
+                    "choice": "action",
+                    "content": plan.elicitation_repair_content,
+                }
+            )
+            assert plan.elicitation_repair_content != plan.canonical_content
+            assert plan.validate(action) is None, (
+                aspect,
+                field,
+                plan.elicitation_repair_content,
+            )
+
+
+class ElicitationRepairWrapper(FakeWrapper):
+    """Ignore the first valid preference question and credit the repair."""
+
+    def reward_snapshot(self):
+        choices = [value.choice.value for value in self.actions]
+        action_count = choices.count("action")
+        return UserBenchRewardSnapshot(
+            remaining_preference_ids=(
+                frozenset() if action_count >= 2 else frozenset({"P1"})
+            ),
+            active_elicited_count=1 if action_count >= 2 else 0,
+            passive_elicited_count=0,
+            remaining_search_aspects=(
+                frozenset() if "search" in choices else frozenset({"hotel"})
+            ),
+            choice_initials=frozenset({"H"}) if "answer" in choices else frozenset(),
+        )
+
+
+class UnrecordedJudgmentThenRecoveryWrapper(ElicitationRepairWrapper):
+    """Return one judgment fallback without crediting its elicitation turn."""
+
+    async def astep(self, action):
+        result = await super().astep(action)
+        action_count = sum(value.choice.value == "action" for value in self.actions)
+        if action.choice.value == "action" and action_count == 1:
+            return UserBenchStepResult(
+                result.task_id,
+                result.observation,
+                result.reward,
+                result.terminated,
+                result.truncated,
+                {"userbench_judgment_fallbacks": 1},
+            )
+        return result
+
+
+class UnrecordedVagueThenRecoveryWrapper(ElicitationRepairWrapper):
+    """Reject one elicitation as vague without credit, then accept its rephrase."""
+
+    async def astep(self, action):
+        result = await super().astep(action)
+        action_count = sum(value.choice.value == "action" for value in self.actions)
+        if action.choice.value == "action" and action_count == 1:
+            return UserBenchStepResult(
+                result.task_id,
+                UserBenchObservation(
+                    "Your question is too vague and general.",
+                    result.observation.step_count,
+                    result.observation.episode_complete,
+                    result.observation.last_reward,
+                    result.observation.diagnostics,
+                ),
+                result.reward,
+                result.terminated,
+                result.truncated,
+                result.diagnostics,
+            )
+        return result
+
+
+@pytest.mark.parametrize(
+    ("wrapper_factory", "repair_marker"),
+    [
+        (UnrecordedJudgmentThenRecoveryWrapper, "judgment_fallback_allowed"),
+        (UnrecordedVagueThenRecoveryWrapper, "vague_action_repair_allowed"),
+    ],
+)
+def test_uncommitted_fallback_rephrases_without_duplicate_exhaustion(
+    wrapper_factory, repair_marker
+):
+    teacher = SequenceTeacher(
+        [
+            ("action", "Do you prefer a specific hotel name?"),
+            (
+                "action",
+                "For the hotel, is there a particular hotel name or property name you want?",
+            ),
+            ("search", "Search for hotel options in Paris"),
+            ("answer", "H1"),
+        ]
+    )
+    trajectory = asyncio.run(
+        collect_teacher_trajectory(
+            task(),
+            teacher=teacher,
+            simulator=simulator(),
+            wrapper_factory=wrapper_factory,
+        )
+    )
+    reasons = [value["reason"] for value in trajectory.generation_diagnostics]
+    assert trajectory.terminated
+    assert repair_marker in reasons
+    assert "duplicate_action" not in reasons
+    assert "semantic_duplicate_action" not in reasons
+    assert teacher.constraints[1].allowed_contents == (
+        "For the hotel, is there a particular hotel name or property name you want?",
+    )
+
+
+class NeverRecordsElicitationWrapper(ElicitationRepairWrapper):
+    """Never credit preference questions, including the one allowed repair."""
+
+    def reward_snapshot(self):
+        snapshot = super().reward_snapshot()
+        return UserBenchRewardSnapshot(
+            remaining_preference_ids=frozenset({"P1"}),
+            active_elicited_count=0,
+            passive_elicited_count=snapshot.passive_elicited_count,
+            remaining_search_aspects=snapshot.remaining_search_aspects,
+            choice_initials=snapshot.choice_initials,
+        )
+
+
+def test_elicitation_not_recorded_retries_same_field_once_and_masks_failed_turn():
+    teacher = SequenceTeacher(
+        [
+            ("action", "Do you prefer a specific hotel name?"),
+            (
+                "action",
+                "For the hotel, is there a particular hotel name or property name you want?",
+            ),
+            ("search", "Search for hotel options in Paris"),
+            ("answer", "H1"),
+        ]
+    )
+    trajectory = asyncio.run(
+        collect_teacher_trajectory(
+            task(),
+            teacher=teacher,
+            simulator=simulator(),
+            wrapper_factory=ElicitationRepairWrapper,
+        )
+    )
+    assert trajectory.terminated
+    assert trajectory.step_rewards == (0.2, 0.2, 0.2, 1.0)
+    assistant_messages = [
+        message for message in trajectory.messages if message.get("role") == "assistant"
+    ]
+    assert [message.get("loss_mask", False) for message in assistant_messages] == [
+        True,
+        False,
+        False,
+        False,
+    ]
+    assert trajectory.generation_diagnostics[-1]["reason"] == (
+        "elicitation_repair_allowed"
+    )
+    assert trajectory.reward_breakdown["exact_repeats"] == 0
+    assert trajectory.reward_breakdown["semantic_repeats"] == 0
+    assert teacher.constraints[1].allowed_contents == (
+        "For the hotel, is there a particular hotel name or property name you want?",
+    )
+
+
+def test_second_unrecorded_elicitation_aborts_without_consuming_another_field():
+    outcome = asyncio.run(
+        collect_teacher_task_with_retries(
+            task(),
+            teacher=SequenceTeacher(
+                [
+                    ("action", "Do you prefer a specific hotel name?"),
+                    (
+                        "action",
+                        "For the hotel, is there a particular hotel name or property name you want?",
+                    ),
+                ]
+            ),
+            simulator=simulator(),
+            wrapper_factory=NeverRecordsElicitationWrapper,
+            max_attempts=1,
+        )
+    )
+    diagnostic = outcome.attempts[0]
+    assert diagnostic.rejection_reasons == ("environment.elicitation_not_recorded",)
+    assert diagnostic.partial_trajectory["environment_steps_completed"] == 2
+    assert [
+        action["field"] for action in diagnostic.partial_trajectory["committed_actions"]
+    ] == ["name", "name"]
 
 
 class JudgmentFallbackWrapper(FakeWrapper):

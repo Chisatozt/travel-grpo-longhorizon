@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import json
+import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
     from travel_grpo.envs.userbench_context import UserBenchSessionState
 
 
-POLICY_VERSION = "teacher-state-machine-v4"
+POLICY_VERSION = "teacher-state-machine-v5"
 _OPTION_ID = re.compile(r"(?<![A-Z0-9])([ACFHR]\d+)(?![A-Z0-9])")
 _PREFIX_BY_ASPECT = {value: key for key, value in ASPECT_BY_OPTION_PREFIX.items()}
 _GENERIC_FIELD_QUESTION = re.compile(
@@ -157,20 +158,44 @@ _ELICITATION_REPAIR_QUESTIONS = {
 _SEARCH_PREFERENCE_CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
     "flight": {
         "direct": ("direct flight", "nonstop", "non-stop"),
-        "one_stop": ("one-stop", "one stop", "single connection"),
-        "layover": ("layover", "connection"),
-        "short_duration": ("shortest flight", "shorter flight", "minimum travel time"),
-        "long_layover": ("longer layover", "long layover"),
-        "wifi": ("wi-fi", "wifi", "internet"),
-        "meal": ("meal service", "meals", "meal"),
-        "lounge_access": ("lounge access", "airport lounge"),
-        "carry_on": ("carry-on baggage", "carry on baggage", "carry-on allowance"),
-        "checked_bag": ("checked baggage", "checked bag"),
+        "one_stop": ("one-stop", "one stop", "single connection", "one connection"),
+        "layover": ("layover", "connection", "connecting flight"),
+        "short_duration": (
+            "shortest flight",
+            "shorter flight",
+            "shorter travel time",
+            "minimum travel time",
+            "quick flight",
+        ),
+        "long_layover": ("longer layover", "long layover", "extended layover"),
+        "wifi": ("wi-fi", "wifi", "internet", "online access"),
+        "meal": ("meal service", "meals", "meal", "food service"),
+        "lounge_access": ("lounge access", "airport lounge", "lounge"),
+        "carry_on": (
+            "carry-on baggage",
+            "carry on baggage",
+            "carry-on allowance",
+            "carry-on luggage",
+            "cabin baggage",
+            "hand luggage",
+        ),
+        "checked_bag": (
+            "checked baggage",
+            "checked bag",
+            "checked luggage",
+            "checked suitcase",
+        ),
         "business_class": ("business class", "business-class"),
     },
     "hotel": {
-        "double_room": ("double room", "double bed"),
-        "king_room": ("king room", "king bed"),
+        "double_room": (
+            "double room",
+            "double bed",
+            "one big bed",
+            "one large bed",
+            "one shared bed",
+        ),
+        "king_room": ("king room", "king bed", "king-sized bed", "king size bed"),
         "suite": ("suite",),
         "guest_capacity": ("guest capacity", "guests", "people"),
         "wifi": ("wi-fi", "wifi", "internet"),
@@ -183,7 +208,15 @@ _SEARCH_PREFERENCE_CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
         "breakfast": ("breakfast",),
         "parking_service": ("parking service", "parking", "place to park"),
         "accessibility": ("barrier-free", "barrier free", "accessible"),
-        "rating": ("rating", "review score"),
+        "rating": (
+            "rating",
+            "review score",
+            "score",
+            "star",
+            "stars",
+            "star rating",
+            "rated",
+        ),
     },
     "apartment": {
         "bedrooms": ("bedrooms", "bedroom"),
@@ -200,7 +233,15 @@ _SEARCH_PREFERENCE_CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
         "cleaning": ("daily cleaning", "cleaning"),
         "early_checkin": ("early check-in", "early checkin"),
         "late_checkout": ("late checkout", "late check-out"),
-        "rating": ("rating", "review score"),
+        "rating": (
+            "rating",
+            "review score",
+            "score",
+            "star",
+            "stars",
+            "star rating",
+            "rated",
+        ),
     },
     "rental_car": {
         "economy": ("economy car", "economy vehicle"),
@@ -208,10 +249,33 @@ _SEARCH_PREFERENCE_CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
         "gasoline": ("gasoline car", "gasoline vehicle"),
         "suv": ("suv",),
         "seats": ("seats", "passengers"),
-        "damage_waiver": ("damage waiver",),
-        "liability": ("liability insurance", "liability coverage", "liability waiver"),
-        "accident": ("personal accident", "accident protection"),
-        "belongings": ("belongings insurance", "personal belongings"),
+        "damage_waiver": (
+            "damage waiver",
+            "collision damage waiver",
+            "damage protection",
+            "coverage against damage",
+            "protection against damage",
+            "rental damage coverage",
+        ),
+        "liability": (
+            "liability insurance",
+            "liability coverage",
+            "liability waiver",
+            "claims from other drivers",
+            "other cars involved",
+            "protection against claims",
+        ),
+        "accident": (
+            "personal accident",
+            "accident protection",
+            "protection if anyone is injured",
+        ),
+        "belongings": (
+            "belongings insurance",
+            "personal belongings",
+            "luggage protection",
+            "personal property coverage",
+        ),
         "child_seat": ("child seat", "baby seat"),
         "additional_driver": ("additional driver", "more than one driver"),
         "underage_driver": ("underage driver", "underage-driver"),
@@ -219,13 +283,26 @@ _SEARCH_PREFERENCE_CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
     "restaurant": {
         "vegetarian": ("vegetarian",),
         "fast_food": ("fast food",),
-        "seafood": ("seafood",),
-        "steakhouse": ("steakhouse",),
+        "seafood": ("seafood", "fish", "fresh from the sea", "from the sea"),
+        "steakhouse": ("steakhouse", "steak", "steaks"),
         "dessert": ("dessert", "bakery", "cafe"),
         "business_dining": ("business dining",),
         "outdoor_seating": ("outdoor seating",),
         "delivery": ("delivery",),
-        "late_night": ("late-night", "late night", "doesn't close early", "does not close early"),
+        "late_night": (
+            "late-night",
+            "late night",
+            "doesn't close early",
+            "does not close early",
+            "closing early",
+            "open late",
+            "open later",
+            "closes late",
+            "closing late",
+            "late hours",
+            "after hours",
+            "kitchen open later",
+        ),
         "parking": ("parking",),
         "pets": ("pet-friendly", "pet friendly", "pets allowed", "dog"),
         "reservations": ("reservations", "reservation"),
@@ -239,7 +316,15 @@ _SEARCH_PREFERENCE_CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
             "budget is limited",
         ),
         "expensive": ("expensive", "high-end", "high end"),
-        "rating": ("rating", "review score"),
+        "rating": (
+            "rating",
+            "review score",
+            "score",
+            "star",
+            "stars",
+            "star rating",
+            "rated",
+        ),
         "one_star": ("one-star", "1-star"),
         "three_star": ("three-star", "3-star"),
         "five_star": ("five-star", "5-star"),
@@ -253,12 +338,47 @@ _SPECULATIVE_SEARCH_PHRASES = (
 _SEARCH_YEAR = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
 
 
+_SEARCH_TOKEN = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
+
+
+def _search_tokens(text: str) -> tuple[str, ...]:
+    """Normalize public search evidence for conservative phrase matching."""
+
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    normalized = normalized.replace("’", "'").replace("–", "-").replace("—", "-")
+    normalized = normalized.replace("-", " ")
+    return tuple(_SEARCH_TOKEN.findall(normalized))
+
+
+def _search_token_matches(actual: str, expected: str) -> bool:
+    if actual == expected:
+        return True
+    # Accept common English inflections without allowing arbitrary substrings.
+    if len(expected) > 3 and actual in {expected + "s", expected + "es"}:
+        return True
+    if len(actual) > 3 and expected in {actual + "s", actual + "es"}:
+        return True
+    if expected.endswith("y") and len(expected) > 3 and actual == expected[:-1] + "ies":
+        return True
+    if actual.endswith("y") and len(actual) > 3 and expected == actual[:-1] + "ies":
+        return True
+    return False
+
+
 def _contains_public_alias(text: str, alias: str) -> bool:
-    normalized = text.casefold().replace("‑", "-").replace("–", "-")
-    return re.search(
-        rf"(?<![a-z0-9]){re.escape(alias.casefold())}(?![a-z0-9])",
-        normalized,
-    ) is not None
+    """Match an alias against public evidence with punctuation/inflection tolerance."""
+
+    actual = _search_tokens(text)
+    expected = _search_tokens(alias)
+    if not actual or not expected or len(expected) > len(actual):
+        return False
+    for start in range(len(actual) - len(expected) + 1):
+        if all(
+            _search_token_matches(actual[start + offset], expected[offset])
+            for offset in range(len(expected))
+        ):
+            return True
+    return False
 
 
 def _search_query_issue(

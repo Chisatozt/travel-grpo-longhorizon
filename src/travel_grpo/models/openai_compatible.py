@@ -43,7 +43,7 @@ class TeacherRuntime:
     timeout: float = 60.0
     max_retries: int = 2
     protocol_retries: int = 2
-    action_retries: int = 2
+    action_retries: int = 3
     thought_max_chars: int = 200
     thinking: str | None = "disabled"
 
@@ -95,7 +95,7 @@ class TeacherRuntime:
             timeout=float(values.get("TEACHER_TIMEOUT", "60")),
             max_retries=int(values.get("TEACHER_MAX_RETRIES", "2")),
             protocol_retries=int(values.get("TEACHER_PROTOCOL_RETRIES", "2")),
-            action_retries=int(values.get("TEACHER_ACTION_RETRIES", "2")),
+            action_retries=int(values.get("TEACHER_ACTION_RETRIES", "3")),
             thought_max_chars=int(values.get("TEACHER_THOUGHT_MAX_CHARS", "200")),
             thinking=thinking or None,
         )

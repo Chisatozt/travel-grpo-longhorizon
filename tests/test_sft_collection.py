@@ -506,6 +506,63 @@ def test_search_validation_rejects_preferences_and_years_absent_from_public_cont
     assert "Reliable internet" in plan.instruction(1)
 
 
+@pytest.mark.parametrize(
+    ("aspect", "context", "query"),
+    [
+        (
+            "hotel",
+            "My recent hotels were all rated around 9 to 10, and that quality felt great.",
+            "Search for hotels with a rating between 9 and 10.",
+        ),
+        (
+            "restaurant",
+            "I prefer places where nothing has ever dropped below two stars.",
+            "Search for restaurants that never dropped below 2 stars in rating.",
+        ),
+        (
+            "restaurant",
+            "Jet lag means I want a kitchen that stays open later rather than closing early.",
+            "Search for a restaurant with late-night opening.",
+        ),
+        (
+            "rental_car",
+            "I want coverage against damage during the rental.",
+            "Search for a rental car with a damage waiver.",
+        ),
+    ],
+)
+def test_search_validation_accepts_inflected_and_paraphrased_public_evidence(
+    aspect, context, query
+):
+    plan = TeacherTurnPlan(
+        TeacherPhase.SEARCH,
+        aspect,
+        public_search_context=(context,),
+    )
+    action = UserBenchAction.from_parameters(
+        {"thought": "search", "choice": "search", "content": query}
+    )
+    assert plan.validate(action) is None
+
+
+def test_search_validation_does_not_equate_generic_shared_bed_with_king_bed():
+    plan = TeacherTurnPlan(
+        TeacherPhase.SEARCH,
+        "hotel",
+        public_search_context=(
+            "We want one big bed rather than two separate beds.",
+        ),
+    )
+    action = UserBenchAction.from_parameters(
+        {
+            "thought": "search",
+            "choice": "search",
+            "content": "Search for a hotel with a king bed.",
+        }
+    )
+    assert plan.validate(action) == "search_invents_preference.king_room"
+
+
 class FakeTeacher:
     def __init__(self):
         self.runtime = TeacherRuntime(
@@ -658,7 +715,7 @@ def test_collects_tool_only_messages_and_raw_rewards():
     ]
     assert record["messages"][-1]["content"] == "feedback-3"
     assert [value["phase"] for value in record.get("generation_diagnostics", [])] == []
-    assert record["policy_version"] == "teacher-state-machine-v4"
+    assert record["policy_version"] == "teacher-state-machine-v5"
     assert FakeWrapper.instances[0].closed
 
 
@@ -700,7 +757,8 @@ def test_collection_config_pins_both_deepseek_roles():
     assert config["collection"]["reward_version"] == "userbench-travel-reward-v2"
     assert config["collection"]["minimum_terminal_reward"] == 0.7
     assert config["collection"]["require_zero_policy_penalty"] is True
-    assert config["collection"]["policy_version"] == "teacher-state-machine-v4"
+    assert config["collection"]["policy_version"] == "teacher-state-machine-v5"
+    assert config["teacher"]["action_retries"] == 3
     assert config["collection"]["fail_fast_on_strict_violation"] is True
     assert config["collection"]["checkpoint_each_task"] is True
     assert config["collection"]["resume_safe"] is True
@@ -797,6 +855,7 @@ def test_bundled_preference_question_is_retried_before_environment_step():
         [
             ("action", "Which hotel room and amenities do you prefer?"),
             ("action", "Which hotel amenities do you prefer?"),
+            ("action", "Do you prefer specific hotel amenities?"),
             ("action", "Do you prefer a specific hotel name?"),
             ("search", "Search for hotel options in Paris"),
             ("answer", "H1"),
@@ -811,7 +870,7 @@ def test_bundled_preference_question_is_retried_before_environment_step():
     assert trajectory.generation_diagnostics[0]["reason"] == "bundled_action"
     assert trajectory.generation_diagnostics[1]["reason"] == "wrong_preference_field"
     assert teacher.requests[0][-1]["content"] != teacher.requests[1][-1]["content"]
-    assert teacher.constraints[2].allowed_contents == (
+    assert teacher.constraints[3].allowed_contents == (
         "Do you prefer a specific hotel name, brand, platform, or property?",
     )
 
@@ -992,6 +1051,7 @@ def test_failed_attempt_diagnostic_contains_safe_partial_trajectory():
             task(),
             teacher=SequenceTeacher(
                 [
+                    ("search", "Los Angeles hotels"),
                     ("search", "Los Angeles hotels"),
                     ("search", "Los Angeles hotels"),
                     ("search", "Los Angeles hotels"),

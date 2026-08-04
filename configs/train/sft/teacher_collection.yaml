@@ -9,14 +9,14 @@ teacher:
   max_tokens: 4096
   thought_max_chars: 200
   protocol_retries: 2
-  action_retries: 2
+  action_retries: 3
 
 simulator:
   config_path: configs/interaction_config/simulator_collection.yaml
   model: deepseek-v4-flash
 
 collection:
-  policy_version: teacher-state-machine-v4
+  policy_version: teacher-state-machine-v5
   train_tasks: data/sft/tasks_train.jsonl
   validation_tasks: data/sft/tasks_validation.jsonl
   frozen_evaluation_tasks: data/evaluation/tasks.jsonl

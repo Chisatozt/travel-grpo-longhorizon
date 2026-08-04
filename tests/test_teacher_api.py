@@ -59,8 +59,20 @@ def response(arguments, *, name="interact_with_env", count=1):
 def test_teacher_runtime_is_secret_safe_and_role_is_pinned():
     value = runtime()
     assert "top-secret" not in repr(value)
+    assert value.action_retries == 3
     with pytest.raises(ValueError, match="teacher model"):
         TeacherRuntime("other-model", "https://provider.example/v1", "secret")
+
+
+def test_teacher_runtime_environment_defaults_to_three_action_retries():
+    value = TeacherRuntime.from_environment(
+        {
+            "TEACHER_MODEL": "deepseek-v4-flash",
+            "TEACHER_BASE_URL": "https://provider.example/v1",
+            "TEACHER_API_KEY": "top-secret",
+        }
+    )
+    assert value.action_retries == 3
 
 
 def test_teacher_client_sends_required_official_tool_and_parses_action():

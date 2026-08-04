@@ -8,6 +8,7 @@ import yaml
 from travel_grpo.envs.userbench_tools import (
     UserBenchAction,
     UserBenchActionError,
+    action_field_matches,
     action_query_issue,
     get_interact_with_env_schema,
 )
@@ -97,3 +98,22 @@ def test_longer_service_hint_shadows_embedded_seat_hint_only_at_same_span():
     )
     assert action_query_issue(service_only, ("rental_car",)) is None
     assert action_query_issue(truly_bundled, ("rental_car",)) == "bundled"
+
+
+def test_layover_duration_is_a_flight_time_question_not_a_path_bundle():
+    assert action_field_matches(
+        "Do you prefer a longer layover duration for the flight?", ("flight",)
+    ) == {("flight", "time")}
+
+
+def test_carry_on_allowance_is_flight_amenities_not_service():
+    assert action_field_matches(
+        "Do you need a carry-on baggage allowance and Wi-Fi for the flight?",
+        ("flight",),
+    ) == {("flight", "amenities")}
+
+
+def test_delivery_is_a_restaurant_tags_question():
+    assert action_field_matches(
+        "Would restaurant delivery be important for you?", ("restaurant",)
+    ) == {("restaurant", "tags")}

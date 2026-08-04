@@ -169,6 +169,27 @@ def test_valid_multiturn_empty_content_renders_only_tool_calls_as_labels():
         assert "H1 is available" not in target
 
 
+def test_loss_masked_assistant_turn_is_kept_in_context_but_not_supervised():
+    record = valid_record()
+    record["messages"].insert(2, _call("call-repair", "search", "invalid search"))
+    record["messages"].insert(
+        3,
+        {
+            "role": "tool",
+            "name": "interact_with_env",
+            "tool_call_id": "call-repair",
+            "content": "Search was not recorded.",
+        },
+    )
+    record["messages"][2]["loss_mask"] = True
+    tokenizer = FakeQwenTokenizer()
+    examples = build_action_only_examples(
+        [record], tokenizer, load_tool_schema(TOOL_CONFIG), max_sequence_length=100000
+    )
+    assert len(examples) == 2
+    assert [value.assistant_turn_index for value in examples] == [2, 3]
+
+
 @pytest.mark.parametrize(
     ("mutate", "reason"),
     [

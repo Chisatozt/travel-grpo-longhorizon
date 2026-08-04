@@ -144,6 +144,8 @@ def _message_reasons(messages: Any) -> tuple[str, ...]:
         if not isinstance(assistant, Mapping) or assistant.get("role") != "assistant":
             reasons.add("invalid_assistant_message")
             continue
+        if "loss_mask" in assistant and not isinstance(assistant["loss_mask"], bool):
+            reasons.add("invalid_loss_mask")
         if assistant.get("content") not in (None, ""):
             reasons.add("assistant_content_must_be_empty")
         calls = assistant.get("tool_calls")
@@ -456,6 +458,10 @@ def build_action_only_examples(
             if message.get("role") != "assistant":
                 continue
             assistant_index += 1
+            if message.get("loss_mask") is True:
+                # The environment consumed this turn, but its action failed
+                # admission and must remain context-only for action SFT.
+                continue
             context = messages[:message_index]
             prompt_ids = _render(
                 tokenizer, context, tool_schema, add_generation_prompt=True

@@ -32,7 +32,14 @@ collection:
   fail_fast_on_strict_violation: true
   checkpoint_each_task: true
   resume_safe: true
+  silver:
+    enabled: true
+    max_judgment_fallbacks: 1
+    max_vague_repairs: 1
+    max_search_repairs: 1
+    minimum_raw_terminal_reward: 0.7
   artifacts:
     accepted: "*.accepted.jsonl"
+    silver: "*.silver.jsonl"
     rejected: "*.rejected.jsonl"
     diagnostics: "*.diagnostics.jsonl"

@@ -55,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=ROOT / "outputs/teacher_trajectories/sft_train.accepted.jsonl",
     )
     parser.add_argument("--rejected-output", type=Path)
+    parser.add_argument("--silver-output", type=Path)
     parser.add_argument("--diagnostics-output", type=Path)
     parser.add_argument(
         "--source-root", type=Path, default=ROOT / "environments/UserBench"
@@ -62,6 +63,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--limit", type=int)
+    parser.add_argument(
+        "--batch-config",
+        type=Path,
+        default=ROOT / "configs/train/sft/teacher_smoke_batches.json",
+        help="fixed task-batch manifest used with --batch",
+    )
+    parser.add_argument(
+        "--batch",
+        help="named three-task batch from --batch-config; mutually exclusive with --limit",
+    )
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
         "--run-dir",
@@ -89,13 +100,16 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
     rejected_output = args.rejected_output or args.output.with_name(
         f"{artifact_stem}.rejected.jsonl"
     )
+    silver_output = args.silver_output or args.output.with_name(
+        f"{artifact_stem}.silver.jsonl"
+    )
     diagnostics_output = args.diagnostics_output or args.output.with_name(
         f"{artifact_stem}.diagnostics.jsonl"
     )
-    outputs = (args.output, rejected_output, diagnostics_output)
+    outputs = (args.output, silver_output, rejected_output, diagnostics_output)
     run_dir = args.run_dir or args.output.parent / f".{artifact_stem}.run"
-    if len(set(outputs)) != 3:
-        raise ValueError("accepted, rejected, and diagnostics outputs must be distinct")
+    if len(set(outputs)) != 4:
+        raise ValueError("gold, silver, rejected, and diagnostics outputs must be distinct")
     if not args.force and not args.dry_run and not args.resume:
         existing = next((path for path in outputs if path.exists()), None)
         if existing is not None:
@@ -104,6 +118,33 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
         raise ValueError("--attempts must be positive")
     tasks = load_teacher_task_pool(args.input)
     assert_disjoint_from_evaluation(tasks, args.evaluation_tasks)
+    if args.batch is not None and args.limit is not None:
+        raise ValueError("--batch and --limit are mutually exclusive")
+    if args.batch is not None:
+        with args.batch_config.open("r", encoding="utf-8") as handle:
+            batch_config = json.load(handle)
+        source = batch_config.get("source")
+        expected_source = args.input.resolve()
+        configured_source = (ROOT / str(source)).resolve() if source else None
+        if configured_source != expected_source:
+            raise ValueError(
+                f"batch source {configured_source} does not match input {expected_source}"
+            )
+        batches = batch_config.get("batches")
+        selected = batches.get(args.batch) if isinstance(batches, dict) else None
+        selected_ids = selected.get("task_ids") if isinstance(selected, dict) else None
+        if (
+            not isinstance(selected_ids, list)
+            or len(selected_ids) != 3
+            or len(set(selected_ids)) != 3
+            or not all(isinstance(value, str) and value for value in selected_ids)
+        ):
+            raise ValueError(f"batch {args.batch!r} must contain exactly three unique task IDs")
+        task_by_id = {str(task["task_id"]): task for task in tasks}
+        missing = [task_id for task_id in selected_ids if task_id not in task_by_id]
+        if missing:
+            raise ValueError(f"batch {args.batch!r} contains unknown task IDs: {missing}")
+        tasks = [task_by_id[task_id] for task_id in selected_ids]
     if args.limit is not None:
         if args.limit <= 0:
             raise ValueError("--limit must be positive")
@@ -113,10 +154,13 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
     simulator_runtime = UserSimulatorRuntime.from_environment(SimulatorRole.COLLECTION)
     summary: dict[str, object] = {
         "task_count": len(tasks),
+        "task_ids": [str(task["task_id"]) for task in tasks],
+        "batch": args.batch,
         "teacher_model": teacher_runtime.model,
         "simulator_model": simulator_runtime.model,
         "simulator_role": simulator_runtime.role.value,
         "output": str(args.output),
+        "silver_output": str(silver_output),
         "rejected_output": str(rejected_output),
         "diagnostics_output": str(diagnostics_output),
         "trajectory_attempts": args.attempts,
@@ -147,6 +191,7 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
                         "completed": len(checkpointed) + completed_now,
                         "total": len(tasks),
                         "accepted": outcome.accepted,
+                        "quality_tier": outcome.quality_tier,
                         "attempts": len(outcome.attempts),
                         "checkpoint": str(path),
                     },
@@ -173,6 +218,7 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
     write_teacher_collection_artifacts(
         outcomes,
         accepted_path=args.output,
+        silver_path=silver_output,
         rejected_path=rejected_output,
         diagnostics_path=diagnostics_output,
         force=args.force or args.resume,
@@ -181,6 +227,8 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
     summary.update(
         {
             "accepted": len(accepted),
+            "gold": sum(value.quality_tier == "gold" for value in outcomes),
+            "silver": sum(value.quality_tier == "silver" for value in outcomes),
             "rejected": len(outcomes) - len(accepted),
             "attempts_used": sum(len(value.attempts) for value in outcomes),
             "resumed_tasks": len(checkpointed),

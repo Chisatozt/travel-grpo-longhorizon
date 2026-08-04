@@ -43,7 +43,9 @@ python scripts/train/sft/collect_sft_data.py \
 
 Collection policy `teacher-state-machine-v2` controls each aspect through `ELICIT → SEARCH → ANSWER`. The hidden Reward-v2 ledger only tells the controller when active preference coverage for an aspect is complete; preference IDs, values, best IDs, coverage, and reward evidence are never inserted into Teacher messages. DeepSeek generates the official three-field tool call under a request-only phase constraint.
 
-Request-local retries become progressively stricter: natural phase guidance, a field-specific instruction with forbidden alternatives, and finally a canonical content allowlist in the temporary request schema. Search is keyed by aspect rather than query wording, and answer IDs must come from visible search output. Simulator/search/judgment fallback, invalid feedback, wrong answers, and unrecorded search/answer transitions abort the attempt immediately because they cannot pass strict admission.
+Collection has two accepted quality tiers. `gold` satisfies the strict gate and is written to `*.accepted.jsonl`. `silver` is accepted separately when the trajectory still terminates with a correct, fully answered itinerary and zero policy/answer errors, but contains one explicitly bounded recovery: one search repair, one vague-action repair, or one simulator judgment fallback. Repaired turns are retained for context and marked `loss_mask=true`; silver with an infrastructure fallback keeps `reward_valid=false` and is never counted as gold. Silver records are written to the sibling `*.silver.jsonl` artifact for explicit downstream inspection and policy-controlled filtering; the default strict SFT loader continues to reject infrastructure-invalid records.
+
+Request-local retries become progressively stricter: natural phase guidance, a field-specific instruction with forbidden alternatives, and finally a canonical content allowlist in the temporary request schema. Search is keyed by aspect rather than query wording, and answer IDs must come from visible search output. Response fallback, invalid feedback, wrong answers, and unrecorded answer transitions abort the attempt immediately. A single judgment fallback or recoverable vague/search transition is retained as silver only when the final hard correctness checks pass; a second fallback/repair remains fail-loud.
 
 Each completed task is atomically checkpointed under a run directory before the batch finishes. Resume a stopped run without recollecting completed tasks:
 
@@ -60,7 +62,7 @@ python scripts/train/sft/collect_sft_data.py \
   --resume
 ```
 
-The ordered task IDs and policy version must match the run manifest. Accepted, rejected, and diagnostic JSONL files are materialized in input order from the checkpoints. Progress events go to stderr and contain no prompts, credentials, hidden labels, or reward evidence.
+The ordered task IDs and policy version must match the run manifest. Gold (`accepted`), silver, rejected, and diagnostic JSONL files are materialized in input order from the checkpoints. Progress events go to stderr and contain no prompts, credentials, hidden labels, or reward evidence.
 
 Use staged real-API validation before a large collection: first one task must reach a terminal Reward-v2 report, then three tasks should confirm retry behavior, and only then run ten tasks. Do not scale if completion is below 80%, strict acceptance below 60%, action-exhaustion above 10%, or composition-22 step p95 exceeds 14. These are collection-readiness gates, not benchmark claims.
 

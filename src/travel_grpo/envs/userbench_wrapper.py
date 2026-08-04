@@ -365,18 +365,42 @@ class UserBenchWrapper:
         ):
             raise UserBenchEnvironmentError("TravelGym reward must be a finite number")
         self._validate_info_task_id(info)
+        reconciled_termination = self._async_one_choice_termination(terminated)
         projected = UserBenchObservation.from_upstream(observation)
-        self._done = terminated or truncated
+        self._done = reconciled_termination or truncated
         diagnostics = copy.deepcopy(dict(info))
         diagnostics.update(_fallback_diagnostics(observation, info))
+        if reconciled_termination and not terminated:
+            # TravelEnv.step_async in the pinned snapshot omits the synchronous
+            # one-choice termination check.  Reconcile it from the same public
+            # state invariant used by TravelEnv.step; no reward or answer is
+            # synthesized here.
+            diagnostics["wrapper_async_termination_reconciled"] = 1
         return UserBenchStepResult(
             task_id=self.task_id,
             observation=projected,
             reward=float(reward),
-            terminated=terminated,
+            terminated=reconciled_termination,
             truncated=truncated,
             diagnostics=diagnostics,
         )
+
+    def _async_one_choice_termination(self, terminated: bool) -> bool:
+        """Match sync one-choice termination when upstream async omits it."""
+
+        if terminated or not self.config.one_choice_per_aspect:
+            return terminated
+        task = getattr(self._environment, "current_task", None)
+        state = getattr(self._environment, "state_list", None)
+        if not isinstance(task, Mapping) or not isinstance(state, Mapping):
+            return terminated
+        dimensions = task.get("dimensions")
+        choices = state.get("choice_initials")
+        if not isinstance(dimensions, (list, tuple, set, frozenset)):
+            return terminated
+        if not isinstance(choices, (list, tuple, set, frozenset)):
+            return terminated
+        return bool(dimensions) and len(choices) >= len(dimensions)
 
     def _validate_info_task_id(self, info: Any) -> None:
         if not isinstance(info, Mapping):

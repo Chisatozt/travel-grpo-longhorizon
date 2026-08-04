@@ -51,6 +51,11 @@ class TravelRewardTask:
     best_ids: Mapping[str, str]
     correct_ids: Mapping[str, frozenset[str]]
     preference_ids_by_aspect: Mapping[str, frozenset[str]]
+    # Field names are used only by the local phase controller to avoid asking
+    # irrelevant questions. Preference values and IDs remain hidden.
+    preference_fields_by_aspect: Mapping[str, tuple[str, ...]] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def from_upstream(cls, task: Mapping[str, Any]) -> "TravelRewardTask":
@@ -74,6 +79,7 @@ class TravelRewardTask:
         best_ids: dict[str, str] = {}
         correct_ids: dict[str, frozenset[str]] = {}
         preference_ids: dict[str, frozenset[str]] = {}
+        preference_fields: dict[str, tuple[str, ...]] = {}
         next_preference = 1
         for aspect in aspects:
             data = preferences.get(aspect)
@@ -98,10 +104,29 @@ class TravelRewardTask:
                 for value in range(next_preference, next_preference + len(raw_preferences))
             )
             next_preference += len(raw_preferences)
+            fields: list[str] = []
+            for preference in raw_preferences:
+                if (
+                    isinstance(preference, Sequence)
+                    and not isinstance(preference, (str, bytes))
+                    and len(preference) >= 2
+                    and str(preference[1]).strip()
+                ):
+                    value = str(preference[1]).strip()
+                    if value not in fields:
+                        fields.append(value)
             best_ids[aspect] = best
             correct_ids[aspect] = accepted
             preference_ids[aspect] = ids
-        return cls(task_id, aspects, best_ids, correct_ids, preference_ids)
+            preference_fields[aspect] = tuple(fields)
+        return cls(
+            task_id,
+            aspects,
+            best_ids,
+            correct_ids,
+            preference_ids,
+            preference_fields,
+        )
 
 
 @dataclass(frozen=True)

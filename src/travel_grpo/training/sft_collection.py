@@ -12,7 +12,7 @@ import os
 import tempfile
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -155,6 +155,19 @@ def validate_teacher_collection_config(path: str | Path) -> Mapping[str, Any]:
         )
     if collection.get("resume_safe") is not True:
         raise TeacherCollectionError("teacher collection resume_safe must be true")
+    silver = collection.get("silver")
+    if not isinstance(silver, Mapping) or silver.get("enabled") is not True:
+        raise TeacherCollectionError("silver collection tier must be enabled")
+    if silver.get("max_judgment_fallbacks") != 1:
+        raise TeacherCollectionError("silver allows exactly one judgment fallback")
+    if silver.get("max_vague_repairs") != 1:
+        raise TeacherCollectionError("silver allows exactly one vague repair")
+    if silver.get("max_search_repairs") != 1:
+        raise TeacherCollectionError("silver allows exactly one search repair")
+    if silver.get("minimum_raw_terminal_reward") != 0.7:
+        raise TeacherCollectionError(
+            "silver minimum_raw_terminal_reward must be 0.7"
+        )
     return document
 
 
@@ -182,6 +195,7 @@ class TeacherTrajectory:
     attempt_strategy: str = AttemptStrategy.NATURAL.value
     teacher_request_count: int = 0
     teacher_usage: Mapping[str, int] | None = None
+    quality_tier: str = "gold"
 
     @property
     def total_reward(self) -> float:
@@ -214,6 +228,7 @@ class TeacherTrajectory:
             "attempt_strategy": self.attempt_strategy,
             "teacher_request_count": self.teacher_request_count,
             "teacher_usage": teacher_usage,
+            "quality_tier": self.quality_tier,
             "reward_version": reward.get("reward_version"),
             "reward_valid": reward.get("reward_valid"),
             "terminal_reward": reward.get("terminal_reward"),
@@ -269,6 +284,7 @@ class TeacherTrajectory:
             attempt_strategy=str(record.get("attempt_strategy", "")),
             teacher_request_count=int(record.get("teacher_request_count", 0)),
             teacher_usage=copy.deepcopy(record.get("teacher_usage", {})),
+            quality_tier=str(record.get("quality_tier", "gold")),
         )
 
 
@@ -284,6 +300,7 @@ class TeacherAttemptDiagnostic:
     partial_trajectory: Mapping[str, Any] | None = None
     policy_version: str = POLICY_VERSION
     attempt_strategy: str = AttemptStrategy.NATURAL.value
+    quality_tier: str = "rejected"
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -293,6 +310,7 @@ class TeacherAttemptDiagnostic:
             "accepted": self.accepted,
             "policy_version": self.policy_version,
             "attempt_strategy": self.attempt_strategy,
+            "quality_tier": self.quality_tier,
             "rejection_reasons": list(self.rejection_reasons),
             "generation_diagnostics": list(self.generation_diagnostics),
             "error_type": self.error_type,
@@ -327,6 +345,7 @@ class TeacherAttemptDiagnostic:
             partial_trajectory=copy.deepcopy(record.get("partial_trajectory")),
             policy_version=str(record.get("policy_version", "")),
             attempt_strategy=str(record.get("attempt_strategy", "")),
+            quality_tier=str(record.get("quality_tier", "rejected")),
         )
 
 
@@ -335,10 +354,15 @@ class TeacherTaskOutcome:
     task_id: str
     trajectory: TeacherTrajectory | None
     attempts: tuple[TeacherAttemptDiagnostic, ...]
+    quality_tier: str = "rejected"
 
     @property
     def accepted(self) -> bool:
         return self.trajectory is not None
+
+    @property
+    def gold(self) -> bool:
+        return self.quality_tier == "gold"
 
     def rejected_record(self) -> dict[str, Any]:
         final = self.attempts[-1]
@@ -351,6 +375,7 @@ class TeacherTaskOutcome:
             "error_message": final.error_message,
             "policy_version": final.policy_version,
             "attempt_strategy": final.attempt_strategy,
+            "quality_tier": self.quality_tier,
         }
 
     def to_checkpoint_record(self) -> dict[str, Any]:
@@ -360,6 +385,7 @@ class TeacherTaskOutcome:
             "task_id": self.task_id,
             "trajectory": None if self.trajectory is None else self.trajectory.to_record(),
             "attempts": [value.to_record() for value in self.attempts],
+            "quality_tier": self.quality_tier,
         }
 
     @classmethod
@@ -379,6 +405,12 @@ class TeacherTaskOutcome:
             attempts=tuple(
                 TeacherAttemptDiagnostic.from_record(value)
                 for value in record.get("attempts", ())
+            ),
+            quality_tier=str(
+                record.get(
+                    "quality_tier",
+                    "rejected" if trajectory_record is None else "gold",
+                )
             ),
         )
 
@@ -641,6 +673,95 @@ def trajectory_rejection_reasons(trajectory: TeacherTrajectory) -> tuple[str, ..
     return tuple(sorted(set(reasons)))
 
 
+_SILVER_ALLOWED_REASONS = frozenset(
+    {
+        "vague_action_feedback",
+        "simulator_judgment_fallback",
+        "reward_invalid",
+        "terminal_reward_below_threshold",
+        "infrastructure_error",
+    }
+)
+
+
+def _silver_markers(trajectory: TeacherTrajectory) -> set[str]:
+    markers = {
+        str(value.get("reason"))
+        for value in trajectory.generation_diagnostics
+        if isinstance(value, Mapping) and value.get("reason")
+    }
+    if any(
+        message.get("role") == "assistant" and message.get("loss_mask") is True
+        for message in trajectory.messages
+        if isinstance(message, Mapping)
+    ):
+        markers.add("loss_masked_repair")
+    return markers
+
+
+def quality_tier_for_trajectory(
+    trajectory: TeacherTrajectory,
+    strict_reasons: Sequence[str] | None = None,
+) -> str | None:
+    """Return ``gold``/``silver`` or ``None`` for a rejected trajectory.
+
+    Silver is deliberately narrower than a generic relaxed gate.  It permits
+    only one explicitly recorded recoverable repair or one valid simulator
+    judgment fallback; correctness, termination, protocol integrity and
+    visible-answer constraints remain hard requirements.
+    """
+
+    reasons = set(strict_reasons or trajectory_rejection_reasons(trajectory))
+    markers = _silver_markers(trajectory)
+    repair_markers = {
+        "search_repair_allowed",
+        "vague_action_repair_allowed",
+        "judgment_fallback_allowed",
+        "loss_masked_repair",
+    }
+    if not reasons:
+        return "silver" if markers & repair_markers else "gold"
+    if not markers & repair_markers:
+        return None
+    if reasons - _SILVER_ALLOWED_REASONS:
+        return None
+    if trajectory.simulator_fallbacks or trajectory.simulator_search_fallbacks:
+        return None
+    if trajectory.simulator_judgment_fallbacks:
+        if trajectory.simulator_judgment_fallbacks != 1:
+            return None
+        if "judgment_fallback_allowed" not in markers:
+            return None
+    reward = trajectory.reward_breakdown
+    if not isinstance(reward, Mapping):
+        return None
+    if reward.get("completion_rate") != 1.0:
+        return None
+    if reward.get("correct_itinerary") is not True:
+        return None
+    if reward.get("policy_penalty") != 0.0:
+        return None
+    for field_name in (
+        "invalid_actions",
+        "exact_repeats",
+        "semantic_repeats",
+        "ambiguous_actions",
+        "unsearched_answers",
+        "wrong_answers",
+    ):
+        if reward.get(field_name, 0) != 0:
+            return None
+    raw_terminal = reward.get("raw_terminal_reward")
+    if (
+        not isinstance(raw_terminal, (int, float))
+        or isinstance(raw_terminal, bool)
+        or not math.isfinite(float(raw_terminal))
+        or float(raw_terminal) < 0.7
+    ):
+        return None
+    return "silver"
+
+
 async def collect_teacher_trajectory(
     task: Mapping[str, Any],
     *,
@@ -683,6 +804,8 @@ async def collect_teacher_trajectory(
     simulator_fallbacks = 0
     simulator_judgment_fallbacks = 0
     simulator_search_fallbacks = 0
+    search_repairs: dict[str, int] = {}
+    vague_repairs: dict[str, int] = {}
     reward_state: UserBenchSessionState | None = None
     reward_breakdown: dict[str, Any] | None = None
     teacher_request_count = 0
@@ -708,6 +831,12 @@ async def collect_teacher_trajectory(
             tool_call = None
             for generation_attempt in range(1, teacher.runtime.action_retries + 2):
                 instruction = plan.instruction(generation_attempt)
+                if plan.phase is TeacherPhase.SEARCH and search_repairs.get(plan.aspect, 0):
+                    instruction += (
+                        " The previous search for this aspect was not recorded. Emit a "
+                        "materially different corrected query, not a copy of the previous "
+                        "query; restate all public arguments and preferences."
+                    )
                 request_messages = [
                     *messages,
                     {"role": "user", "content": instruction},
@@ -854,10 +983,12 @@ async def collect_teacher_trajectory(
                     "teacher_latency_seconds": tool_call.latency_seconds,
                     "teacher_usage": dict(tool_call.usage),
                     "reward": result.reward,
+                    "loss_mask": False,
                     "terminated": result.terminated,
                     "truncated": result.truncated,
                 }
             )
+            assistant_message_index = len(messages)
             messages.append(tool_call.to_assistant_message())
             messages.append(
                 {
@@ -899,7 +1030,73 @@ async def collect_teacher_trajectory(
                 and plan.aspect not in reward_state.answers
             ):
                 fail_reason = "environment.answer_not_recorded"
+            if (
+                fail_reason == "simulator.judgment_fallback"
+                and not response_fallback
+                and simulator_judgment_fallbacks == 1
+                and feedback.strip()
+            ):
+                # Keep the turn for auditability, but admit at most one valid
+                # judgment fallback as silver. The reward ledger remains
+                # infrastructure-invalid, so this can never become gold.
+                messages[assistant_message_index]["loss_mask"] = True
+                committed_actions[-1]["loss_mask"] = True
+                generation_diagnostics.append(
+                    {
+                        "environment_turn": turn + 1,
+                        "generation_attempt": 0,
+                        "reason": "judgment_fallback_allowed",
+                        "phase": plan.phase.value,
+                        "aspect": plan.aspect,
+                        "field": plan.field,
+                        "attempt_strategy": strategy.value,
+                    }
+                )
+                fail_reason = None
+            elif fail_reason == "environment.vague_action_feedback":
+                repair_key = f"{plan.aspect}.{plan.field or plan.phase.value}"
+                if vague_repairs.get(repair_key, 0) < 1:
+                    vague_repairs[repair_key] = vague_repairs.get(repair_key, 0) + 1
+                    if plan.phase is TeacherPhase.ELICIT and plan.field is not None:
+                        policy.asked_fields[plan.aspect].discard(plan.field)
+                    if semantic is not None:
+                        semantic_signatures.discard(semantic)
+                    messages[assistant_message_index]["loss_mask"] = True
+                    committed_actions[-1]["loss_mask"] = True
+                    generation_diagnostics.append(
+                        {
+                            "environment_turn": turn + 1,
+                            "generation_attempt": 0,
+                            "reason": "vague_action_repair_allowed",
+                            "phase": plan.phase.value,
+                            "aspect": plan.aspect,
+                            "field": plan.field,
+                            "attempt_strategy": strategy.value,
+                        }
+                    )
+                    fail_reason = None
             if fail_reason is not None:
+                if (
+                    fail_reason == "environment.search_not_recorded"
+                    and search_repairs.get(plan.aspect, 0) < 1
+                ):
+                    search_repairs[plan.aspect] = search_repairs.get(plan.aspect, 0) + 1
+                    # Keep the consumed turn in context, but do not train the
+                    # actor to reproduce a search UserBench did not record.
+                    messages[assistant_message_index]["loss_mask"] = True
+                    committed_actions[-1]["loss_mask"] = True
+                    generation_diagnostics.append(
+                        {
+                            "environment_turn": turn + 1,
+                            "generation_attempt": 0,
+                            "reason": "search_repair_allowed",
+                            "phase": plan.phase.value,
+                            "aspect": plan.aspect,
+                            "field": plan.field,
+                            "attempt_strategy": strategy.value,
+                        }
+                    )
+                    continue
                 raise TeacherAttemptAbort(
                     fail_reason,
                     f"task {task_id!r} cannot pass strict admission: {fail_reason}",
@@ -1014,7 +1211,10 @@ async def collect_teacher_task_with_retries(
                 trajectory_attempt=attempt,
             )
             reasons = trajectory_rejection_reasons(trajectory)
-            accepted = not reasons
+            quality_tier = quality_tier_for_trajectory(trajectory, reasons)
+            accepted = quality_tier is not None
+            if accepted and trajectory.quality_tier != quality_tier:
+                trajectory = replace(trajectory, quality_tier=quality_tier)
             attempts.append(
                 TeacherAttemptDiagnostic(
                     task_id=task_id,
@@ -1033,10 +1233,13 @@ async def collect_teacher_task_with_retries(
                         }
                     ),
                     attempt_strategy=trajectory.attempt_strategy,
+                    quality_tier=quality_tier or "rejected",
                 )
             )
             if accepted:
-                return TeacherTaskOutcome(task_id, trajectory, tuple(attempts))
+                return TeacherTaskOutcome(
+                    task_id, trajectory, tuple(attempts), quality_tier
+                )
         except Exception as exc:  # collection failures belong in diagnostics, not SFT
             diagnostics = getattr(exc, "diagnostics", None)
             if diagnostics is None:
@@ -1061,9 +1264,10 @@ async def collect_teacher_task_with_retries(
                     error_message=str(exc),
                     partial_trajectory=getattr(exc, "partial_trajectory", None),
                     attempt_strategy=AttemptStrategy.for_attempt(attempt).value,
+                    quality_tier="rejected",
                 )
             )
-    return TeacherTaskOutcome(task_id, None, tuple(attempts))
+    return TeacherTaskOutcome(task_id, None, tuple(attempts), "rejected")
 
 
 async def collect_teacher_outcomes(
@@ -1245,9 +1449,13 @@ def summarize_teacher_outcomes(
                     }
                 )
     accepted = sum(value.accepted for value in outcomes)
+    gold = sum(value.quality_tier == "gold" for value in outcomes)
+    silver = sum(value.quality_tier == "silver" for value in outcomes)
     return {
         "tasks": len(outcomes),
         "accepted": accepted,
+        "gold": gold,
+        "silver": silver,
         "rejected": len(outcomes) - accepted,
         "acceptance_rate": 0.0 if not outcomes else accepted / len(outcomes),
         "attempts": sum(len(value.attempts) for value in outcomes),
@@ -1334,20 +1542,37 @@ def write_teacher_collection_artifacts(
     accepted_path: str | Path,
     rejected_path: str | Path,
     diagnostics_path: str | Path,
+    silver_path: str | Path | None = None,
     force: bool = False,
-) -> tuple[Path, Path, Path]:
-    """Write accepted SFT data, rejected tasks, and attempt diagnostics separately."""
+
+) -> tuple[Path, Path, Path, Path]:
+    """Write gold, silver, rejected tasks, and diagnostics separately."""
+
+    if silver_path is None:
+        accepted = Path(accepted_path)
+        stem = accepted.stem
+        if stem.endswith(".accepted"):
+            stem = stem[: -len(".accepted")]
+        silver_path = accepted.with_name(f"{stem}.silver.jsonl")
 
     destinations = tuple(
-        Path(value) for value in (accepted_path, rejected_path, diagnostics_path)
+        Path(value)
+        for value in (accepted_path, silver_path, rejected_path, diagnostics_path)
     )
-    if len(set(destinations)) != 3:
-        raise ValueError("accepted, rejected, and diagnostics paths must be distinct")
+    if len(set(destinations)) != 4:
+        raise ValueError("gold, silver, rejected, and diagnostics paths must be distinct")
     existing = [value for value in destinations if value.exists()]
     if existing and not force:
         raise FileExistsError(f"collection artifact already exists: {existing[0]}")
     accepted = [
-        outcome.trajectory for outcome in outcomes if outcome.trajectory is not None
+        outcome.trajectory
+        for outcome in outcomes
+        if outcome.quality_tier == "gold" and outcome.trajectory is not None
+    ]
+    silver = [
+        outcome.trajectory
+        for outcome in outcomes
+        if outcome.quality_tier == "silver" and outcome.trajectory is not None
     ]
     rejected = [
         outcome.rejected_record() for outcome in outcomes if not outcome.accepted
@@ -1358,6 +1583,7 @@ def write_teacher_collection_artifacts(
         for diagnostic in outcome.attempts
     ]
     write_teacher_trajectories(accepted, destinations[0], force=force)
-    _write_jsonl_records(rejected, destinations[1], force=force)
-    _write_jsonl_records(diagnostics, destinations[2], force=force)
+    write_teacher_trajectories(silver, destinations[1], force=force)
+    _write_jsonl_records(rejected, destinations[2], force=force)
+    _write_jsonl_records(diagnostics, destinations[3], force=force)
     return destinations

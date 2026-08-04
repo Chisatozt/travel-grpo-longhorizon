@@ -14,7 +14,7 @@ import pytest
 from travel_grpo.envs.observation import UserBenchObservation, UserBenchStepResult
 from travel_grpo.envs.reward import TravelRewardTask, UserBenchRewardSnapshot
 from travel_grpo.envs.userbench_interaction import SimulatorRole, UserSimulatorRuntime
-from travel_grpo.envs.userbench_tools import UserBenchAction
+from travel_grpo.envs.userbench_tools import ActionChoice, UserBenchAction
 from travel_grpo.models.openai_compatible import TeacherRuntime, TeacherToolCall
 from travel_grpo.training.teacher_policy import TeacherPhase, TeacherTurnPlan
 from travel_grpo.envs.userbench_tools import FIELD_QUERY_HINTS
@@ -159,6 +159,154 @@ def test_collection_script_runs_from_source_checkout() -> None:
 
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout)["dry_run"] is True
+
+
+def test_collection_cli_uses_fixed_development_batch() -> None:
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment.update(
+        {
+            "TEACHER_MODEL": "deepseek-v4-flash",
+            "TEACHER_BASE_URL": "https://teacher.example/v1",
+            "TEACHER_API_KEY": "test-only",
+            "COLLECTION_USER_SIM_MODEL": "deepseek-v4-flash",
+            "COLLECTION_USER_SIM_BASE_URL": "https://simulator.example/v1",
+            "COLLECTION_USER_SIM_API_KEY": "test-only",
+        }
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(ROOT / "scripts/train/sft/collect_sft_data.py"),
+            "--dry-run",
+            "--batch",
+            "development",
+        ],
+        cwd=ROOT,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    summary = json.loads(completed.stdout)
+    assert summary["batch"] == "development"
+    assert summary["task_ids"] == [
+        "apartment:2-38|rental_car:2-7",
+        "apartment:2-10|rental_car:2-23",
+        "hotel:2-69|rental_car:2-21",
+    ]
+
+
+def test_teacher_smoke_batches_are_unique_train_tasks_and_pairwise_disjoint() -> None:
+    config = json.loads(
+        (ROOT / "configs/train/sft/teacher_smoke_batches.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    train_ids = {
+        json.loads(line)["task_id"]
+        for line in (ROOT / "data/sft/tasks_train.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip()
+    }
+    batches = {
+        name: tuple(value["task_ids"])
+        for name, value in config["batches"].items()
+    }
+    seen: set[str] = set()
+    for task_ids in batches.values():
+        assert len(task_ids) == 3
+        assert len(set(task_ids)) == 3
+        assert set(task_ids) <= train_ids
+        assert not (seen & set(task_ids))
+        seen.update(task_ids)
+
+
+def test_upstream_preference_fields_narrow_local_phase_without_exposing_values() -> None:
+    task = {
+        "id": "hotel:2-1|rental_car:2-2",
+        "dimensions": ["hotel", "rental_car"],
+        "preferences": {
+            "hotel": {
+                "best_id": "H1",
+                "correct_ids": ["H1"],
+                "preferences": [
+                    ["hotel", "amenities", "hidden value", "hidden response"],
+                    ["hotel", "service", "another hidden value", "hidden response"],
+                ],
+            },
+            "rental_car": {
+                "best_id": "C1",
+                "correct_ids": ["C1"],
+                "preferences": [["rental_car", "brand", "secret", "secret"]],
+            },
+        },
+    }
+    reward_task = TravelRewardTask.from_upstream(task)
+    assert reward_task.preference_fields_by_aspect == {
+        "hotel": ("amenities", "service"),
+        "rental_car": ("brand",),
+    }
+    serialized = json.dumps(reward_task.preference_fields_by_aspect)
+    assert "hidden" not in serialized
+    assert "secret" not in serialized
+
+
+def test_generic_amenity_question_is_rejected_before_environment_consumes_a_step() -> None:
+    plan = TeacherTurnPlan(TeacherPhase.ELICIT, "apartment", "amenities")
+    generic = UserBenchAction.from_parameters(
+        {
+            "thought": "ask",
+            "choice": "action",
+            "content": "What amenities are important to you in the apartment, such as a gym, pool, parking, or laundry facilities?",
+        }
+    )
+    assert plan.validate(generic) == "vague_action"
+
+    concrete = UserBenchAction.from_parameters(
+        {
+            "thought": "ask",
+            "choice": "action",
+            "content": plan.canonical_content,
+        }
+    )
+    assert plan.validate(concrete) is None
+
+
+def test_answer_instruction_can_include_only_public_visible_candidate_facts():
+    plan = TeacherTurnPlan(
+        TeacherPhase.ANSWER,
+        "apartment",
+        available_option_ids=("A1",),
+        visible_option_details=(
+            '{"amenities":["Elevator"],"cost":300,"id":"A1"}',
+        ),
+    )
+    instruction = plan.instruction(1)
+    assert '"id":"A1"' in instruction
+    assert "ground_truth" not in instruction
+    assert "best_id" not in instruction
+
+
+def test_answer_validation_rejects_visible_option_missing_public_search_requirement():
+    plan = TeacherTurnPlan(
+        TeacherPhase.ANSWER,
+        "apartment",
+        available_option_ids=("A12", "A18"),
+        visible_option_details=(
+            '{"amenities":["Air Conditioning"],"id":"A12"}',
+            '{"amenities":["Kitchen"],"id":"A18"}',
+        ),
+        public_requirements=(("air conditioning", ("air conditioning",)),),
+    )
+    action = UserBenchAction.from_parameters(
+        {"thought": "choose", "choice": "answer", "content": "A18"}
+    )
+    assert plan.validate(action) == "answer_not_matching_public_requirement.air_conditioning"
 
 
 class FakeTeacher:
@@ -444,7 +592,7 @@ def test_bundled_preference_question_is_retried_before_environment_step():
     assert trajectory.generation_diagnostics[1]["reason"] == "wrong_preference_field"
     assert teacher.requests[0][-1]["content"] != teacher.requests[1][-1]["content"]
     assert teacher.constraints[2].allowed_contents == (
-        "Do you prefer a specific hotel name or property?",
+        "Do you prefer a specific hotel name, brand, platform, or property?",
     )
 
 
@@ -528,6 +676,71 @@ class RetryWrapper(FakeWrapper):
         return result
 
 
+class SearchRepairWrapper(FakeWrapper):
+    failed_search = False
+
+    def reward_snapshot(self):
+        snapshot = super().reward_snapshot()
+        search_count = sum(action.choice.value == "search" for action in self.actions)
+        if self.failed_search and search_count == 1:
+            return UserBenchRewardSnapshot(
+                snapshot.remaining_preference_ids,
+                snapshot.active_elicited_count,
+                snapshot.passive_elicited_count,
+                frozenset({"hotel"}),
+                snapshot.choice_initials,
+            )
+        return snapshot
+
+    async def astep(self, action):
+        if action.choice.value == "search" and not self.failed_search:
+            self.failed_search = True
+            self.actions.append(action)
+            self.steps += 1
+            return UserBenchStepResult(
+                self.task_id,
+                UserBenchObservation("Search was not recorded.", self.steps, False, 0.0, {}),
+                0.0,
+                False,
+                False,
+                {},
+            )
+        return await super().astep(action)
+
+
+def test_search_not_recorded_is_retried_once_and_failed_turn_is_loss_masked():
+    teacher = SequenceTeacher(
+        [
+            ("action", "Do you prefer a specific hotel name?"),
+            ("search", "Search for hotel options in Paris, first attempt"),
+            ("search", "Search for hotel options in Paris, corrected attempt"),
+            ("answer", "H1"),
+        ]
+    )
+    trajectory = asyncio.run(
+        collect_teacher_trajectory(
+            task(),
+            teacher=teacher,
+            simulator=simulator(),
+            wrapper_factory=SearchRepairWrapper,
+        )
+    )
+    assert trajectory.terminated
+    assert trajectory.step_rewards == (0.2, 0.0, 0.2, 1.0)
+    assistant_messages = [
+        message
+        for message in trajectory.messages
+        if message.get("role") == "assistant"
+    ]
+    assert [message.get("loss_mask", False) for message in assistant_messages] == [
+        False,
+        True,
+        False,
+        False,
+    ]
+    assert trajectory.generation_diagnostics[-1]["reason"] == "search_repair_allowed"
+
+
 def test_whole_trajectory_retry_and_artifact_routing(tmp_path):
     RetryWrapper.attempt = 0
     outcome = asyncio.run(
@@ -549,7 +762,8 @@ def test_whole_trajectory_retry_and_artifact_routing(tmp_path):
     )
     assert json.loads(paths[0].read_text(encoding="utf-8"))["trajectory_attempt"] == 2
     assert paths[1].read_text(encoding="utf-8") == ""
-    assert len(paths[2].read_text(encoding="utf-8").splitlines()) == 2
+    assert paths[2].read_text(encoding="utf-8") == ""
+    assert len(paths[3].read_text(encoding="utf-8").splitlines()) == 2
 
 
 def test_failed_attempt_diagnostic_contains_safe_partial_trajectory():
@@ -586,8 +800,15 @@ def test_failed_attempt_diagnostic_contains_safe_partial_trajectory():
 
 class ConstraintEchoTeacher(FakeTeacher):
     async def generate_action(self, messages, *, force_answer=False, constraint=None):
-        assert constraint is not None and constraint.allowed_contents
-        content = constraint.allowed_contents[0]
+        assert constraint is not None
+        if constraint.allowed_contents:
+            content = constraint.allowed_contents[0]
+        elif constraint.choice is ActionChoice.SEARCH:
+            instruction = str(messages[-1]["content"])
+            aspect = "hotel" if "search for hotel" in instruction else "rental car"
+            content = f"Search for {aspect} options in Los Angeles for the stated dates."
+        else:
+            raise AssertionError("only SEARCH may omit a deterministic content enum")
         call = TeacherToolCall(
             f"canonical-{self.index}",
             UserBenchAction.from_parameters(
@@ -725,7 +946,62 @@ class JudgmentFallbackWrapper(FakeWrapper):
         )
 
 
-def test_simulator_fallback_aborts_after_the_consumed_step():
+class OneJudgmentFallbackWrapper(FakeWrapper):
+    """Inject exactly one simulator judgment fallback, then recover normally."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.injected = False
+
+    async def astep(self, action):
+        result = await super().astep(action)
+        if self.injected:
+            return result
+        self.injected = True
+        return UserBenchStepResult(
+            result.task_id,
+            result.observation,
+            result.reward,
+            result.terminated,
+            result.truncated,
+            {"userbench_judgment_fallbacks": 1},
+        )
+
+
+def test_one_judgment_fallback_is_admitted_as_silver_and_loss_masked(tmp_path):
+    outcome = asyncio.run(
+        collect_teacher_task_with_retries(
+            task(),
+            teacher=FakeTeacher(),
+            simulator=simulator(),
+            wrapper_factory=OneJudgmentFallbackWrapper,
+            max_attempts=1,
+        )
+    )
+    assert outcome.accepted
+    assert outcome.quality_tier == "silver"
+    assert outcome.trajectory is not None
+    assert outcome.trajectory.quality_tier == "silver"
+    assert outcome.trajectory.reward_breakdown["reward_valid"] is False
+    assert outcome.trajectory.reward_breakdown["raw_terminal_reward"] >= 0.7
+    assert any(
+        message.get("loss_mask") is True
+        for message in outcome.trajectory.messages
+        if message.get("role") == "assistant"
+    )
+    paths = write_teacher_collection_artifacts(
+        [outcome],
+        accepted_path=tmp_path / "batch.accepted.jsonl",
+        silver_path=tmp_path / "batch.silver.jsonl",
+        rejected_path=tmp_path / "batch.rejected.jsonl",
+        diagnostics_path=tmp_path / "batch.diagnostics.jsonl",
+    )
+    assert paths[0].read_text(encoding="utf-8") == ""
+    assert json.loads(paths[1].read_text(encoding="utf-8"))["quality_tier"] == "silver"
+    assert paths[2].read_text(encoding="utf-8") == ""
+
+
+def test_second_simulator_fallback_aborts_after_the_consumed_step():
     teacher = FakeTeacher()
     outcome = asyncio.run(
         collect_teacher_task_with_retries(
@@ -738,8 +1014,10 @@ def test_simulator_fallback_aborts_after_the_consumed_step():
     )
     diagnostic = outcome.attempts[0]
     assert diagnostic.rejection_reasons == ("simulator.judgment_fallback",)
-    assert diagnostic.partial_trajectory["environment_steps_completed"] == 1
-    assert teacher.index == 1
+    assert diagnostic.partial_trajectory["environment_steps_completed"] == 2
+    # One fallback is admitted to the silver path; the second fallback is
+    # still fail-loud and aborts after its environment step is consumed.
+    assert teacher.index == 2
 
 
 def test_per_task_checkpoint_round_trip_and_manifest_resume(tmp_path):

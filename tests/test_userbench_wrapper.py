@@ -124,6 +124,31 @@ def test_async_step_uses_the_async_environment_path():
     asyncio.run(scenario())
 
 
+def test_async_step_reconciles_pinned_one_choice_termination():
+    class AsyncOneChoiceEnv(FakeTravelEnv):
+        current_task = {"dimensions": ["hotel", "restaurant"]}
+        state_list = {"choice_initials": {"H", "R"}}
+
+        async def step_async(self, action_input):
+            await asyncio.sleep(0)
+            observation = self._observation(1, 1.0, complete=False)
+            return observation, 1.0, False, False, {"task_id": self.task_id}
+
+    async def scenario():
+        fake = AsyncOneChoiceEnv("task-1", rewards=(1.0,))
+        wrapper = build_wrapper(fake)
+        wrapper.reset()
+        result = await wrapper.astep(
+            {"thought": "finish", "choice": "answer", "content": "option"}
+        )
+        wrapper.close()
+        return result
+
+    result = asyncio.run(scenario())
+    assert result.terminated is True
+    assert result.diagnostics["wrapper_async_termination_reconciled"] == 1
+
+
 def test_collection_mode_captures_upstream_fallback_without_raw_stdout(capsys):
     class PrintingTravelEnv(FakeTravelEnv):
         async def step_async(self, action_input):

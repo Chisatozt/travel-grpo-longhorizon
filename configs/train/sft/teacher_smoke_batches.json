@@ -1,0 +1,69 @@
+{
+  "version": "teacher-smoke-batches-v1",
+  "source": "data/sft/tasks_train.jsonl",
+  "batches": {
+    "development": {
+      "task_ids": [
+        "apartment:2-38|rental_car:2-7",
+        "apartment:2-10|rental_car:2-23",
+        "hotel:2-69|rental_car:2-21"
+      ]
+    },
+    "confirmation_1": {
+      "task_ids": [
+        "hotel:2-13|rental_car:2-23",
+        "flight:2-34|rental_car:2-56",
+        "flight:2-96|hotel:2-33"
+      ]
+    },
+    "confirmation_2": {
+      "task_ids": [
+        "flight:2-37|rental_car:2-54",
+        "flight:2-45|hotel:2-32",
+        "rental_car:2-59|restaurant:2-2"
+      ]
+    },
+    "confirmation_3": {
+      "task_ids": [
+        "flight:2-49|apartment:2-72",
+        "flight:2-69|rental_car:2-55",
+        "apartment:2-7|rental_car:2-23"
+      ]
+    },
+    "confirmation_4": {
+      "task_ids": [
+        "flight:2-14|apartment:2-43",
+        "flight:2-97|rental_car:2-19",
+        "flight:2-39|restaurant:2-49"
+      ]
+    },
+    "confirmation_5": {
+      "task_ids": [
+        "apartment:2-109|restaurant:2-121",
+        "rental_car:2-63|restaurant:2-73",
+        "apartment:2-83|rental_car:2-46"
+      ]
+    },
+    "confirmation_6": {
+      "task_ids": [
+        "hotel:2-61|restaurant:2-14",
+        "apartment:2-68|rental_car:2-23",
+        "rental_car:2-29|restaurant:2-8"
+      ]
+    },
+    "confirmation_7": {
+      "task_ids": [
+        "apartment:2-101|rental_car:2-8",
+        "flight:2-14|hotel:2-46",
+        "hotel:2-12|restaurant:2-52"
+      ]
+    },
+    "confirmation_8": {
+      "task_ids": [
+        "flight:2-78|rental_car:2-4",
+        "hotel:2-74|restaurant:2-50",
+        "flight:2-7|apartment:2-23"
+      ]
+    }
+  }
+}

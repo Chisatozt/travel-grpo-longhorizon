@@ -16,6 +16,7 @@ from travel_grpo.envs.userbench_context import (
     set_current_session,
 )
 from travel_grpo.training.grpo.adapter.agent_loop import (
+    finalize_actor_stop,
     reject_parallel_tool_calls,
     select_post_tool_state,
     session_requests_termination,
@@ -131,6 +132,20 @@ def test_parallel_tool_calls_terminate_before_environment_step():
         assert session.metrics()["termination_reason"] == "parallel_tool_calls"
     finally:
         clear_current_session()
+
+
+def test_no_tool_output_is_a_penalized_protocol_error():
+    session = SimpleNamespace(
+        num_tool_calls=0,
+        protocol_error=None,
+        invalid_actions=0,
+        termination_reason=None,
+        done=False,
+    )
+    finalize_actor_stop(session)
+    assert session.protocol_error == "no_tool_output"
+    assert session.termination_reason == "no_tool_output"
+    assert session.invalid_actions == 1
 
 
 def test_verl_yaml_paths_and_simulator_roles_are_consistent():

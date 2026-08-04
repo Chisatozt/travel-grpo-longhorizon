@@ -124,6 +124,17 @@ def test_async_step_uses_the_async_environment_path():
     asyncio.run(scenario())
 
 
+def test_async_reset_uses_non_blocking_wrapper_entrypoint():
+    async def scenario():
+        fake = FakeTravelEnv("task-1", rewards=(0.8,))
+        wrapper = build_wrapper(fake)
+        observation = await wrapper.areset()
+        assert observation.to_tool_text() == "feedback-0"
+        wrapper.close()
+
+    asyncio.run(scenario())
+
+
 def test_async_step_reconciles_pinned_one_choice_termination():
     class AsyncOneChoiceEnv(FakeTravelEnv):
         current_task = {"dimensions": ["hotel", "restaurant"]}

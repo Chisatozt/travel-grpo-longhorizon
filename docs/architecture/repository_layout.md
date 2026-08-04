@@ -22,12 +22,13 @@ The layout follows the stage-oriented organization of
 - `experiments/` is reserved for small, auditable summaries and configurations.
   Large checkpoints, rollouts, and logs belong under ignored output paths.
 
-## Implemented versus scaffolded
+## Implementation status
 
 The deterministic task-splitting implementation lives in
 `src/travel_grpo/data/`, with its entry point under `scripts/data/`. The
 project-owned UserBench lifecycle wrapper lives in `src/travel_grpo/envs/`, and
-the optional veRL 0.6.1 adapter lives in
+the optional veRL 0.8 adapter lives in
 `src/travel_grpo/training/grpo/adapter/`. The DeepSeek teacher collector lives
-in `src/travel_grpo/training/sft_collection.py`. Model training and
-final-evaluation launchers remain explicit placeholders.
+in `src/travel_grpo/training/sft_collection.py`. SFT merge, GRPO launch/export,
+and resumable frozen-evaluation entry points are implemented; formal GPU/API
+runs remain external operations and no benchmark result is claimed.

@@ -2,5 +2,7 @@ interaction:
   - name: userbench
     class_name: travel_grpo.training.grpo.adapter.session.UserBenchInteraction
     config:
+      enabled: false
+      migration_guard: verl_0_8_uses_direct_agent_loop
       environment_config_path: configs/interaction_config/userbench.yaml
       simulator_config_path: configs/interaction_config/simulator_train.yaml

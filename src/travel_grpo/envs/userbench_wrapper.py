@@ -232,6 +232,16 @@ class UserBenchWrapper:
         self._done = projected.episode_complete
         return projected
 
+    async def areset(self) -> UserBenchObservation:
+        """Reset without blocking an AgentLoop worker's asyncio event loop.
+
+        The pinned TravelGym reset API is synchronous.  Keeping that call on a
+        worker thread lets unrelated trajectories continue while a simulator
+        client or upstream initialization is slow.
+        """
+
+        return await asyncio.to_thread(self.reset)
+
     def reward_task(self) -> TravelRewardTask:
         """Return only frozen labels required by the internal terminal reward."""
 

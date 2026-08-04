@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from travel_grpo.envs.userbench_context import require_current_session
+from travel_grpo.envs.userbench_wrapper import UserBenchEnvironmentError
 from travel_grpo.envs.userbench_tools import (
     TOOL_NAME,
     UserBenchAction,
@@ -14,9 +15,9 @@ from travel_grpo.envs.userbench_tools import (
     get_interact_with_env_schema,
 )
 from travel_grpo.training.grpo.adapter.session import ENVIRONMENT_NAME
-from travel_grpo.training.grpo.compat import require_verl_061
+from travel_grpo.training.grpo.compat import require_verl_080
 
-try:  # Keep core imports light; actual construction requires veRL 0.6.1.
+try:  # Keep core imports light; actual construction requires veRL 0.8.0.
     from verl.tools.base_tool import BaseTool
     from verl.tools.schemas import OpenAIFunctionToolSchema, ToolResponse
 except ImportError:  # pragma: no cover - expected outside the optional runtime.
@@ -54,7 +55,31 @@ async def execute_userbench_action(
             metadata={"validation_error": str(exc), "task_id": session.task_id},
         )
 
-    result = await session.wrapper.astep(action)
+    try:
+        result = await session.wrapper.astep(action)
+    except Exception as exc:
+        module = exc.__class__.__module__.split(".", 1)[0]
+        infrastructure = isinstance(
+            exc, (UserBenchEnvironmentError, TimeoutError, ConnectionError, OSError)
+        ) or module in {"openai", "httpx", "httpcore"}
+        if not infrastructure:
+            raise
+        reason = f"simulator_{exc.__class__.__name__}"
+        session.infrastructure_errors.append(reason)
+        session.protocol_error = "simulator_infrastructure_failure"
+        session.termination_reason = "simulator_infrastructure_failure"
+        session.terminated = True
+        return UserBenchToolExecution(
+            text="Error: UserBench simulator infrastructure failure; trajectory invalid.",
+            reward=0.0,
+            metadata={
+                "task_id": session.task_id,
+                "infrastructure_invalid": True,
+                "error_type": exc.__class__.__name__,
+                "terminated": True,
+                "truncated": False,
+            },
+        )
     try:
         snapshot = session.wrapper.reward_snapshot()
     except AttributeError:
@@ -83,7 +108,7 @@ class UserBenchTool(BaseTool):  # type: ignore[misc]
     def __init__(
         self, config: dict[str, Any], tool_schema: OpenAIFunctionToolSchema
     ) -> None:
-        require_verl_061()
+        require_verl_080()
         super().__init__(config, tool_schema)
 
     async def create(

@@ -1,75 +1,83 @@
 # Travel GRPO
 
-面向长程旅游助手 Agent 的 UserBench 后训练与评测项目。
+面向 UserBench 旅游助手的可审计 Agentic 后训练项目，覆盖冻结数据划分、教师轨迹 Gold/Silver 验收、action-only LoRA SFT、veRL 0.8 在线 GRPO，以及 Baseline/SFT/GRPO 冻结测试集配对评测。
 
-> 当前状态：**早期开发**。固定版本的 UserBench 快照、可复现任务划分、环境包装、Reward v2 严格准入的教师轨迹采集、action-only LoRA/QLoRA SFT 流水线和 veRL 0.6.1 适配层已经实现；尚未执行正式 SFT、完整 GRPO 启动和最终评测 rollout。
+当前状态：代码链路与离线验证已实现；尚未在正式 Linux GPU 环境执行 SFT、GRPO 或 471 题评测，因此本仓库不声明任何模型或 benchmark 指标。
 
-## 目标流水线
+## 固定流水线
 
 ```text
-教师模型采集多轮轨迹
-  -> 轨迹回放与质量过滤
-  -> action-only LoRA SFT
-  -> UserBench 在线 GRPO
-  -> 冻结测试集上的 Baseline / SFT / GRPO 对比
+UserBench 固定划分
+  → deepseek-v4-flash 教师轨迹（Gold + Silver）
+  → Qwen/Qwen3.5-2B action-only LoRA SFT
+  → 合并 SFT 模型
+  → veRL 0.8 + UserBench 在线 GRPO
+  → 132 题 validation 选择 checkpoint
+  → 471 题 Baseline / SFT / GRPO 配对评测
 ```
 
-Actor、训练用户模拟器和正式评测用户模拟器是三个独立运行边界，禁止混用端点、模型配置或采样参数。
+Actor、采集模拟器、GRPO 模拟器和评测模拟器是独立运行边界。后三者虽都使用 `deepseek-v4-flash`，仍必须分别读取 `COLLECTION_USER_SIM_*`、`GRPO_USER_SIM_*`、`EVAL_USER_SIM_*` 并运行在不同进程。
 
-## 环境包装
+## 本机与正式环境
 
-核心包不依赖 UserBench 或 veRL。需要运行真实环境或 GRPO 时，分别从固定快照和外部 veRL 0.6.1 checkout 进行 editable install：
+- Windows/RTX 4050：仅用于数据验证、单元测试和 `--dry-run`。
+- 正式训练：Linux、Python 3.12、单张可见 NVIDIA GPU，至少 80 GiB（目标 96 GiB），支持 BF16。
+- 固定运行栈：veRL 0.8.0、vLLM 0.25.1、Torch 2.11.0、Ray 2.56.1。
+
+Linux 安装：
 
 ```bash
-pip install -e environments/UserBench
-pip install -e /path/to/verl
+bash scripts/setup.sh
 ```
 
-Actor 只使用单一工具 `interact_with_env(thought, choice, content)`，其中 `choice` 为 `search`、`action` 或 `answer`。教师轨迹采集使用 `TEACHER_*` 和 `COLLECTION_USER_SIM_*` 两套独立的 `deepseek-v4-flash` API 配置；GRPO Actor 使用 `Qwen/Qwen3.5-2B`，其 UserBench 模拟器读取 `GRPO_USER_SIM_*`。正式评测继续使用独立的 `EVAL_USER_SIM_*`。由于固定 UserBench 通过进程环境读取 OpenAI endpoint，不同模拟器角色必须运行在不同进程。详见 `docs/training/sft.md` 和 `docs/training/grpo.md`。
+该脚本创建 `.venv`，editable 安装本项目和固定 UserBench 快照，并对 veRL 唯一的动态采样连接补丁执行源文件、补丁载荷和结果 SHA-256 校验。
 
-## 数据划分
+复制 `.env.example` 为 `.env`，填写各运行边界的凭据；每个独立进程启动前使用 `set -a; source .env; set +a` 加载，但不要把 `.env` 提交到仓库。
+
+## 执行顺序
 
 ```bash
-pip install -e ".[data]"
-python scripts/data/build_dataset_splits.py --dry-run
-python scripts/data/build_dataset_splits.py
 python scripts/data/build_dataset_splits.py --verify-only
+python scripts/train/grpo/prepare_data.py
+
+python scripts/train/sft/collect_sft_data.py --dry-run --limit 1
+python scripts/train/sft/collect_sft_data.py \
+  --input data/sft/tasks_train.jsonl \
+  --run-dir outputs/teacher_trajectories/runs/sft-train \
+  --output outputs/teacher_trajectories/sft_train.accepted.jsonl
+python scripts/train/sft/collect_sft_data.py \
+  --input data/sft/tasks_validation.jsonl \
+  --run-dir outputs/teacher_trajectories/runs/sft-validation \
+  --output outputs/teacher_trajectories/sft_validation.accepted.jsonl
+python scripts/train/sft/sft_train.py --dry-run
+bash scripts/train/sft/run_sft.sh
+python scripts/train/sft/merge_lora.py
+
+bash scripts/train/grpo/run_vanilla.sh --dry-run
+bash scripts/train/grpo/run_vanilla.sh
+bash scripts/train/grpo/run_grpo.sh --dry-run
+bash scripts/train/grpo/run_grpo.sh
+python scripts/eval/select_checkpoint.py \
+  --validation-dir outputs/models/grpo/validation_rollouts
+bash scripts/train/grpo/export_actor.sh \
+  outputs/models/grpo/global_step_100/actor outputs/models/grpo-merged \
+  --selection outputs/models/grpo/checkpoint_selection.json
+
+# 配置和 checkpoint 完全冻结后，每个阶段分别启动 Actor 服务和评测进程
+export ACTOR_MODEL=Qwen/Qwen3.5-2B
+bash scripts/vllm_server/actor.sh "$ACTOR_MODEL"
+bash scripts/eval/run_evaluation.sh baseline
+export ACTOR_MODEL=outputs/models/sft-merged
+bash scripts/vllm_server/actor.sh "$ACTOR_MODEL"
+bash scripts/eval/run_evaluation.sh sft
+export ACTOR_MODEL=outputs/models/grpo-merged
+bash scripts/vllm_server/actor.sh "$ACTOR_MODEL"
+bash scripts/eval/run_evaluation.sh grpo
+python scripts/eval/compare_stages.py
 ```
 
-划分规则位于 `configs/data/dataset_split.toml`，产物数量与哈希记录在 `data/split_manifest.json`。派生记录遵循 `data/example.jsonl` 的五字段契约：`task_id`、`composition`、`difficulty`、`source_split`、`prompt`。
+完整契约见 [SFT](docs/training/sft.md)、[GRPO](docs/training/grpo.md) 和 [评测](docs/evaluation/userbench.md)。
 
-## 项目结构
+## 不可变边界
 
-```text
-configs/
-├── data/                 # 冻结数据划分配置
-├── interaction_config/   # UserBench、AgentLoop 与隔离的模拟器配置
-├── tool_config/          # Actor 可见工具协议
-├── train/{sft,grpo}/     # 训练阶段配置
-└── eval/                 # 冻结评测配置
-scripts/
-├── data/                 # 数据构建与验证入口
-├── train/{sft,grpo}/     # 分阶段训练入口
-├── eval/                 # 独立评测入口
-└── vllm_server/          # Actor 与训练模拟器服务入口
-src/travel_grpo/
-├── data/                 # 已实现的 UserBench 数据划分
-├── envs/                 # UserBench 包装、交互、工具与奖励边界
-├── models/               # Actor 推理客户端
-├── training/             # SFT 与 GRPO 核心逻辑
-├── evaluation/           # 冻结评测逻辑
-└── utils/                # 通用基础设施
-```
-
-完整职责说明见 `docs/architecture/repository_layout.md`。
-
-## 第三方环境
-
-`environments/UserBench/` 是 Salesforce AI Research
-[UserBench](https://github.com/SalesforceAIResearch/UserBench) 的固定快照。来源提交与许可信息见
-`environments/UserBench/EMBEDDED_SOURCE.json`，日常开发不得直接修改该目录。
-
-本项目结构参考
-[qiqihezh/agentic-grpo-longhorizon](https://github.com/qiqihezh/agentic-grpo-longhorizon)，但保留 UserBench 数据契约、`travel_grpo` 包命名空间和三类运行时隔离边界，不复制 τ-bench 专用实现。
-
-项目根许可证尚未指定；内嵌 UserBench 的版权与 Apache-2.0 许可保持不变。当前没有训练或 benchmark 结果声明。
+`environments/UserBench/` 是 Salesforce AI Research UserBench 提交 `80506d2ab484cab843e60a2401ff3e0290d05b87` 的完整快照。日常开发不得修改；来源和 Apache-2.0 信息记录在 `EMBEDDED_SOURCE.json`。正式 471 条 test 只允许在训练配方和 checkpoint 完全冻结后使用。

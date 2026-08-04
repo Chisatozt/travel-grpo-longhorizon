@@ -1,7 +1,7 @@
 profile_version: travel-grpo-verl08-v1
-dynamic_sampling: false
+dynamic_sampling: true
 model_path: outputs/models/sft-merged
-output_dir: outputs/models/grpo-smoke
+output_dir: outputs/models/grpo
 data:
   apply_chat_template_kwargs: {enable_thinking: false}
   train_files: outputs/grpo/data/train.parquet
@@ -33,10 +33,16 @@ actor:
   micro_batch_size_per_gpu: 1
   gradient_checkpointing: true
 algorithm: {adv_estimator: grpo, norm_adv_by_std_in_grpo: false, kl_in_reward: false, kl_loss: false}
-trainer: {total_training_steps: 2, save_freq: 1, test_freq: 1, val_before_train: true, logger: console}
+dynamic:
+  group_size: 4
+  required_groups: 2
+  max_generation_batches: 3
+  max_consecutive_skips: 10
+  reward_tolerance: 1.0e-6
+trainer: {total_training_steps: 500, save_freq: 50, test_freq: 50, val_before_train: true, logger: console}
 actor_rollout_ref:
   model:
-    path: ${oc.env:GRPO_ACTOR_MODEL,Qwen/Qwen3.5-2B}
+    path: ${oc.env:GRPO_ACTOR_MODEL,outputs/models/sft-merged}
   rollout:
     multi_turn:
       enable: true

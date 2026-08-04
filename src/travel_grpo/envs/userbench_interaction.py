@@ -80,10 +80,7 @@ class UserSimulatorRuntime:
             max_tokens=int(values.get(f"{prefix}_MAX_TOKENS", "2048")),
             timeout=float(values.get(f"{prefix}_TIMEOUT", "60")),
         )
-        if (
-            resolved_role in {SimulatorRole.COLLECTION, SimulatorRole.GRPO}
-            and runtime.model.casefold() != DEEPSEEK_V4_FLASH_MODEL
-        ):
+        if runtime.model.casefold() != DEEPSEEK_V4_FLASH_MODEL:
             raise SimulatorBoundaryError(
                 f"{prefix}_MODEL must be {DEEPSEEK_V4_FLASH_MODEL!r}"
             )

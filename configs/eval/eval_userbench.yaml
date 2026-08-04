@@ -1,8 +1,25 @@
 evaluation:
+  contract_version: travel-userbench-evaluation-v1
   dataset: data/evaluation/tasks.parquet
   upstream_split: test
+  expected_tasks: 471
   frozen: true
-  environment_config_path: configs/interaction_config/userbench.yaml
-  simulator_config_path: configs/interaction_config/simulator_eval.yaml
+  actor:
+    temperature: 0.0
+    do_sample: false
+    max_tokens: 4096
+    enable_thinking: false
+    tool_parser: qwen3_coder
+    context_length: 32768
+  simulator:
+    config_path: configs/interaction_config/simulator_eval.yaml
+    model: deepseek-v4-flash
+    temperature: 0.0
+    process_isolated: true
+  environment:
+    config_path: configs/interaction_config/userbench.yaml
+    seed: 42
+    max_steps: 20
   tool_config_path: configs/tool_config/userbench_tools.yaml
-  agent_loop_config_path: configs/interaction_config/agent_loop.yaml
+  fixed_denominator: 471
+  per_task_atomic_checkpoint: true

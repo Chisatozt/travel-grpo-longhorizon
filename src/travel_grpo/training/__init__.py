@@ -1,1 +1,1 @@
-"""Post-training namespace (scaffold only)."""
+"""Teacher collection, action-only SFT, and online GRPO."""

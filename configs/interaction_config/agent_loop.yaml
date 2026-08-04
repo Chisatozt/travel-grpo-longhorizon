@@ -1,2 +1,5 @@
 - name: userbench_tool_agent
   _target_: travel_grpo.training.grpo.adapter.agent_loop.UserBenchAgentLoop
+  environment_config_path: configs/interaction_config/userbench.yaml
+  simulator_config_path: configs/interaction_config/simulator_train.yaml
+  max_steps: 20

@@ -118,6 +118,7 @@ class UserBenchSessionState:
     wrapper: UserBenchWrapper
     rewards: RawRewardTrace = field(default_factory=RawRewardTrace)
     num_tool_calls: int = 0
+    actor_attempts: int = 0
     terminated: bool = False
     truncated: bool = False
     protocol_error: str | None = None
@@ -298,6 +299,7 @@ class UserBenchSessionState:
             "raw_cumulative_reward": self.rewards.total,
             "cumulative_reward": self.rewards.total,
             "num_tool_calls": self.num_tool_calls,
+            "actor_attempts": self.actor_attempts,
             "terminated": self.terminated,
             "truncated": self.truncated,
             "protocol_error": self.protocol_error,

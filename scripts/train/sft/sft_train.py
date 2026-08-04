@@ -16,10 +16,12 @@ if str(SOURCE_ROOT) not in sys.path:
 from travel_grpo.training.sft_dataset import (  # noqa: E402
     ActionOnlyDataCollator,
     SFTDatasetError,
+    assert_sft_readiness,
+    assert_task_ids_within_split,
     assert_train_validation_disjoint,
     audit_trajectory_file,
-    build_action_only_examples,
-    load_sft_trajectories,
+    build_action_only_dataset,
+    load_sft_trajectory_files,
     load_tool_schema,
     rendered_dataset_summary,
 )
@@ -34,6 +36,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--render-smoke", action="store_true")
     parser.add_argument("--audit-only", type=Path)
     parser.add_argument("--limit", type=int)
+    parser.add_argument(
+        "--allow-small-smoke",
+        action="store_true",
+        help="bypass formal trajectory-count gates for an explicit non-formal smoke",
+    )
     parser.add_argument("--resume-from-checkpoint", type=Path)
     return parser
 
@@ -49,6 +56,13 @@ def _project_path(value: Any, name: str) -> Path:
         raise ValueError(f"{name} must be a non-empty path")
     path = Path(value).expanduser()
     return path.resolve() if path.is_absolute() else (ROOT / path).resolve()
+
+
+def _project_paths(value: Any, name: str) -> tuple[Path, ...]:
+    values = [value] if isinstance(value, str) else value
+    if not isinstance(values, list) or not values:
+        raise ValueError(f"{name} must be a non-empty path list")
+    return tuple(_project_path(item, name) for item in values)
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -78,12 +92,36 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ValueError("data.assistant_loss must be action_only")
     if data.get("example_unit") != "assistant_turn":
         raise ValueError("data.example_unit must be assistant_turn")
+    tiers = data.get("accepted_quality_tiers", ["gold"])
+    if (
+        not isinstance(tiers, list)
+        or not tiers
+        or set(tiers) - {"gold", "silver"}
+    ):
+        raise ValueError("data.accepted_quality_tiers must contain gold and/or silver")
+    _project_paths(data.get("train_trajectories"), "data.train_trajectories")
+    _project_paths(
+        data.get("validation_trajectories"), "data.validation_trajectories"
+    )
+    for key in ("train_tasks", "validation_tasks"):
+        if key in data:
+            _project_path(data[key], f"data.{key}")
+    for key in ("minimum_train_trajectories", "minimum_validation_trajectories"):
+        value = data.get(key, 0)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValueError(f"data.{key} must be a non-negative integer")
     if not isinstance(data.get("max_sequence_length"), int) or data["max_sequence_length"] <= 0:
         raise ValueError("data.max_sequence_length must be positive")
     if training.get("bf16") and training.get("fp16"):
         raise ValueError("bf16 and fp16 cannot both be enabled")
-    if not isinstance(lora.get("target_modules"), list) or not lora["target_modules"]:
-        raise ValueError("lora.target_modules must be a non-empty list")
+    targets = lora.get("target_modules")
+    if not (
+        targets == "all-linear"
+        or isinstance(targets, list)
+        and targets
+        and all(isinstance(value, str) and value for value in targets)
+    ):
+        raise ValueError("lora.target_modules must be all-linear or a non-empty string list")
     for key in ("rank", "alpha"):
         if not isinstance(lora.get(key), int) or lora[key] <= 0:
             raise ValueError(f"lora.{key} must be a positive integer")
@@ -142,23 +180,78 @@ def load_config(path: Path) -> dict[str, Any]:
     return dict(root)
 
 
-def _audit(config: Mapping[str, Any], *, limit: int | None) -> tuple[dict[str, Any], tuple[dict[str, Any], ...], tuple[dict[str, Any], ...], dict[str, Any]]:
+def _audit(
+    config: Mapping[str, Any],
+    *,
+    limit: int | None,
+    allow_small_smoke: bool,
+) -> tuple[dict[str, Any], tuple[dict[str, Any], ...], tuple[dict[str, Any], ...], dict[str, Any]]:
     data = _mapping(config["data"], "data")
     schema = load_tool_schema(_project_path(data["tool_schema_path"], "tool schema"))
-    train_path = _project_path(data["train_trajectories"], "train trajectories")
-    validation_path = _project_path(
+    train_paths = _project_paths(data["train_trajectories"], "train trajectories")
+    validation_paths = _project_paths(
         data["validation_trajectories"], "validation trajectories"
     )
-    train_audit = audit_trajectory_file(train_path, limit=limit)
-    validation_audit = audit_trajectory_file(validation_path, limit=limit)
-    train = load_sft_trajectories(train_path, limit=limit)
-    validation = load_sft_trajectories(validation_path, limit=limit)
+    tiers = tuple(data.get("accepted_quality_tiers", ["gold"]))
+    train_audits = [
+        audit_trajectory_file(path, limit=limit, accepted_quality_tiers=tiers)
+        for path in train_paths
+    ]
+    validation_audits = [
+        audit_trajectory_file(path, limit=limit, accepted_quality_tiers=tiers)
+        for path in validation_paths
+    ]
+    train = load_sft_trajectory_files(
+        train_paths, limit=limit, accepted_quality_tiers=tiers
+    )
+    validation = load_sft_trajectory_files(
+        validation_paths, limit=limit, accepted_quality_tiers=tiers
+    )
     assert_train_validation_disjoint(train, validation)
+    if "train_tasks" in data or "validation_tasks" in data:
+        if not {"train_tasks", "validation_tasks"} <= set(data):
+            raise ValueError(
+                "data.train_tasks and data.validation_tasks must be configured together"
+            )
+        try:
+            import pyarrow.parquet as pq
+        except ImportError as exc:
+            raise RuntimeError("SFT split isolation requires the data extra") from exc
+        train_task_ids = pq.read_table(
+            _project_path(data["train_tasks"], "data.train_tasks"),
+            columns=["task_id"],
+        ).column("task_id").to_pylist()
+        validation_task_ids = pq.read_table(
+            _project_path(data["validation_tasks"], "data.validation_tasks"),
+            columns=["task_id"],
+        ).column("task_id").to_pylist()
+        assert_task_ids_within_split(train, train_task_ids, split_name="train")
+        assert_task_ids_within_split(
+            validation, validation_task_ids, split_name="validation"
+        )
+    minimum_train = int(data.get("minimum_train_trajectories", 0))
+    minimum_validation = int(data.get("minimum_validation_trajectories", 0))
+    required_compositions = tuple(data.get("required_compositions", ()))
+    if not allow_small_smoke and (minimum_train or minimum_validation or required_compositions):
+        assert_sft_readiness(
+            train,
+            validation,
+            minimum_train=minimum_train,
+            minimum_validation=minimum_validation,
+            required_compositions=required_compositions,
+        )
     return (
         {
-            "train": train_audit.summary(),
-            "validation": validation_audit.summary(),
+            "train": {
+                "files": [value.summary() for value in train_audits],
+                "accepted_trajectories": len(train),
+            },
+            "validation": {
+                "files": [value.summary() for value in validation_audits],
+                "accepted_trajectories": len(validation),
+            },
             "train_validation_intersection": 0,
+            "formal_readiness_enforced": not allow_small_smoke,
         },
         train,
         validation,
@@ -195,23 +288,44 @@ def _load_tokenizer(model: Mapping[str, Any]):
     return tokenizer
 
 
-def _render(config, train, validation, schema, *, limit):
+def _render(config, train, validation, schema, *, limit, allow_small_smoke):
     model = _mapping(config["model"], "model")
     data = _mapping(config["data"], "data")
     tokenizer = _load_tokenizer(model)
-    train_examples = build_action_only_examples(
+    train_examples, train_overlong = build_action_only_dataset(
         train[:limit] if limit else train,
         tokenizer,
         schema,
         max_sequence_length=int(data["max_sequence_length"]),
+        accepted_quality_tiers=tuple(data.get("accepted_quality_tiers", ["gold"])),
     )
-    validation_examples = build_action_only_examples(
+    validation_examples, validation_overlong = build_action_only_dataset(
         validation[:limit] if limit else validation,
         tokenizer,
         schema,
         max_sequence_length=int(data["max_sequence_length"]),
+        accepted_quality_tiers=tuple(data.get("accepted_quality_tiers", ["gold"])),
     )
-    return tokenizer, train_examples, validation_examples
+    retained_train_ids = {value.task_id for value in train_examples}
+    retained_validation_ids = {value.task_id for value in validation_examples}
+    retained_train = tuple(value for value in train if str(value["task_id"]) in retained_train_ids)
+    retained_validation = tuple(
+        value for value in validation if str(value["task_id"]) in retained_validation_ids
+    )
+    if not allow_small_smoke:
+        assert_sft_readiness(
+            retained_train,
+            retained_validation,
+            minimum_train=int(data.get("minimum_train_trajectories", 0)),
+            minimum_validation=int(data.get("minimum_validation_trajectories", 0)),
+            required_compositions=tuple(data.get("required_compositions", ())),
+        )
+    return (
+        tokenizer,
+        train_examples,
+        validation_examples,
+        {"train": list(train_overlong), "validation": list(validation_overlong)},
+    )
 
 
 def _train(config, tokenizer, train_examples, validation_examples, resume):
@@ -219,7 +333,9 @@ def _train(config, tokenizer, train_examples, validation_examples, resume):
         import torch
         from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
         from transformers import (
+            AutoConfig,
             AutoModelForCausalLM,
+            AutoModelForMultimodalLM,
             BitsAndBytesConfig,
             Trainer,
             TrainingArguments,
@@ -241,7 +357,22 @@ def _train(config, tokenizer, train_examples, validation_examples, resume):
         else None
     )
     dtype = torch.bfloat16 if training.get("bf16") else torch.float16 if training.get("fp16") else torch.float32
-    model = AutoModelForCausalLM.from_pretrained(
+    architecture = AutoConfig.from_pretrained(
+        model_config["base"],
+        trust_remote_code=bool(model_config.get("trust_remote_code", False)),
+        cache_dir=str(
+            _project_path(
+                model_config.get("cache_dir", "outputs/cache/huggingface"),
+                "model.cache_dir",
+            )
+        ),
+    )
+    model_class = (
+        AutoModelForMultimodalLM
+        if str(getattr(architecture, "model_type", "")).startswith("qwen3_5")
+        else AutoModelForCausalLM
+    )
+    model = model_class.from_pretrained(
         model_config["base"],
         trust_remote_code=bool(model_config.get("trust_remote_code", False)),
         torch_dtype=dtype,
@@ -263,7 +394,11 @@ def _train(config, tokenizer, train_examples, validation_examples, resume):
             r=int(lora["rank"]),
             lora_alpha=int(lora["alpha"]),
             lora_dropout=float(lora["dropout"]),
-            target_modules=list(lora["target_modules"]),
+            target_modules=(
+                lora["target_modules"]
+                if isinstance(lora["target_modules"], str)
+                else list(lora["target_modules"])
+            ),
             task_type="CAUSAL_LM",
         ),
     )
@@ -323,16 +458,26 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             raise ValueError("--resume-from-checkpoint must be under outputs/") from exc
     if args.audit_only is not None:
         return {"mode": "audit", **audit_trajectory_file(args.audit_only, limit=args.limit).summary()}
-    audit, train, validation, schema = _audit(config, limit=args.limit)
+    audit, train, validation, schema = _audit(
+        config,
+        limit=args.limit,
+        allow_small_smoke=bool(args.allow_small_smoke),
+    )
     summary: dict[str, Any] = {"mode": "dry-run" if args.dry_run else "train", **audit}
     if args.dry_run and not args.render_smoke:
         return summary
-    tokenizer, train_examples, validation_examples = _render(
-        config, train, validation, schema, limit=args.limit
+    tokenizer, train_examples, validation_examples, overlong = _render(
+        config,
+        train,
+        validation,
+        schema,
+        limit=args.limit,
+        allow_small_smoke=bool(args.allow_small_smoke),
     )
     summary["rendered"] = {
         "train": rendered_dataset_summary(train_examples),
         "validation": rendered_dataset_summary(validation_examples),
+        "overlong_rejections": overlong,
     }
     if args.dry_run or args.render_smoke:
         summary["mode"] = "render-smoke"

@@ -18,7 +18,12 @@ from travel_grpo.envs.userbench_tools import (
     UserBenchActionError,
     get_interact_with_env_schema,
 )
-from travel_grpo.training.sft_collection import TRAJECTORY_SCHEMA_VERSION
+from travel_grpo.training.sft_collection import (
+    TRAJECTORY_SCHEMA_VERSION,
+    TeacherTrajectory,
+    quality_tier_for_trajectory,
+    trajectory_rejection_reasons as collection_rejection_reasons,
+)
 
 IGNORE_INDEX = -100
 MIN_TERMINAL_REWARD = 0.7
@@ -26,6 +31,10 @@ MIN_TERMINAL_REWARD = 0.7
 
 class SFTDatasetError(ValueError):
     """Raised when a trajectory cannot safely become an SFT example."""
+
+
+class SFTTrajectoryTooLongError(SFTDatasetError):
+    """Raised so callers can reject one whole trajectory without truncation."""
 
 
 class ChatTemplateTokenizer(Protocol):
@@ -309,7 +318,66 @@ def trajectory_rejection_reasons(record: Any) -> tuple[str, ...]:
     return tuple(sorted(reasons))
 
 
-def audit_trajectory_file(path: str | Path, *, limit: int | None = None) -> TrajectoryAudit:
+_SILVER_RELAXABLE_RECORD_REASONS = frozenset(
+    {
+        "vague_action_feedback",
+        "reward_invalid",
+        "terminal_reward_below_threshold",
+        "infrastructure_error",
+    }
+)
+
+
+def sft_admission_reasons(
+    record: Any,
+    *,
+    accepted_quality_tiers: Sequence[str] = ("gold",),
+) -> tuple[str, ...]:
+    """Revalidate Gold/Silver admission without trusting the serialized tier."""
+
+    allowed = tuple(str(value) for value in accepted_quality_tiers)
+    if not allowed or set(allowed) - {"gold", "silver"}:
+        raise SFTDatasetError("accepted quality tiers must be a subset of gold,silver")
+    strict = set(trajectory_rejection_reasons(record))
+    if not isinstance(record, Mapping):
+        return tuple(sorted(strict))
+    # ``quality_tier`` is collection metadata, not an admission authority.
+    # Infer the tier again from the trajectory evidence so a stale or forged
+    # serialized label can neither upgrade Silver to Gold nor reject valid
+    # evidence that was mislabeled by an older collector.
+    if not strict:
+        return () if "gold" in allowed else ("quality_tier_not_accepted",)
+
+    # Silver records may relax only the same evidence failures admitted during
+    # collection.  Every structural, protocol, answer and split check remains
+    # enforced by the record-level validator above.
+    structural = strict - _SILVER_RELAXABLE_RECORD_REASONS
+    if structural:
+        return tuple(sorted(structural))
+    try:
+        trajectory = TeacherTrajectory.from_record(record)
+    except Exception:
+        return ("invalid_silver_trajectory",)
+    collection_reasons = collection_rejection_reasons(trajectory)
+    if quality_tier_for_trajectory(trajectory, collection_reasons) != "silver":
+        return ("invalid_silver_admission",)
+    masked_assistant_turns = sum(
+        isinstance(message, Mapping)
+        and message.get("role") == "assistant"
+        and message.get("loss_mask") is True
+        for message in trajectory.messages
+    )
+    if trajectory.simulator_judgment_fallbacks > masked_assistant_turns:
+        return ("unmasked_silver_judgment_fallback",)
+    return () if "silver" in allowed else ("quality_tier_not_accepted",)
+
+
+def audit_trajectory_file(
+    path: str | Path,
+    *,
+    limit: int | None = None,
+    accepted_quality_tiers: Sequence[str] = ("gold",),
+) -> TrajectoryAudit:
     source = Path(path)
     if limit is not None and limit <= 0:
         raise SFTDatasetError("limit must be positive")
@@ -333,7 +401,11 @@ def audit_trajectory_file(path: str | Path, *, limit: int | None = None) -> Traj
             rejected.append(TrajectoryRejection(line_number, None, ("invalid_json",)))
             continue
         task_id = record.get("task_id") if isinstance(record, Mapping) else None
-        reasons = set(trajectory_rejection_reasons(record))
+        reasons = set(
+            sft_admission_reasons(
+                record, accepted_quality_tiers=accepted_quality_tiers
+            )
+        )
         if isinstance(task_id, str):
             if task_id in seen:
                 reasons.add("duplicate_task_id")
@@ -353,14 +425,85 @@ def audit_trajectory_file(path: str | Path, *, limit: int | None = None) -> Traj
     return TrajectoryAudit(source.resolve(), tuple(accepted), tuple(rejected))
 
 
-def load_sft_trajectories(path: str | Path, *, limit: int | None = None) -> tuple[dict[str, Any], ...]:
-    audit = audit_trajectory_file(path, limit=limit)
+def load_sft_trajectories(
+    path: str | Path,
+    *,
+    limit: int | None = None,
+    accepted_quality_tiers: Sequence[str] = ("gold",),
+) -> tuple[dict[str, Any], ...]:
+    audit = audit_trajectory_file(
+        path, limit=limit, accepted_quality_tiers=accepted_quality_tiers
+    )
     if audit.rejections:
         first = audit.rejections[0]
         raise SFTDatasetError(
             f"trajectory line {first.line_number} is not trainable: {', '.join(first.reasons)}"
         )
     return audit.records
+
+
+def load_sft_trajectory_files(
+    paths: Sequence[str | Path],
+    *,
+    limit: int | None = None,
+    accepted_quality_tiers: Sequence[str] = ("gold", "silver"),
+) -> tuple[dict[str, Any], ...]:
+    """Load several tier artifacts while enforcing global task-ID uniqueness."""
+
+    if not paths:
+        raise SFTDatasetError("at least one SFT trajectory file is required")
+    combined: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for path in paths:
+        values = load_sft_trajectories(
+            path,
+            limit=limit,
+            accepted_quality_tiers=accepted_quality_tiers,
+        )
+        for record in values:
+            task_id = str(record["task_id"])
+            if task_id in seen:
+                raise SFTDatasetError(f"duplicate SFT task across tier files: {task_id!r}")
+            seen.add(task_id)
+            combined.append(record)
+    return tuple(combined)
+
+
+def assert_sft_readiness(
+    train: Sequence[Mapping[str, Any]],
+    validation: Sequence[Mapping[str, Any]],
+    *,
+    minimum_train: int = 400,
+    minimum_validation: int = 40,
+    required_compositions: Sequence[str] = (
+        "22",
+        "33",
+        "44",
+        "2222",
+        "233",
+        "333",
+        "334",
+        "444",
+    ),
+) -> None:
+    """Fail before formal SFT when data quantity or composition coverage is weak."""
+
+    if len(train) < minimum_train:
+        raise SFTDatasetError(
+            f"formal SFT requires at least {minimum_train} train trajectories, found {len(train)}"
+        )
+    if len(validation) < minimum_validation:
+        raise SFTDatasetError(
+            "formal SFT requires at least "
+            f"{minimum_validation} validation trajectories, found {len(validation)}"
+        )
+    for name, values in (("train", train), ("validation", validation)):
+        observed = {str(record.get("composition")) for record in values}
+        missing = sorted(set(required_compositions) - observed)
+        if missing:
+            raise SFTDatasetError(
+                f"formal SFT {name} is missing compositions: {', '.join(missing)}"
+            )
 
 
 def assert_train_validation_disjoint(
@@ -372,6 +515,23 @@ def assert_train_validation_disjoint(
     if overlap:
         raise SFTDatasetError(
             f"SFT train/validation overlap at task {min(overlap)!r}"
+        )
+
+
+def assert_task_ids_within_split(
+    records: Sequence[Mapping[str, Any]],
+    allowed_task_ids: Sequence[str],
+    *,
+    split_name: str,
+) -> None:
+    """Prevent accepted trajectories from crossing frozen project splits."""
+
+    allowed = set(allowed_task_ids)
+    observed = {str(record["task_id"]) for record in records}
+    outside = sorted(observed - allowed)
+    if outside:
+        raise SFTDatasetError(
+            f"SFT {split_name} contains task outside its frozen split: {outside[0]!r}"
         )
 
 
@@ -440,6 +600,7 @@ def build_action_only_examples(
     tool_schema: Mapping[str, Any],
     *,
     max_sequence_length: int,
+    accepted_quality_tiers: Sequence[str] = ("gold", "silver"),
 ) -> tuple[ActionOnlyExample, ...]:
     """Build exact per-assistant-turn masks using a verified token prefix."""
 
@@ -447,7 +608,9 @@ def build_action_only_examples(
         raise SFTDatasetError("max_sequence_length must be positive")
     examples: list[ActionOnlyExample] = []
     for trajectory_number, record in enumerate(records, start=1):
-        reasons = trajectory_rejection_reasons(record)
+        reasons = sft_admission_reasons(
+            record, accepted_quality_tiers=accepted_quality_tiers
+        )
         if reasons:
             raise SFTDatasetError(
                 f"task {record.get('task_id')!r} is not trainable: {', '.join(reasons)}"
@@ -479,7 +642,7 @@ def build_action_only_examples(
                     "chat template cannot produce a verified assistant completion prefix"
                 )
             if len(full_ids) > max_sequence_length:
-                raise SFTDatasetError(
+                raise SFTTrajectoryTooLongError(
                     f"task {record['task_id']!r} assistant turn {assistant_index} has "
                     f"{len(full_ids)} tokens, exceeding max_sequence_length={max_sequence_length}; "
                     "silent truncation is forbidden"
@@ -503,6 +666,48 @@ def build_action_only_examples(
     return tuple(examples)
 
 
+def build_action_only_dataset(
+    records: Sequence[Mapping[str, Any]],
+    tokenizer: ChatTemplateTokenizer,
+    tool_schema: Mapping[str, Any],
+    *,
+    max_sequence_length: int,
+    accepted_quality_tiers: Sequence[str] = ("gold", "silver"),
+) -> tuple[tuple[ActionOnlyExample, ...], tuple[dict[str, Any], ...]]:
+    """Render a split, dropping only whole overlong trajectories.
+
+    Structural or gate failures still fail loudly.  An overlong turn discards
+    every example from that trajectory and is returned as an explicit audit
+    record; no prompt, tool call, or Observation is truncated.
+    """
+
+    examples: list[ActionOnlyExample] = []
+    rejected: list[dict[str, Any]] = []
+    for record in records:
+        try:
+            values = build_action_only_examples(
+                [record],
+                tokenizer,
+                tool_schema,
+                max_sequence_length=max_sequence_length,
+                accepted_quality_tiers=accepted_quality_tiers,
+            )
+        except SFTTrajectoryTooLongError as exc:
+            rejected.append(
+                {
+                    "task_id": str(record.get("task_id", "")),
+                    "composition": str(record.get("composition", "")),
+                    "reason": "trajectory_too_long",
+                    "detail": str(exc),
+                }
+            )
+            continue
+        examples.extend(values)
+    if not examples:
+        raise SFTDatasetError("no action-only examples remain after overlong rejection")
+    return tuple(examples), tuple(rejected)
+
+
 @dataclass(frozen=True)
 class ActionOnlyDataCollator:
     pad_token_id: int
@@ -514,8 +719,12 @@ class ActionOnlyDataCollator:
             raise SFTDatasetError("cannot collate an empty batch")
         try:
             import torch
-        except ImportError as exc:  # pragma: no cover - training extra supplies torch.
-            raise RuntimeError("PyTorch is required by the SFT collator") from exc
+        except ImportError:  # Offline schema checks do not require training extras.
+            import numpy as np
+
+            tensor = np.asarray
+        else:
+            tensor = lambda value: torch.tensor(value, dtype=torch.long)
         normalized = [
             value.to_trainer_dict() if isinstance(value, ActionOnlyExample) else dict(value)
             for value in features
@@ -537,7 +746,7 @@ class ActionOnlyDataCollator:
                 rows["labels"].append([self.label_pad_token_id] * pad + list(value["labels"]))
             else:
                 raise SFTDatasetError("padding_side must be 'left' or 'right'")
-        return {key: torch.tensor(value, dtype=torch.long) for key, value in rows.items()}
+        return {key: tensor(value) for key, value in rows.items()}
 
 
 def rendered_dataset_summary(examples: Sequence[ActionOnlyExample]) -> dict[str, Any]:

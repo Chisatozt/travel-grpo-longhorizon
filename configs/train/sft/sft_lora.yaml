@@ -6,30 +6,40 @@ model:
   torch_dtype: bfloat16
 
 data:
-  train_trajectories: outputs/teacher_trajectories/sft_train.accepted.jsonl
-  validation_trajectories: outputs/teacher_trajectories/sft_validation.accepted.jsonl
+  train_tasks: data/sft/tasks_train.parquet
+  validation_tasks: data/sft/tasks_validation.parquet
+  train_trajectories:
+    - outputs/teacher_trajectories/sft_train.accepted.jsonl
+    - outputs/teacher_trajectories/sft_train.silver.jsonl
+  validation_trajectories:
+    - outputs/teacher_trajectories/sft_validation.accepted.jsonl
+    - outputs/teacher_trajectories/sft_validation.silver.jsonl
+  accepted_quality_tiers: [gold, silver]
+  minimum_train_trajectories: 400
+  minimum_validation_trajectories: 40
+  required_compositions: ["22", "33", "44", "2222", "233", "333", "334", "444"]
   tool_schema_path: configs/tool_config/userbench_tools.yaml
   assistant_loss: action_only
   example_unit: assistant_turn
-  max_sequence_length: 16384
+  max_sequence_length: 32768
 
 lora:
   rank: 16
   alpha: 32
   dropout: 0.05
-  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  target_modules: all-linear
 
 training:
   output_dir: outputs/sft/qwen3.5-2b-lora
-  per_device_train_batch_size: 1
-  per_device_eval_batch_size: 1
-  gradient_accumulation_steps: 16
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 8
   learning_rate: 0.0001
   weight_decay: 0.01
   warmup_ratio: 0.03
   lr_scheduler_type: cosine
   optim: adamw_torch
-  num_train_epochs: 2
+  num_train_epochs: 3
   max_steps: -1
   gradient_checkpointing: true
   bf16: true

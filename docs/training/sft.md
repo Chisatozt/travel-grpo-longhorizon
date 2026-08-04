@@ -43,7 +43,7 @@ python scripts/train/sft/collect_sft_data.py \
 
 Collection policy `teacher-state-machine-v2` controls each aspect through `ELICIT → SEARCH → ANSWER`. The hidden Reward-v2 ledger only tells the controller when active preference coverage for an aspect is complete; preference IDs, values, best IDs, coverage, and reward evidence are never inserted into Teacher messages. DeepSeek generates the official three-field tool call under a request-only phase constraint.
 
-Collection has two accepted quality tiers. `gold` satisfies the strict gate and is written to `*.accepted.jsonl`. `silver` is accepted separately when the trajectory still terminates with a correct, fully answered itinerary and zero policy/answer errors, but contains one explicitly bounded recovery: one search repair, one vague-action repair, or one simulator judgment fallback. Repaired turns are retained for context and marked `loss_mask=true`; silver with an infrastructure fallback keeps `reward_valid=false` and is never counted as gold. Silver records are written to the sibling `*.silver.jsonl` artifact for explicit downstream inspection and policy-controlled filtering; the default strict SFT loader continues to reject infrastructure-invalid records.
+Collection has two accepted quality tiers. `gold` satisfies the strict gate and is written to `*.accepted.jsonl`. `silver` is accepted separately when the trajectory still terminates with a correct, fully answered itinerary and zero policy/answer errors, but contains one explicitly bounded recovery: one search repair, one vague-action repair, or one simulator judgment fallback. Repaired turns are retained for context and marked `loss_mask=true`; silver with an infrastructure fallback keeps `reward_valid=false` and is never counted as gold. Formal SFT reloads both tier files, ignores the serialized tier as authority, and reruns the Gold/Silver gates. A Silver judgment fallback without a masked assistant repair is rejected.
 
 Request-local retries become progressively stricter: natural phase guidance, a field-specific instruction with forbidden alternatives, and finally a canonical content allowlist in the temporary request schema. Search is keyed by aspect rather than query wording, and answer IDs must come from visible search output. Response fallback, invalid feedback, wrong answers, and unrecorded answer transitions abort the attempt immediately. A single judgment fallback or recoverable vague/search transition is retained as silver only when the final hard correctness checks pass; a second fallback/repair remains fail-loud.
 
@@ -82,7 +82,7 @@ Audit an arbitrary trajectory file without loading a model or using the network:
 
 ```bash
 python scripts/train/sft/sft_train.py \
-  --audit-only outputs/teacher_trajectories/smoke_strict_v2_deepseek_v4_flash.accepted.jsonl
+  --audit-only outputs/teacher_trajectories/your-run.accepted.jsonl
 ```
 
 ## Action-only rendering
@@ -93,7 +93,7 @@ The raw archive keeps OpenAI-compatible JSON-string function arguments. Qwen3.5'
 
 One raw trajectory produces one example per assistant decision. For each decision, the renderer tokenizes the complete prior context with an assistant generation prefix, then tokenizes that context plus the assistant tool call. The first token sequence must be an exact prefix of the second. Only the verified completion suffix receives labels; system, user, tool observation, prior assistant turns, and padding use `-100`. This avoids string matching and correctly supervises an empty `assistant.content` whose actual target is in `assistant.tool_calls`.
 
-The renderer measures the true token length before training. A sample longer than `max_sequence_length` fails with its task and turn number. There is no silent left or right truncation, so search evidence, final answers, and tool-call pairing cannot be lost.
+The renderer measures the true token length before training. If any assistant decision exceeds `max_sequence_length`, the entire trajectory is excluded and recorded in `overlong_rejections` with its task and turn number. Readiness is checked again after this exclusion. There is no silent left or right truncation, so search evidence, final answers, and tool-call pairing cannot be lost.
 
 ## LoRA and QLoRA
 
@@ -110,6 +110,8 @@ pip install -e ".[sft,qlora]"
 ```
 
 Configuration lives in `configs/train/sft/sft_lora.yaml`. It pins `Qwen/Qwen3.5-2B`, action-only assistant-turn examples, LoRA targets, optimizer parameters, evaluation/save cadence, and an ignored `outputs/sft/` destination.
+
+Formal readiness requires at least 400 accepted train trajectories, 40 validation trajectories, and all eight compositions in both splits. Trajectories are deduplicated across tier files and train/validation must be disjoint. No GRPO or final-evaluation task may be used as backfill. The maximum rendered length is 32768; an overlength trajectory is rejected whole and never truncated.
 
 Audit both configured splits without loading a tokenizer or model:
 
@@ -135,3 +137,5 @@ bash scripts/train/sft/run_sft.sh \
 ```
 
 Set `model.qlora: true` for 4-bit NF4 QLoRA. Training, checkpoints, logs, and caches belong under ignored output directories. No model-quality or benchmark result is claimed until reproducible artifacts exist.
+
+Merge the trained adapter before GRPO with `python scripts/train/sft/merge_lora.py`. The fixed target is `outputs/models/sft-merged`; the merger supports Qwen3.5's multimodal Auto model class, saves model/tokenizer-or-processor plus `merge_manifest.json`, and refuses a non-empty destination.

@@ -1,16 +1,16 @@
-"""Per-rollout UserBench session lifecycle and veRL interaction adapter."""
+"""veRL 0.8 rollout metadata and direct UserBench session construction."""
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from travel_grpo.envs.userbench_context import (
     UserBenchSessionError,
     UserBenchSessionState,
-    clear_current_session,
     get_current_session,
     require_current_session,
     set_current_session,
@@ -21,15 +21,8 @@ from travel_grpo.envs.userbench_wrapper import (
     UserBenchEnvironmentConfig,
     UserBenchWrapper,
 )
-from travel_grpo.training.grpo.compat import require_verl_061
 
-try:  # The integration package remains importable without the optional runtime.
-    from verl.interactions.base import BaseInteraction
-except ImportError:  # pragma: no cover - exercised by normal lightweight installs.
-    BaseInteraction = object  # type: ignore[assignment,misc]
-
-
-INTERACTION_NAME = "userbench"
+AGENT_NAME = "userbench_tool_agent"
 ENVIRONMENT_NAME = "TravelGym"
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
 
@@ -41,14 +34,12 @@ def _non_empty(value: Any, name: str) -> str:
 
 
 def build_rollout_extra_info(task_id: str) -> dict[str, Any]:
-    """Build the duplicated IDs expected by veRL interaction and tool creation."""
+    """Build the veRL 0.8 extra_info payload with duplicated ID guards."""
 
     normalized = _non_empty(task_id, "task_id")
     return {
-        "interaction_kwargs": {
-            "name": INTERACTION_NAME,
-            "task_id": normalized,
-        },
+        "task_id": normalized,
+        "need_tools_kwargs": True,
         "tools_kwargs": {
             "interact_with_env": {
                 "create_kwargs": {
@@ -61,185 +52,180 @@ def build_rollout_extra_info(task_id: str) -> dict[str, Any]:
 
 
 def validate_rollout_extra_info(extra_info: Mapping[str, Any]) -> str:
-    """Return the task ID only when interaction and tool payloads agree."""
-
     if not isinstance(extra_info, Mapping):
         raise TypeError("rollout extra_info must be a mapping")
-    interaction = extra_info.get("interaction_kwargs")
+    task_id = _non_empty(extra_info.get("task_id"), "extra_info.task_id")
     tools = extra_info.get("tools_kwargs")
-    if not isinstance(interaction, Mapping) or not isinstance(tools, Mapping):
-        raise TypeError(
-            "rollout extra_info is missing interaction_kwargs or tools_kwargs"
-        )
-    interaction_id = _non_empty(interaction.get("task_id"), "interaction task_id")
-    tool_entry = tools.get("interact_with_env")
-    create_kwargs = (
-        tool_entry.get("create_kwargs") if isinstance(tool_entry, Mapping) else None
-    )
-    if not isinstance(create_kwargs, Mapping):
-        raise TypeError("rollout extra_info is missing interact_with_env create_kwargs")
-    tool_id = _non_empty(create_kwargs.get("id"), "tool task_id")
-    if interaction_id != tool_id:
+    entry = tools.get("interact_with_env") if isinstance(tools, Mapping) else None
+    create = entry.get("create_kwargs") if isinstance(entry, Mapping) else None
+    if not isinstance(create, Mapping):
+        raise TypeError("rollout extra_info is missing tool create_kwargs")
+    tool_id = _non_empty(create.get("id"), "tool task_id")
+    if tool_id != task_id:
         raise ValueError(
-            f"interaction task ID {interaction_id!r} does not match tool task ID {tool_id!r}"
+            f"extra_info task ID {task_id!r} does not match tool task ID {tool_id!r}"
         )
-    if create_kwargs.get("env_name") != ENVIRONMENT_NAME:
+    if create.get("env_name") != ENVIRONMENT_NAME:
         raise ValueError(f"tool env_name must be {ENVIRONMENT_NAME!r}")
-    return interaction_id
+    return task_id
+
+
+def task_id_from_run_kwargs(kwargs: Mapping[str, Any]) -> str:
+    extra_info = kwargs.get("extra_info")
+    if hasattr(extra_info, "item"):
+        extra_info = extra_info.item()
+    if not isinstance(extra_info, Mapping):
+        raise ValueError("veRL rollout is missing extra_info")
+    return validate_rollout_extra_info(extra_info)
 
 
 def calculate_current_session_score() -> float:
-    """Return the deterministic Travel Reward v2 terminal score."""
-
     return float(require_current_session().reward_report()["terminal_reward"])
 
 
-def _load_yaml_mapping(path: str | Path) -> Mapping[str, Any]:
+def _project_path(value: str | Path) -> Path:
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    working = candidate.resolve()
+    return working if working.exists() else (PROJECT_ROOT / candidate).resolve()
+
+
+def _load_yaml(path: str | Path) -> Mapping[str, Any]:
     try:
         import yaml
-    except ImportError as exc:  # pragma: no cover - veRL environments include PyYAML.
-        raise RuntimeError("PyYAML is required by the veRL UserBench adapter") from exc
-    config_path = _resolve_project_path(path)
-    with config_path.open("r", encoding="utf-8") as handle:
-        loaded = yaml.safe_load(handle)
+    except ImportError as exc:
+        raise RuntimeError("PyYAML is required by the UserBench AgentLoop") from exc
+    resolved = _project_path(path)
+    loaded = yaml.safe_load(resolved.read_text(encoding="utf-8"))
     if not isinstance(loaded, Mapping):
-        raise TypeError(f"configuration must be a mapping: {config_path}")
+        raise TypeError(f"configuration must be a mapping: {resolved}")
     return loaded
 
 
-def _resolve_project_path(path: str | Path) -> Path:
-    candidate = Path(path).expanduser()
-    if candidate.is_absolute():
-        return candidate.resolve()
-    working_directory_candidate = candidate.resolve()
-    if working_directory_candidate.exists():
-        return working_directory_candidate
-    return (PROJECT_ROOT / candidate).resolve()
+@dataclass(frozen=True)
+class UserBenchRolloutRuntime:
+    environment_config: UserBenchEnvironmentConfig
+    simulator_runtime: UserSimulatorRuntime
+    source_root: Path | None
 
-
-WrapperFactory = Callable[..., UserBenchWrapper]
-
-
-class UserBenchInteraction(BaseInteraction):  # type: ignore[misc]
-    """veRL interaction scored once with deterministic Travel Reward v2."""
-
-    def __init__(self, config: Mapping[str, Any]) -> None:
-        require_verl_061()
-        super().__init__(config)
-        environment_path = config.get("environment_config_path")
-        simulator_path = config.get("simulator_config_path")
-        if not environment_path or not simulator_path:
-            raise ValueError(
-                "UserBench interaction requires environment_config_path and simulator_config_path"
-            )
-        environment_document = _load_yaml_mapping(environment_path)
-        simulator_document = _load_yaml_mapping(simulator_path)
+    @classmethod
+    def from_config_files(
+        cls, environment_path: str | Path, simulator_path: str | Path
+    ) -> "UserBenchRolloutRuntime":
+        environment_document = _load_yaml(environment_path)
+        simulator_document = _load_yaml(simulator_path)
         environment = environment_document.get("environment", environment_document)
         reward = environment_document.get("reward")
         simulator = simulator_document.get("simulator", simulator_document)
         if not isinstance(environment, Mapping) or not isinstance(simulator, Mapping):
-            raise TypeError("invalid UserBench environment or simulator configuration")
-        if not isinstance(reward, Mapping):
-            raise TypeError("UserBench environment configuration is missing reward")
-        if reward.get("version") != REWARD_VERSION:
-            raise ValueError(f"reward.version must be {REWARD_VERSION!r}")
+            raise TypeError("invalid UserBench environment/simulator configuration")
+        if not isinstance(reward, Mapping) or reward.get("version") != REWARD_VERSION:
+            raise ValueError(f"environment reward must use {REWARD_VERSION}")
         if reward.get("terminal_only") is not True or reward.get("range") != [-1.0, 1.0]:
-            raise ValueError("Travel Reward v2 must be terminal-only with range [-1, 1]")
-
-        allowed_config = set(UserBenchEnvironmentConfig.__dataclass_fields__)
-        environment_values = {
-            key: value for key, value in environment.items() if key in allowed_config
-        }
-        self.environment_config = UserBenchEnvironmentConfig(**environment_values)
-        source_root = environment.get("source_root")
-        self.source_root = (
-            _resolve_project_path(source_root) if source_root is not None else None
-        )
+            raise ValueError("Travel Reward v2 must be terminal-only in [-1, 1]")
         role = SimulatorRole(_non_empty(simulator.get("role"), "simulator.role"))
-        prefix = {
-            SimulatorRole.COLLECTION: "COLLECTION_USER_SIM",
-            SimulatorRole.GRPO: "GRPO_USER_SIM",
-            SimulatorRole.EVAL: "EVAL_USER_SIM",
-        }[role]
-        expected_simulator_fields = {
-            "model_env": f"{prefix}_MODEL",
-            "base_url_env": f"{prefix}_BASE_URL",
-            "api_key_env": f"{prefix}_API_KEY",
-        }
-        for key, expected in expected_simulator_fields.items():
-            if simulator.get(key) != expected:
-                raise ValueError(f"simulator.{key} must be {expected!r}")
-        expected_decoding = {
+        if role is not SimulatorRole.GRPO:
+            raise ValueError("GRPO AgentLoop requires the grpo simulator role")
+        expected = {
+            "model_env": "GRPO_USER_SIM_MODEL",
+            "base_url_env": "GRPO_USER_SIM_BASE_URL",
+            "api_key_env": "GRPO_USER_SIM_API_KEY",
             "temperature": 0.0,
             "max_tokens": 2048,
             "timeout": 60.0,
         }
-        for key, expected in expected_decoding.items():
-            if simulator.get(key) != expected:
-                raise ValueError(f"simulator.{key} must be {expected!r}")
-        self.runtime = UserSimulatorRuntime.from_environment(role)
-        self._wrapper_factory: WrapperFactory = UserBenchWrapper
+        for name, value in expected.items():
+            if simulator.get(name) != value:
+                raise ValueError(f"simulator.{name} must be {value!r}")
+        allowed = set(UserBenchEnvironmentConfig.__dataclass_fields__)
+        config = UserBenchEnvironmentConfig(
+            **{key: value for key, value in environment.items() if key in allowed}
+        )
+        source = environment.get("source_root")
+        return cls(
+            environment_config=config,
+            simulator_runtime=UserSimulatorRuntime.from_environment(role),
+            source_root=None if source is None else _project_path(str(source)),
+        )
 
-    async def start_interaction(
-        self, instance_id: str | None = None, **kwargs: Any
-    ) -> str:
+    def start_session(
+        self,
+        task_id: str,
+        *,
+        request_id: str | None = None,
+        wrapper_factory: Any = UserBenchWrapper,
+    ) -> UserBenchSessionState:
         if get_current_session() is not None:
-            raise UserBenchSessionError(
-                "a UserBench session is already active in this context"
-            )
-        task_id = _non_empty(kwargs.get("task_id"), "task_id")
-        request_id = instance_id or uuid.uuid4().hex
-        wrapper = self._wrapper_factory(
-            task_id,
-            self.runtime,
+            raise UserBenchSessionError("a UserBench session is already active")
+        normalized = _non_empty(task_id, "task_id")
+        wrapper = wrapper_factory(
+            normalized,
+            self.simulator_runtime,
             self.environment_config,
             source_root=self.source_root,
         )
         try:
             wrapper.reset()
-            reward_task = wrapper.reward_task()
-            reward_snapshot = wrapper.reward_snapshot()
+            state = UserBenchSessionState(
+                request_id=request_id or uuid.uuid4().hex,
+                task_id=normalized,
+                wrapper=wrapper,
+                reward_task=wrapper.reward_task(),
+                reward_snapshot=wrapper.reward_snapshot(),
+            )
         except Exception:
             wrapper.close()
             raise
-        set_current_session(
-            UserBenchSessionState(
-                request_id=request_id,
-                task_id=task_id,
-                wrapper=wrapper,
-                reward_task=reward_task,
-                reward_snapshot=reward_snapshot,
-            )
+        set_current_session(state)
+        return state
+
+    async def astart_session(
+        self,
+        task_id: str,
+        *,
+        request_id: str | None = None,
+        wrapper_factory: Any = UserBenchWrapper,
+    ) -> UserBenchSessionState:
+        """Create and reset a session on the non-blocking rollout path."""
+
+        if get_current_session() is not None:
+            raise UserBenchSessionError("a UserBench session is already active")
+        normalized = _non_empty(task_id, "task_id")
+        wrapper = wrapper_factory(
+            normalized,
+            self.simulator_runtime,
+            self.environment_config,
+            source_root=self.source_root,
         )
-        return request_id
+        try:
+            async_reset = getattr(wrapper, "areset", None)
+            if callable(async_reset):
+                await async_reset()
+            else:
+                import asyncio
 
-    async def generate_response(
-        self, instance_id: str, messages: list[dict[str, Any]], **kwargs: Any
-    ) -> tuple[bool, str, float, dict[str, Any]]:
-        session = self._require_request(instance_id)
-        if session.done:
-            return True, "", 0.0, session.metrics()
-        session.protocol_error = "actor produced no interact_with_env tool call"
-        session.termination_reason = "no_tool_output"
-        return True, "", 0.0, session.metrics()
-
-    async def calculate_score(
-        self, instance_id: str | None = None, **kwargs: Any
-    ) -> float:
-        self._require_request(instance_id)
-        return calculate_current_session_score()
-
-    async def finalize_interaction(
-        self, instance_id: str | None = None, **kwargs: Any
-    ) -> None:
-        self._require_request(instance_id)
-        clear_current_session(close=True)
-
-    @staticmethod
-    def _require_request(instance_id: str | None) -> UserBenchSessionState:
-        session = require_current_session()
-        if instance_id is not None and session.request_id != instance_id:
-            raise UserBenchSessionError(
-                f"interaction ID {instance_id!r} does not match active request {session.request_id!r}"
+                await asyncio.to_thread(wrapper.reset)
+            state = UserBenchSessionState(
+                request_id=request_id or uuid.uuid4().hex,
+                task_id=normalized,
+                wrapper=wrapper,
+                reward_task=wrapper.reward_task(),
+                reward_snapshot=wrapper.reward_snapshot(),
             )
-        return session
+        except Exception:
+            wrapper.close()
+            raise
+        set_current_session(state)
+        return state
+
+
+class UserBenchInteraction:
+    """Removed veRL 0.6 compatibility marker.
+
+    veRL 0.8 uses :class:`UserBenchAgentLoop` directly.  Construction fails
+    loudly so an old interaction config can never silently enter production.
+    """
+
+    def __init__(self, *_: Any, **__: Any) -> None:
+        raise RuntimeError("UserBenchInteraction was removed; use UserBenchAgentLoop with veRL 0.8")

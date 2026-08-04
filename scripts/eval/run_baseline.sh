@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-# Placeholder baseline evaluation launcher. Not implemented in the scaffold.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+exec "$ROOT/scripts/eval/run_evaluation.sh" baseline "$@"

@@ -1,4 +1,4 @@
-"""veRL-to-UserBench adapter namespace (scaffold only)."""
+"""Direct veRL 0.8 ToolAgentLoop-to-UserBench adapter."""
 
 """Public class paths loaded by veRL configuration."""
 

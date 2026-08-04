@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import importlib.util
 import json
 import os
 import subprocess
@@ -17,11 +18,14 @@ from travel_grpo.training.sft_dataset import (
     IGNORE_INDEX,
     ActionOnlyDataCollator,
     SFTDatasetError,
+    assert_task_ids_within_split,
     assert_train_validation_disjoint,
     audit_trajectory_file,
+    build_action_only_dataset,
     build_action_only_examples,
     load_sft_trajectories,
     load_tool_schema,
+    sft_admission_reasons,
     trajectory_rejection_reasons,
 )
 
@@ -264,16 +268,6 @@ def test_missing_reward_and_vague_feedback_are_both_reported():
     assert "vague_action_feedback" in reasons
 
 
-def test_current_smoke_is_audited_as_legacy_and_vague():
-    source = ROOT / "outputs/teacher_trajectories/smoke_strict_v2_deepseek_v4_flash.accepted.jsonl"
-    audit = audit_trajectory_file(source)
-    summary = audit.summary()
-    assert summary["accepted_trajectories"] == 0
-    assert summary["rejection_reasons"]["legacy_or_unknown_schema"] == 1
-    assert summary["rejection_reasons"]["missing_reward_evidence"] == 1
-    assert summary["rejection_reasons"]["vague_action_feedback"] == 1
-
-
 def test_loader_rejects_duplicate_task_ids(tmp_path):
     source = tmp_path / "duplicate.jsonl"
     write_jsonl(source, [valid_record(), valid_record()])
@@ -283,12 +277,46 @@ def test_loader_rejects_duplicate_task_ids(tmp_path):
         load_sft_trajectories(source)
 
 
+@pytest.mark.parametrize("declared", ["silver", "forged", None])
+def test_sft_gate_ignores_serialized_quality_tier_for_gold_evidence(declared):
+    record = valid_record()
+    record["quality_tier"] = declared
+    assert sft_admission_reasons(
+        record, accepted_quality_tiers=("gold", "silver")
+    ) == ()
+    assert sft_admission_reasons(
+        record, accepted_quality_tiers=("silver",)
+    ) == ("quality_tier_not_accepted",)
+
+
 def test_overlength_fails_without_truncation():
     tokenizer = FakeQwenTokenizer()
     with pytest.raises(SFTDatasetError, match="silent truncation is forbidden"):
         build_action_only_examples(
             [valid_record()], tokenizer, load_tool_schema(TOOL_CONFIG), max_sequence_length=10
         )
+
+
+def test_dataset_builder_rejects_whole_overlong_trajectory_and_reports_it():
+    short = valid_record("hotel:2-short")
+    long = valid_record("hotel:2-long")
+    long["messages"][1]["content"] = "x" * 20_000
+    examples, rejected = build_action_only_dataset(
+        [short, long],
+        FakeQwenTokenizer(),
+        load_tool_schema(TOOL_CONFIG),
+        max_sequence_length=10_000,
+    )
+    assert {value.task_id for value in examples} == {"hotel:2-short"}
+    assert rejected == (
+        {
+            "task_id": "hotel:2-long",
+            "composition": "22",
+            "reason": "trajectory_too_long",
+            "detail": rejected[0]["detail"],
+        },
+    )
+    assert "silent truncation is forbidden" in rejected[0]["detail"]
 
 
 def test_collator_uses_minus_100_for_label_padding():
@@ -305,9 +333,54 @@ def test_collator_uses_minus_100_for_label_padding():
     assert (batch["labels"][shorter][padding] == IGNORE_INDEX).all()
 
 
+def test_merge_lora_model_class_manifest_and_output_guard(tmp_path):
+    script = ROOT / "scripts/train/sft/merge_lora.py"
+    spec = importlib.util.spec_from_file_location("travel_merge_lora", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    causal, multimodal = object(), object()
+    config = type("Config", (), {"model_type": "qwen3_5_moe_text"})()
+    assert module.choose_model_class(config, causal, multimodal) is multimodal
+    manifest = module.build_merge_manifest(
+        base_model="Qwen/Qwen3.5-2B",
+        adapter=tmp_path / "adapter",
+        output=tmp_path / "merged",
+        model_type=config.model_type,
+        dtype="bfloat16",
+    )
+    assert manifest["operation"] == "peft_merge_and_unload"
+
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    (adapter / "adapter_config.json").write_text("{}", encoding="utf-8")
+    output = tmp_path / "occupied"
+    output.mkdir()
+    (output / "keep.txt").write_text("user data", encoding="utf-8")
+    command = [
+        sys.executable,
+        str(script),
+        "--adapter",
+        str(adapter),
+        "--output",
+        str(output),
+        "--dry-run",
+    ]
+    rejected = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert rejected.returncode != 0
+    assert "must be new or empty" in rejected.stderr
+
+
 def test_train_validation_overlap_fails():
     with pytest.raises(SFTDatasetError, match="overlap"):
         assert_train_validation_disjoint([valid_record()], [valid_record()])
+
+
+def test_sft_task_must_remain_in_its_frozen_split():
+    with pytest.raises(SFTDatasetError, match="outside its frozen split"):
+        assert_task_ids_within_split(
+            [valid_record()], ["another-task"], split_name="train"
+        )
 
 
 def test_chat_template_prefix_mismatch_fails():

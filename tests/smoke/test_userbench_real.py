@@ -26,7 +26,7 @@ def test_real_userbench_without_network(monkeypatch):
     travel_env = pytest.importorskip("travelgym.env.travel_env")
     task_path = ROOT / "environments/UserBench/travelgym/data/travelgym_data_22.json"
     tasks = json.loads(task_path.read_text(encoding="utf-8"))
-    task_id = next(iter(tasks.values()))["id"]
+    task_id = next(iter(tasks))
 
     async def fake_async_evaluator(*args, **kwargs):
         return "offline evaluator feedback", [], 0.2

@@ -149,6 +149,16 @@ python scripts/train/sft/two_stage_sft.py --render-smoke
 The configured Transformers cache is `outputs/cache/huggingface`. The render smoke uses `local_files_only=True`; it never downloads implicitly. Formal LoRA training is an explicit command:
 
 ```bash
+# GPU-server one-command setup + preflight + training:
+bash scripts/train/sft/launch_two_stage_sft.sh
+
+# Only install/check/cache/render; do not update model weights:
+bash scripts/train/sft/launch_two_stage_sft.sh --preflight
+
+# If the virtualenv and model cache already exist, skip those steps:
+bash scripts/train/sft/launch_two_stage_sft.sh --skip-install --skip-download
+
+# The lower-level Python entrypoint remains available:
 python scripts/train/sft/two_stage_sft.py
 
 # Linux wrapper for the same command:

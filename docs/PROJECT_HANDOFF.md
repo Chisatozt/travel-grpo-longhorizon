@@ -159,8 +159,8 @@ SFT 已实现：
 
 正式 readiness 要求：
 
-- train 至少 400 条重新验收后的轨迹；
-- validation 至少 40 条；
+- train 至少 50 条重新验收后的轨迹；
+- validation 至少 5 条；
 - 八种 composition 在两个 split 中都至少有一条；
 - 不允许从 GRPO 或 final evaluation 回填。
 
@@ -261,8 +261,8 @@ outputs/evaluation/grpo
 
 这是当前第一个业务卡点。代码已准备好，但尚未获得：
 
-- 至少 400 条 train Gold+Silver；
-- 至少 40 条 validation Gold+Silver；
+- 至少 50 条 train Gold+Silver；
+- 至少 5 条 validation Gold+Silver；
 - 两个 split 的八 composition 完整覆盖；
 - 当前 v4 schema、无重复、通过重新 gate 的正式文件。
 

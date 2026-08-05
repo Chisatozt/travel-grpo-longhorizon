@@ -289,6 +289,24 @@ def test_sft_gate_ignores_serialized_quality_tier_for_gold_evidence(declared):
     ) == ("quality_tier_not_accepted",)
 
 
+def test_legacy_silver_judgment_fallback_without_marker_is_admitted():
+    record = valid_record()
+    record["quality_tier"] = "silver"
+    record["simulator_judgment_fallbacks"] = 1
+    record["messages"][2]["loss_mask"] = True
+    record["reward_valid"] = False
+    record["infrastructure_errors"] = ["userbench judgment fallback"]
+    record["reward_breakdown"]["reward_valid"] = False
+    record["reward_breakdown"]["infrastructure_errors"] = [
+        "userbench judgment fallback"
+    ]
+    record["generation_diagnostics"] = []
+
+    assert sft_admission_reasons(
+        record, accepted_quality_tiers=("gold", "silver")
+    ) == ()
+
+
 def test_overlength_fails_without_truncation():
     tokenizer = FakeQwenTokenizer()
     with pytest.raises(SFTDatasetError, match="silent truncation is forbidden"):

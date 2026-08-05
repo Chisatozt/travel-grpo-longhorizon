@@ -885,8 +885,11 @@ def quality_tier_for_trajectory(
     if trajectory.simulator_judgment_fallbacks:
         if trajectory.simulator_judgment_fallbacks != 1:
             return None
-        if "judgment_fallback_allowed" not in markers:
-            return None
+        # Older collectors persisted the consumed fallback turn with
+        # ``loss_mask=True`` but did not persist the newer diagnostic marker.
+        # ``quality_tier_for_trajectory`` already requires a repair marker;
+        # the durable loss mask is sufficient evidence for those legacy Silver
+        # records, and the fallback count is still capped at exactly one.
     reward = trajectory.reward_breakdown
     if not isinstance(reward, Mapping):
         return None

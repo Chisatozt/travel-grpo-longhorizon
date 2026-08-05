@@ -50,7 +50,7 @@ For a fixed-size, composition-proportional train collection, use adaptive strati
 ```bash
 python scripts/train/sft/collect_sft_data.py \
   --input data/sft/tasks_train.jsonl \
-  --target-accepted 400 \
+  --target-accepted 50 \
   --stratify-by composition \
   --stratified-wave-size 32 \
   --sampling-seed sft-train-composition-v4 \

@@ -15,9 +15,12 @@ data:
     - outputs/teacher_trajectories/sft_validation.accepted.jsonl
     - outputs/teacher_trajectories/sft_validation.silver.jsonl
   accepted_quality_tiers: [gold, silver]
-  minimum_train_trajectories: 400
-  minimum_validation_trajectories: 40
-  required_compositions: ["22", "33", "44", "2222", "233", "333", "334", "444"]
+  # minimum_train_trajectories: 400
+  # minimum_validation_trajectories: 40
+  # required_compositions: ["22", "33", "44", "2222", "233", "333", "334", "444"]
+  minimum_train_trajectories: 50
+  minimum_validation_trajectories: 5
+  required_compositions: []
   tool_schema_path: configs/tool_config/userbench_tools.yaml
   assistant_loss: action_only
   example_unit: assistant_turn

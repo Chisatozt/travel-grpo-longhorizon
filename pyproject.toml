@@ -43,7 +43,7 @@ grpo = [
   "ray[default]==2.56.1; platform_system == 'Linux'",
   "tensordict==0.10.0; platform_system == 'Linux'",
   "numpy==2.2.6; platform_system == 'Linux'",
-  "transformers @ git+https://github.com/huggingface/transformers.git@7ea2320c76117e6742364808a666ef6f2fb40a67; platform_system == 'Linux'",
+  "transformers @ git+https://github.com/huggingface/transformers.git@7ea2320c76117e6742364808a666ef6f2fb40a67 ; platform_system == 'Linux'",
 ]
 logging = [
   "swanlab==0.9.1; platform_system == 'Linux'",

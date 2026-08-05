@@ -27,6 +27,13 @@ from travel_grpo.training.sft_collection import (
 
 IGNORE_INDEX = -100
 MIN_TERMINAL_REWARD = 0.7
+PREFIX_SCHEMA_VERSION = "userbench-teacher-prefix-v1"
+SFT_RECORD_FORMATS = frozenset({"trajectory", "prefix"})
+_PREFIX_FINAL_ANSWER_FAILURE_PREFIXES = (
+    "environment.wrong_answer",
+    "environment.answer_not_recorded",
+    "environment.answer_not_matching_public_requirement",
+)
 
 
 class SFTDatasetError(ValueError):
@@ -372,11 +379,149 @@ def sft_admission_reasons(
     return () if "silver" in allowed else ("quality_tier_not_accepted",)
 
 
+def prefix_admission_reasons(record: Any) -> tuple[str, ...]:
+    """Validate a safe Stage-1 prefix without pretending it is terminal Gold/Silver.
+
+    Prefix records are extracted from failed Teacher attempts only after every
+    retained action received positive environment evidence.  The failed final
+    answer is metadata and must not appear in ``messages``; the last retained
+    assistant decision is therefore the successful search immediately before
+    that answer.
+    """
+
+    if not isinstance(record, Mapping):
+        return ("record_not_mapping",)
+    reasons: set[str] = set()
+    if record.get("schema_version") != PREFIX_SCHEMA_VERSION:
+        reasons.add("legacy_or_unknown_prefix_schema")
+    for field in ("task_id", "composition", "source_split"):
+        if not isinstance(record.get(field), str) or not str(record[field]).strip():
+            reasons.add(f"missing_{field}")
+    if record.get("source_split") != "train":
+        reasons.add("not_official_train")
+
+    messages = record.get("messages")
+    reasons.update(_message_reasons(messages))
+    assistant_messages = (
+        [
+            message
+            for message in messages
+            if isinstance(message, Mapping) and message.get("role") == "assistant"
+        ]
+        if isinstance(messages, list)
+        else []
+    )
+    if any(message.get("loss_mask") is True for message in assistant_messages):
+        reasons.add("prefix_contains_loss_masked_action")
+    action_count = record.get("prefix_action_count")
+    if (
+        not isinstance(action_count, int)
+        or isinstance(action_count, bool)
+        or action_count <= 0
+        or action_count != len(assistant_messages)
+    ):
+        reasons.add("prefix_action_count_mismatch")
+
+    assistant_choices: list[str | None] = []
+    for assistant_message in assistant_messages:
+        calls = assistant_message.get("tool_calls")
+        call = calls[0] if isinstance(calls, list) and len(calls) == 1 else None
+        function = call.get("function") if isinstance(call, Mapping) else None
+        arguments = function.get("arguments") if isinstance(function, Mapping) else None
+        try:
+            parameters = json.loads(arguments) if isinstance(arguments, str) else None
+        except json.JSONDecodeError:
+            parameters = None
+        assistant_choices.append(
+            parameters.get("choice") if isinstance(parameters, Mapping) else None
+        )
+    last_choice = assistant_choices[-1] if assistant_choices else None
+    if last_choice != "search":
+        reasons.add("prefix_does_not_end_after_successful_search")
+
+    evidence = record.get("retained_action_evidence")
+    evidence_aspects: list[str | None] = []
+    if not isinstance(evidence, list) or len(evidence) != len(assistant_messages):
+        reasons.add("invalid_retained_action_evidence")
+    else:
+        for index, item in enumerate(evidence):
+            if not isinstance(item, Mapping):
+                reasons.add("invalid_retained_action_evidence")
+                continue
+            reward = item.get("reward")
+            if (
+                not isinstance(reward, (int, float))
+                or isinstance(reward, bool)
+                or not math.isfinite(float(reward))
+                or float(reward) <= 0.0
+            ):
+                reasons.add("nonpositive_retained_action")
+            if item.get("choice") != assistant_choices[index]:
+                reasons.add("retained_action_evidence_mismatch")
+            aspect = item.get("aspect")
+            evidence_aspects.append(aspect if isinstance(aspect, str) else None)
+
+    failures = record.get("source_failure_reasons")
+    if (
+        not isinstance(failures, list)
+        or not failures
+        or any(
+            not isinstance(reason, str)
+            or not any(
+                reason.startswith(prefix)
+                for prefix in _PREFIX_FINAL_ANSWER_FAILURE_PREFIXES
+            )
+            for reason in failures
+        )
+    ):
+        reasons.add("invalid_prefix_source_failure")
+    failed_answer = record.get("failed_answer")
+    if not isinstance(failed_answer, Mapping):
+        reasons.add("missing_removed_failed_answer")
+    else:
+        if not isinstance(failed_answer.get("aspect"), str) or not failed_answer.get(
+            "aspect"
+        ):
+            reasons.add("invalid_removed_failed_answer_aspect")
+        if not isinstance(failed_answer.get("content"), str) or not failed_answer.get(
+            "content"
+        ):
+            reasons.add("invalid_removed_failed_answer_content")
+        environment_turn = failed_answer.get("environment_turn")
+        if (
+            not isinstance(environment_turn, int)
+            or isinstance(environment_turn, bool)
+            or environment_turn <= 0
+        ):
+            reasons.add("invalid_removed_failed_answer_turn")
+        if not evidence_aspects or evidence_aspects[-1] != failed_answer.get("aspect"):
+            reasons.add("prefix_search_aspect_mismatch")
+    return tuple(sorted(reasons))
+
+
+def sft_record_admission_reasons(
+    record: Any,
+    *,
+    record_format: str = "trajectory",
+    accepted_quality_tiers: Sequence[str] = ("gold", "silver"),
+) -> tuple[str, ...]:
+    if record_format not in SFT_RECORD_FORMATS:
+        raise SFTDatasetError(
+            f"record_format must be one of {', '.join(sorted(SFT_RECORD_FORMATS))}"
+        )
+    if record_format == "prefix":
+        return prefix_admission_reasons(record)
+    return sft_admission_reasons(
+        record, accepted_quality_tiers=accepted_quality_tiers
+    )
+
+
 def audit_trajectory_file(
     path: str | Path,
     *,
     limit: int | None = None,
     accepted_quality_tiers: Sequence[str] = ("gold",),
+    record_format: str = "trajectory",
 ) -> TrajectoryAudit:
     source = Path(path)
     if limit is not None and limit <= 0:
@@ -402,8 +547,10 @@ def audit_trajectory_file(
             continue
         task_id = record.get("task_id") if isinstance(record, Mapping) else None
         reasons = set(
-            sft_admission_reasons(
-                record, accepted_quality_tiers=accepted_quality_tiers
+            sft_record_admission_reasons(
+                record,
+                record_format=record_format,
+                accepted_quality_tiers=accepted_quality_tiers,
             )
         )
         if isinstance(task_id, str):
@@ -430,9 +577,13 @@ def load_sft_trajectories(
     *,
     limit: int | None = None,
     accepted_quality_tiers: Sequence[str] = ("gold",),
+    record_format: str = "trajectory",
 ) -> tuple[dict[str, Any], ...]:
     audit = audit_trajectory_file(
-        path, limit=limit, accepted_quality_tiers=accepted_quality_tiers
+        path,
+        limit=limit,
+        accepted_quality_tiers=accepted_quality_tiers,
+        record_format=record_format,
     )
     if audit.rejections:
         first = audit.rejections[0]
@@ -447,6 +598,7 @@ def load_sft_trajectory_files(
     *,
     limit: int | None = None,
     accepted_quality_tiers: Sequence[str] = ("gold", "silver"),
+    record_format: str = "trajectory",
 ) -> tuple[dict[str, Any], ...]:
     """Load several tier artifacts while enforcing global task-ID uniqueness."""
 
@@ -459,6 +611,7 @@ def load_sft_trajectory_files(
             path,
             limit=limit,
             accepted_quality_tiers=accepted_quality_tiers,
+            record_format=record_format,
         )
         for record in values:
             task_id = str(record["task_id"])
@@ -605,6 +758,7 @@ def build_action_only_examples(
     *,
     max_sequence_length: int,
     accepted_quality_tiers: Sequence[str] = ("gold", "silver"),
+    record_format: str = "trajectory",
 ) -> tuple[ActionOnlyExample, ...]:
     """Build exact per-assistant-turn masks using a verified token prefix."""
 
@@ -612,8 +766,10 @@ def build_action_only_examples(
         raise SFTDatasetError("max_sequence_length must be positive")
     examples: list[ActionOnlyExample] = []
     for trajectory_number, record in enumerate(records, start=1):
-        reasons = sft_admission_reasons(
-            record, accepted_quality_tiers=accepted_quality_tiers
+        reasons = sft_record_admission_reasons(
+            record,
+            record_format=record_format,
+            accepted_quality_tiers=accepted_quality_tiers,
         )
         if reasons:
             raise SFTDatasetError(
@@ -677,6 +833,7 @@ def build_action_only_dataset(
     *,
     max_sequence_length: int,
     accepted_quality_tiers: Sequence[str] = ("gold", "silver"),
+    record_format: str = "trajectory",
 ) -> tuple[tuple[ActionOnlyExample, ...], tuple[dict[str, Any], ...]]:
     """Render a split, dropping only whole overlong trajectories.
 
@@ -695,6 +852,7 @@ def build_action_only_dataset(
                 tool_schema,
                 max_sequence_length=max_sequence_length,
                 accepted_quality_tiers=accepted_quality_tiers,
+                record_format=record_format,
             )
         except SFTTrajectoryTooLongError as exc:
             rejected.append(

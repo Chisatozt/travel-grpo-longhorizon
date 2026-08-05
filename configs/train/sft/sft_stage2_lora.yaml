@@ -1,3 +1,6 @@
+stage:
+  name: complete_trajectory
+
 model:
   base: Qwen/Qwen3.5-2B
   cache_dir: outputs/cache/huggingface
@@ -6,8 +9,8 @@ model:
   torch_dtype: bfloat16
 
 data:
-  # Internal holdout derived from the frozen sft_train pool. This is suitable
-  # for SFT eval_loss monitoring, not frozen-split or benchmark reporting.
+  train_format: trajectory
+  validation_format: trajectory
   train_tasks: outputs/teacher_trajectories/sft_train.from_train_holdout.tasks.parquet
   validation_tasks: outputs/teacher_trajectories/sft_validation.from_train.tasks.parquet
   train_trajectories:
@@ -17,11 +20,8 @@ data:
     - outputs/teacher_trajectories/sft_validation.from_train.accepted.jsonl
     - outputs/teacher_trajectories/sft_validation.from_train.silver.jsonl
   accepted_quality_tiers: [gold, silver]
-  # minimum_train_trajectories: 400
-  # minimum_validation_trajectories: 40
-  # required_compositions: ["22", "33", "44", "2222", "233", "333", "334", "444"]
   minimum_train_trajectories: 50
-  minimum_validation_trajectories: 5
+  minimum_validation_trajectories: 10
   required_compositions: []
   tool_schema_path: configs/tool_config/userbench_tools.yaml
   assistant_loss: action_only
@@ -29,13 +29,16 @@ data:
   max_sequence_length: 32768
 
 lora:
+  # Stage 2 continues the exact Stage-1 adapter; its optimizer/scheduler state
+  # is intentionally reset for the complete-trajectory curriculum.
+  init_from: outputs/sft/qwen3.5-2b-lora-stage1
   rank: 16
   alpha: 32
   dropout: 0.05
   target_modules: all-linear
 
 training:
-  output_dir: outputs/sft/qwen3.5-2b-lora
+  output_dir: outputs/sft/qwen3.5-2b-lora-stage2
   per_device_train_batch_size: 2
   per_device_eval_batch_size: 2
   gradient_accumulation_steps: 8

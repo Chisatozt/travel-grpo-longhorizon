@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--render-smoke", action="store_true")
     parser.add_argument("--audit-only", type=Path)
+    parser.add_argument(
+        "--audit-format",
+        choices=("trajectory", "prefix"),
+        default="trajectory",
+    )
     parser.add_argument("--limit", type=int)
     parser.add_argument(
         "--allow-small-smoke",
@@ -99,6 +104,10 @@ def load_config(path: Path) -> dict[str, Any]:
         or set(tiers) - {"gold", "silver"}
     ):
         raise ValueError("data.accepted_quality_tiers must contain gold and/or silver")
+    for key in ("train_format", "validation_format"):
+        value = data.get(key, "trajectory")
+        if value not in {"trajectory", "prefix"}:
+            raise ValueError(f"data.{key} must be trajectory or prefix")
     _project_paths(data.get("train_trajectories"), "data.train_trajectories")
     _project_paths(
         data.get("validation_trajectories"), "data.validation_trajectories"
@@ -122,6 +131,13 @@ def load_config(path: Path) -> dict[str, Any]:
         and all(isinstance(value, str) and value for value in targets)
     ):
         raise ValueError("lora.target_modules must be all-linear or a non-empty string list")
+    init_from = lora.get("init_from")
+    if init_from is not None:
+        init_path = _project_path(init_from, "lora.init_from")
+        try:
+            init_path.relative_to((ROOT / "outputs").resolve())
+        except ValueError as exc:
+            raise ValueError("lora.init_from must be under outputs/") from exc
     for key in ("rank", "alpha"):
         if not isinstance(lora.get(key), int) or lora[key] <= 0:
             raise ValueError(f"lora.{key} must be a positive integer")
@@ -177,6 +193,8 @@ def load_config(path: Path) -> dict[str, Any]:
         output.relative_to((ROOT / "outputs").resolve())
     except ValueError as exc:
         raise ValueError("training.output_dir must be under outputs/") from exc
+    if init_from is not None and output == _project_path(init_from, "lora.init_from"):
+        raise ValueError("training.output_dir must differ from lora.init_from")
     return dict(root)
 
 
@@ -193,19 +211,37 @@ def _audit(
         data["validation_trajectories"], "validation trajectories"
     )
     tiers = tuple(data.get("accepted_quality_tiers", ["gold"]))
+    train_format = str(data.get("train_format", "trajectory"))
+    validation_format = str(data.get("validation_format", "trajectory"))
     train_audits = [
-        audit_trajectory_file(path, limit=limit, accepted_quality_tiers=tiers)
+        audit_trajectory_file(
+            path,
+            limit=limit,
+            accepted_quality_tiers=tiers,
+            record_format=train_format,
+        )
         for path in train_paths
     ]
     validation_audits = [
-        audit_trajectory_file(path, limit=limit, accepted_quality_tiers=tiers)
+        audit_trajectory_file(
+            path,
+            limit=limit,
+            accepted_quality_tiers=tiers,
+            record_format=validation_format,
+        )
         for path in validation_paths
     ]
     train = load_sft_trajectory_files(
-        train_paths, limit=limit, accepted_quality_tiers=tiers
+        train_paths,
+        limit=limit,
+        accepted_quality_tiers=tiers,
+        record_format=train_format,
     )
     validation = load_sft_trajectory_files(
-        validation_paths, limit=limit, accepted_quality_tiers=tiers
+        validation_paths,
+        limit=limit,
+        accepted_quality_tiers=tiers,
+        record_format=validation_format,
     )
     assert_train_validation_disjoint(train, validation)
     if "train_tasks" in data or "validation_tasks" in data:
@@ -243,10 +279,12 @@ def _audit(
     return (
         {
             "train": {
+                "record_format": train_format,
                 "files": [value.summary() for value in train_audits],
                 "accepted_trajectories": len(train),
             },
             "validation": {
+                "record_format": validation_format,
                 "files": [value.summary() for value in validation_audits],
                 "accepted_trajectories": len(validation),
             },
@@ -292,12 +330,15 @@ def _render(config, train, validation, schema, *, limit, allow_small_smoke):
     model = _mapping(config["model"], "model")
     data = _mapping(config["data"], "data")
     tokenizer = _load_tokenizer(model)
+    train_format = str(data.get("train_format", "trajectory"))
+    validation_format = str(data.get("validation_format", "trajectory"))
     train_examples, train_overlong = build_action_only_dataset(
         train[:limit] if limit else train,
         tokenizer,
         schema,
         max_sequence_length=int(data["max_sequence_length"]),
         accepted_quality_tiers=tuple(data.get("accepted_quality_tiers", ["gold"])),
+        record_format=train_format,
     )
     validation_examples, validation_overlong = build_action_only_dataset(
         validation[:limit] if limit else validation,
@@ -305,6 +346,7 @@ def _render(config, train, validation, schema, *, limit, allow_small_smoke):
         schema,
         max_sequence_length=int(data["max_sequence_length"]),
         accepted_quality_tiers=tuple(data.get("accepted_quality_tiers", ["gold"])),
+        record_format=validation_format,
     )
     retained_train_ids = {value.task_id for value in train_examples}
     retained_validation_ids = {value.task_id for value in validation_examples}
@@ -331,7 +373,12 @@ def _render(config, train, validation, schema, *, limit, allow_small_smoke):
 def _train(config, tokenizer, train_examples, validation_examples, resume):
     try:
         import torch
-        from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+        from peft import (
+            LoraConfig,
+            PeftModel,
+            get_peft_model,
+            prepare_model_for_kbit_training,
+        )
         from transformers import (
             AutoConfig,
             AutoModelForCausalLM,
@@ -388,20 +435,53 @@ def _train(config, tokenizer, train_examples, validation_examples, resume):
         model = prepare_model_for_kbit_training(
             model, use_gradient_checkpointing=bool(training["gradient_checkpointing"])
         )
-    model = get_peft_model(
-        model,
-        LoraConfig(
-            r=int(lora["rank"]),
-            lora_alpha=int(lora["alpha"]),
-            lora_dropout=float(lora["dropout"]),
-            target_modules=(
-                lora["target_modules"]
-                if isinstance(lora["target_modules"], str)
-                else list(lora["target_modules"])
+    init_from = lora.get("init_from")
+    if init_from is not None:
+        adapter = _project_path(init_from, "lora.init_from")
+        model_files = (
+            adapter / "adapter_model.safetensors",
+            adapter / "adapter_model.bin",
+        )
+        if not (adapter / "adapter_config.json").is_file() or not any(
+            path.is_file() for path in model_files
+        ):
+            raise RuntimeError(
+                f"Stage-2 initialization adapter is incomplete: {adapter}"
+            )
+        model = PeftModel.from_pretrained(model, str(adapter), is_trainable=True)
+        adapter_config = model.peft_config.get("default")
+        if adapter_config is None:
+            raise RuntimeError("Stage-2 initialization adapter has no default config")
+        expected = (
+            int(lora["rank"]),
+            int(lora["alpha"]),
+            float(lora["dropout"]),
+        )
+        observed = (
+            int(adapter_config.r),
+            int(adapter_config.lora_alpha),
+            float(adapter_config.lora_dropout),
+        )
+        if observed != expected:
+            raise RuntimeError(
+                "Stage-2 LoRA hyperparameters do not match the Stage-1 adapter: "
+                f"expected {expected}, found {observed}"
+            )
+    else:
+        model = get_peft_model(
+            model,
+            LoraConfig(
+                r=int(lora["rank"]),
+                lora_alpha=int(lora["alpha"]),
+                lora_dropout=float(lora["dropout"]),
+                target_modules=(
+                    lora["target_modules"]
+                    if isinstance(lora["target_modules"], str)
+                    else list(lora["target_modules"])
+                ),
+                task_type="CAUSAL_LM",
             ),
-            task_type="CAUSAL_LM",
-        ),
-    )
+        )
     if training["gradient_checkpointing"]:
         model.gradient_checkpointing_enable()
         model.config.use_cache = False
@@ -457,13 +537,28 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         except ValueError as exc:
             raise ValueError("--resume-from-checkpoint must be under outputs/") from exc
     if args.audit_only is not None:
-        return {"mode": "audit", **audit_trajectory_file(args.audit_only, limit=args.limit).summary()}
+        return {
+            "mode": "audit",
+            "record_format": args.audit_format,
+            **audit_trajectory_file(
+                args.audit_only,
+                limit=args.limit,
+                record_format=args.audit_format,
+            ).summary(),
+        }
     audit, train, validation, schema = _audit(
         config,
         limit=args.limit,
         allow_small_smoke=bool(args.allow_small_smoke),
     )
-    summary: dict[str, Any] = {"mode": "dry-run" if args.dry_run else "train", **audit}
+    summary: dict[str, Any] = {
+        "mode": "dry-run" if args.dry_run else "train",
+        "stage": config.get("stage", {}).get("name")
+        if isinstance(config.get("stage"), Mapping)
+        else None,
+        "initial_adapter": _mapping(config["lora"], "lora").get("init_from"),
+        **audit,
+    }
     if args.dry_run and not args.render_smoke:
         return summary
     tokenizer, train_examples, validation_examples, overlong = _render(

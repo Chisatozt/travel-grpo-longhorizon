@@ -16,6 +16,7 @@ from travel_grpo.envs.reward import REWARD_VERSION
 from travel_grpo.training.sft_collection import TRAJECTORY_SCHEMA_VERSION
 from travel_grpo.training.sft_dataset import (
     IGNORE_INDEX,
+    PREFIX_SCHEMA_VERSION,
     ActionOnlyDataCollator,
     SFTDatasetError,
     assert_task_ids_within_split,
@@ -25,6 +26,7 @@ from travel_grpo.training.sft_dataset import (
     build_action_only_examples,
     load_sft_trajectories,
     load_tool_schema,
+    prefix_admission_reasons,
     sft_admission_reasons,
     trajectory_rejection_reasons,
 )
@@ -147,6 +149,48 @@ def valid_record(task_id="hotel:2-1"):
     }
 
 
+def valid_prefix_record(task_id="hotel:2-prefix"):
+    return {
+        "schema_version": PREFIX_SCHEMA_VERSION,
+        "source_schema_version": TRAJECTORY_SCHEMA_VERSION,
+        "task_id": task_id,
+        "composition": "22",
+        "source_split": "train",
+        "attempt": 1,
+        "attempt_strategy": "canonical",
+        "source_diagnostic_line": 10,
+        "source_failure_reasons": ["environment.wrong_answer"],
+        "prefix_action_count": 1,
+        "prefix_environment_steps": 2,
+        "retained_action_evidence": [
+            {
+                "choice": "search",
+                "aspect": "hotel",
+                "environment_turn": 1,
+                "reward": 0.2,
+            }
+        ],
+        "expected_aspects": ["hotel"],
+        "answered_aspects": [],
+        "failed_answer": {
+            "aspect": "hotel",
+            "content": "H2",
+            "environment_turn": 2,
+        },
+        "messages": [
+            {"role": "system", "content": "Use one tool."},
+            {"role": "user", "content": "Find a hotel."},
+            _call("call-prefix-search", "search", "hotels in Paris"),
+            {
+                "role": "tool",
+                "name": "interact_with_env",
+                "tool_call_id": "call-prefix-search",
+                "content": "H1 and H2 are available.",
+            },
+        ],
+    }
+
+
 def write_jsonl(path, records):
     path.write_text(
         "".join(json.dumps(value, ensure_ascii=False) + "\n" for value in records),
@@ -171,6 +215,48 @@ def test_valid_multiturn_empty_content_renders_only_tool_calls_as_labels():
         assert "interact_with_env" in target
         assert "choice" in target and "content" in target
         assert "H1 is available" not in target
+
+
+def test_safe_prefix_has_a_separate_gate_and_uses_action_only_rendering():
+    record = valid_prefix_record()
+    assert prefix_admission_reasons(record) == ()
+    examples = build_action_only_examples(
+        [record],
+        FakeQwenTokenizer(),
+        load_tool_schema(TOOL_CONFIG),
+        max_sequence_length=100000,
+        record_format="prefix",
+    )
+    assert len(examples) == 1
+    assert examples[0].assistant_turn_index == 1
+    assert examples[0].label_tokens > 0
+
+
+def test_prefix_gate_rejects_a_retained_failed_answer():
+    record = valid_prefix_record()
+    record["messages"].extend(
+        [
+            _call("call-failed-answer", "answer", "H2"),
+            {
+                "role": "tool",
+                "name": "interact_with_env",
+                "tool_call_id": "call-failed-answer",
+                "content": "Wrong answer.",
+            },
+        ]
+    )
+    record["prefix_action_count"] = 2
+    record["retained_action_evidence"].append(
+        {
+            "choice": "answer",
+            "aspect": "hotel",
+            "environment_turn": 2,
+            "reward": -1.0,
+        }
+    )
+    assert "prefix_does_not_end_after_successful_search" in prefix_admission_reasons(
+        record
+    )
 
 
 def test_loss_masked_assistant_turn_is_kept_in_context_but_not_supervised():

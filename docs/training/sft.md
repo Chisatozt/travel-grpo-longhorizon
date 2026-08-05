@@ -124,33 +124,46 @@ For Linux QLoRA, also install the optional bitsandbytes extra:
 pip install -e ".[sft,qlora]"
 ```
 
-Configuration lives in `configs/train/sft/sft_lora.yaml`. It pins `Qwen/Qwen3.5-2B`, action-only assistant-turn examples, LoRA targets, optimizer parameters, evaluation/save cadence, and an ignored `outputs/sft/` destination.
+The default curriculum is two-stage and always uses `Qwen/Qwen3.5-2B`:
 
-Formal readiness requires at least 400 accepted train trajectories, 40 validation trajectories, and all eight compositions in both splits. Trajectories are deduplicated across tier files and train/validation must be disjoint. No GRPO or final-evaluation task may be used as backfill. The maximum rendered length is 32768; an overlength trajectory is rejected whole and never truncated.
+- `configs/train/sft/sft_stage1_lora.yaml` trains the 35 deduplicated safe prefixes extracted by `prepare_stage1_prefix_sft.py`. A prefix is admitted only when all retained actions are structurally valid, the last retained action is the successful search, and the failed final answer has been removed.
+- `configs/train/sft/sft_stage2_lora.yaml` reloads the trainable Stage-1 LoRA and continues on the 87 complete Gold/Silver trajectories. The optimizer and scheduler intentionally restart for Stage 2; the LoRA weights do not.
 
-Audit both configured splits without loading a tokenizer or model:
+Both stages use the same 10 complete internal-validation trajectories. Stage 1 therefore measures full held-out behavior while learning safe elicitation/search prefixes, and Stage 2 continues the same metric on complete trajectories. These ten tasks are an internal holdout derived from the frozen train pool and are not benchmark validation.
+
+The original full-data target remains 400 accepted train trajectories, 40 independent validation trajectories, and all eight compositions in both splits. The current limited-data curriculum deliberately gates Stage 1 at 35 prefixes plus 10 validation trajectories and Stage 2 at 50 complete train trajectories plus the same 10 validation trajectories; passing those gates permits the experiment to run but does not satisfy the original formal-data target. Trajectories are deduplicated and train/validation must be disjoint. The maximum rendered length is 32768; an overlength record is rejected whole and never truncated.
+
+Audit both stages without loading a tokenizer or model:
 
 ```bash
-python scripts/train/sft/sft_train.py --dry-run
+python scripts/train/sft/two_stage_sft.py --dry-run
 ```
 
 After explicitly caching the Qwen3.5 tokenizer, test real chat-template rendering without loading the model:
 
 ```bash
 export HF_HOME=outputs/cache/huggingface
-python scripts/train/sft/sft_train.py --dry-run --render-smoke --limit 1
+python scripts/train/sft/two_stage_sft.py --render-smoke
 ```
 
 The configured Transformers cache is `outputs/cache/huggingface`. The render smoke uses `local_files_only=True`; it never downloads implicitly. Formal LoRA training is an explicit command:
 
 ```bash
+python scripts/train/sft/two_stage_sft.py
+
+# Linux wrapper for the same command:
 bash scripts/train/sft/run_sft.sh
 
-# Resume only from a checkpoint under outputs/
-bash scripts/train/sft/run_sft.sh \
-  --resume-from-checkpoint outputs/sft/qwen3.5-2b-lora/checkpoint-100
+# Resume one stage only from its own checkpoint under outputs/.
+python scripts/train/sft/two_stage_sft.py \
+  --stage 1 \
+  --stage1-resume-from-checkpoint outputs/sft/qwen3.5-2b-lora-stage1/checkpoint-10
+
+python scripts/train/sft/two_stage_sft.py \
+  --stage 2 \
+  --stage2-resume-from-checkpoint outputs/sft/qwen3.5-2b-lora-stage2/checkpoint-50
 ```
 
 Set `model.qlora: true` for 4-bit NF4 QLoRA. Training, checkpoints, logs, and caches belong under ignored output directories. No model-quality or benchmark result is claimed until reproducible artifacts exist.
 
-Merge the trained adapter before GRPO with `python scripts/train/sft/merge_lora.py`. The fixed target is `outputs/models/sft-merged`; the merger supports Qwen3.5's multimodal Auto model class, saves model/tokenizer-or-processor plus `merge_manifest.json`, and refuses a non-empty destination.
+Merge the final Stage-2 adapter before GRPO with `python scripts/train/sft/merge_lora.py`. Its default adapter is `outputs/sft/qwen3.5-2b-lora-stage2` and its fixed target is `outputs/models/sft-merged`; the merger supports Qwen3.5's multimodal Auto model class, saves model/tokenizer-or-processor plus `merge_manifest.json`, and refuses a non-empty destination.

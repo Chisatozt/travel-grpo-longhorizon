@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--adapter",
         type=Path,
-        default=ROOT / "outputs/sft/qwen3.5-2b-lora",
+        default=ROOT / "outputs/sft/qwen3.5-2b-lora-stage2",
     )
     parser.add_argument(
         "--output", type=Path, default=ROOT / "outputs/models/sft-merged"

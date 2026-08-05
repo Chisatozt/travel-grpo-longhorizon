@@ -22,6 +22,7 @@ data = [
 sft = [
   "accelerate>=1.2,<2",
   "peft>=0.14,<1",
+  "pyarrow==25.0.0",
   "PyYAML>=6,<7",
   "torch>=2.4,<3",
   "transformers @ git+https://github.com/huggingface/transformers.git@7ea2320c76117e6742364808a666ef6f2fb40a67",

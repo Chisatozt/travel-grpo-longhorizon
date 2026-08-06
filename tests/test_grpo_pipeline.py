@@ -27,7 +27,7 @@ def test_dynamic_sampling_discards_invalid_and_equal_groups():
     indices, stats = select_reward_varying_groups(
         uids, rewards, sampling_invalid=invalid, expected_group_size=4
     )
-    assert indices == [0, 1, 2, 3]
+    assert indices == [0, 1, 2, 3, 8, 10, 11]
     assert stats["kept_group_count"] == 1
     assert stats["constant_reward_group_count"] == 1
     assert stats["sampling_invalid_group_count"] == 1
@@ -139,6 +139,243 @@ def test_bounded_sampler_restores_cross_batch_group_order(monkeypatch):
     result = manager.generate_sequences(batch)
     assert result.rows == uids
     assert result.meta_info["travel_dynamic_sampling"]["sampled_batches"] == 2
+
+
+def test_bounded_sampler_keeps_valid_rows_across_batches_and_preserves_fields(monkeypatch):
+    class Scores:
+        def __init__(self, values):
+            self.values = list(values)
+
+        def sum(self, dim=-1):
+            return self
+
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def tolist(self):
+            return list(self.values)
+
+    class Output:
+        def __init__(self, row_ids, uids, rewards, valid=None, degraded=None):
+            self.rows = list(row_ids)
+            self.batch = {
+                "rm_scores": Scores(rewards),
+                "token_ids": [[f"token-{row}"] for row in row_ids],
+                "attention_mask": [[1] for _ in row_ids],
+                "response_mask": [[1] for _ in row_ids],
+            }
+            valid = [True] * len(row_ids) if valid is None else list(valid)
+            degraded = [False] * len(row_ids) if degraded is None else list(degraded)
+            self.non_tensor_batch = {
+                "uid": list(uids),
+                "userbench": [
+                    {
+                        "reward": {
+                            "terminal_reward": reward,
+                            "reward_valid": item_valid,
+                            "reward_degraded": item_degraded,
+                        },
+                        "tool_metadata": {"row": row},
+                    }
+                    for row, reward, item_valid, item_degraded in zip(
+                        row_ids, rewards, valid, degraded, strict=True
+                    )
+                ],
+                "tool_metadata": [{"row": row} for row in row_ids],
+            }
+            self.meta_info = {"timing": {}}
+
+        def slice(self, start, stop):
+            valid = [
+                item["reward"]["reward_valid"]
+                for item in self.non_tensor_batch["userbench"][start:stop]
+            ]
+            degraded = [
+                item["reward"]["reward_degraded"]
+                for item in self.non_tensor_batch["userbench"][start:stop]
+            ]
+            return Output(
+                self.rows[start:stop],
+                self.non_tensor_batch["uid"][start:stop],
+                self.batch["rm_scores"].values[start:stop],
+                valid,
+                degraded,
+            )
+
+    class DataProto:
+        @staticmethod
+        def concat(outputs):
+            return Output(
+                [row for output in outputs for row in output.rows],
+                [
+                    uid
+                    for output in outputs
+                    for uid in output.non_tensor_batch["uid"]
+                ],
+                [
+                    reward
+                    for output in outputs
+                    for reward in output.batch["rm_scores"].values
+                ],
+                [
+                    item["reward"]["reward_valid"]
+                    for output in outputs
+                    for item in output.non_tensor_batch["userbench"]
+                ],
+                [
+                    item["reward"]["reward_degraded"]
+                    for output in outputs
+                    for item in output.non_tensor_batch["userbench"]
+                ],
+            )
+
+    monkeypatch.setitem(sys.modules, "verl", types.SimpleNamespace(DataProto=DataProto))
+    input_uids = ["a"] * 4 + ["b"] * 4
+    batches = [
+        Output(
+            ["a0", "a1", "a2", "a-invalid", "b0", "b1", "b2", "b3"],
+            input_uids,
+            [0.1, 0.2, 0.3, 0.0, 0.1, 0.1, 0.1, 0.1],
+            [True, True, True, False, True, True, True, True],
+        ),
+        Output(
+            ["a4", "a5", "a6", "a7", "b4", "b5", "b6", "b7"],
+            input_uids,
+            [0.4, 0.5, 0.6, 0.7, 0.1, 0.2, 0.3, 0.4],
+        ),
+    ]
+    seen_batches = []
+
+    def generate(batch):
+        seen_batches.append(batch)
+        return batches.pop(0)
+
+    manager = types.SimpleNamespace(generate_sequences=generate)
+    install_verl_bounded_sampler(
+        manager,
+        {
+            "enable": True,
+            "group_size": 4,
+            "required_groups": 2,
+            "max_generation_batches": 3,
+            "max_consecutive_skips": 10,
+            "reward_tolerance": 1e-6,
+        },
+    )
+    batch = types.SimpleNamespace(
+        meta_info={}, non_tensor_batch={"uid": input_uids}
+    )
+    result = manager.generate_sequences(batch)
+    assert seen_batches == [batch, batch]
+    assert len(result.rows) == 8
+    assert result.rows[:4] == ["a0", "a1", "a2", "a7"]
+    assert result.rows[4:] == ["b0", "b5", "b6", "b7"]
+    assert result.non_tensor_batch["uid"] == ["a"] * 4 + ["b"] * 4
+    assert set(result.batch) == {
+        "rm_scores",
+        "token_ids",
+        "attention_mask",
+        "response_mask",
+    }
+    assert set(result.non_tensor_batch) == {"uid", "userbench", "tool_metadata"}
+    diagnostics = result.meta_info["travel_dynamic_sampling"]
+    assert diagnostics["sampled_batches"] == 2
+    assert diagnostics["candidate_count"] == 15
+    assert diagnostics["degraded_candidate_count"] == 0
+
+
+def test_bounded_sampler_uses_degraded_rows_only_when_clean_candidates_are_insufficient(monkeypatch):
+    class Scores:
+        def __init__(self, values):
+            self.values = list(values)
+
+        def sum(self, dim=-1):
+            return self
+
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def tolist(self):
+            return list(self.values)
+
+    class Output:
+        def __init__(self, uids, rewards, degraded):
+            self.rows = list(range(len(uids)))
+            self.batch = {"rm_scores": Scores(rewards)}
+            self.non_tensor_batch = {
+                "uid": list(uids),
+                "userbench": [
+                    {
+                        "reward": {
+                            "terminal_reward": reward,
+                            "reward_valid": True,
+                            "reward_degraded": item_degraded,
+                        }
+                    }
+                    for reward, item_degraded in zip(rewards, degraded, strict=True)
+                ],
+            }
+            self.meta_info = {"timing": {}}
+
+        def slice(self, start, stop):
+            values = self.batch["rm_scores"].values[start:stop]
+            items = self.non_tensor_batch["userbench"][start:stop]
+            return Output(
+                self.non_tensor_batch["uid"][start:stop],
+                values,
+                [item["reward"]["reward_degraded"] for item in items],
+            )
+
+    class DataProto:
+        @staticmethod
+        def concat(outputs):
+            return Output(
+                [
+                    uid
+                    for output in outputs
+                    for uid in output.non_tensor_batch["uid"]
+                ],
+                [
+                    reward
+                    for output in outputs
+                    for reward in output.batch["rm_scores"].values
+                ],
+                [
+                    item["reward"]["reward_degraded"]
+                    for output in outputs
+                    for item in output.non_tensor_batch["userbench"]
+                ],
+            )
+
+    monkeypatch.setitem(sys.modules, "verl", types.SimpleNamespace(DataProto=DataProto))
+    uids = ["a"] * 4 + ["b"] * 4
+    output = Output(
+        uids,
+        [0.1, 0.2, 0.3, 0.4, 0.1, 0.2, 0.3, 0.4],
+        [False, False, False, True, False, False, False, False],
+    )
+    manager = types.SimpleNamespace(generate_sequences=lambda _: output)
+    install_verl_bounded_sampler(
+        manager,
+        {
+            "enable": True,
+            "group_size": 4,
+            "required_groups": 2,
+            "max_generation_batches": 3,
+            "max_consecutive_skips": 10,
+            "reward_tolerance": 1e-6,
+        },
+    )
+    batch = types.SimpleNamespace(meta_info={}, non_tensor_batch={"uid": uids})
+    result = manager.generate_sequences(batch)
+    assert len(result.rows) == 8
+    assert result.meta_info["travel_dynamic_sampling"]["degraded_candidate_count"] == 1
 
 
 def test_grpo_profile_dry_preflight_is_static_only(tmp_path):

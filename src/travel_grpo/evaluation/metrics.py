@@ -32,9 +32,11 @@ def sanitize_reward(report: Mapping[str, Any]) -> dict[str, Any]:
     allowed = (
         "reward_version", "reward_valid", "terminal_reward", "raw_terminal_reward",
         "termination_reason", "grounded_quality", "quality_by_aspect", "completion_rate",
-        "active_preference_coverage", "passive_preference_coverage", "efficiency",
+        "active_preference_coverage", "passive_preference_coverage", "search_coverage",
+        "efficiency", "environment_steps", "actor_attempts", "effective_steps",
         "policy_penalty", "gold_itinerary", "correct_itinerary", "fully_grounded",
         "user_aligned_success", "infrastructure_invalid", "infrastructure_errors",
+        "reward_degraded", "simulator_fallback_counts",
         "invalid_actions", "exact_repeats", "semantic_repeats", "ambiguous_actions",
         "unsearched_answers", "wrong_answers",
     )

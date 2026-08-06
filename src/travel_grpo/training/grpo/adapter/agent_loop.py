@@ -160,6 +160,7 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 "gold_itinerary": bool(reward.get("gold_itinerary")),
                 "user_aligned_success": bool(reward.get("user_aligned_success")),
                 "completion_rate": float(reward.get("completion_rate", 0.0)),
+                "search_coverage": float(reward.get("search_coverage", 0.0)),
                 "active_preference_coverage": float(
                     reward.get("active_preference_coverage", 0.0)
                 ),
@@ -171,9 +172,14 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 "quality_by_aspect": dict(reward.get("quality_by_aspect", {})),
                 "actor_attempts": session.actor_attempts,
                 "environment_steps": session.num_tool_calls,
+                "effective_steps": int(reward.get("effective_steps", session.num_tool_calls)),
                 "invalid_actions": session.invalid_actions,
                 "exact_repeats": session.exact_repeats,
                 "semantic_repeats": session.semantic_repeats,
+                "reward_degraded": bool(reward.get("reward_degraded", False)),
+                "simulator_fallback_counts": dict(
+                    reward.get("simulator_fallback_counts", {})
+                ),
                 "termination_reason": session.termination_reason,
             }
             return output

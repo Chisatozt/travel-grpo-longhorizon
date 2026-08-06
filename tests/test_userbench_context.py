@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from travel_grpo.envs.observation import UserBenchObservation, UserBenchStepResult
+from travel_grpo.envs.reward import TravelRewardTask, UserBenchRewardSnapshot
 from travel_grpo.envs.userbench_context import (
     PINNED_USERBENCH_COMMIT,
     UserBenchSessionState,
@@ -125,3 +126,80 @@ def test_concurrent_contexts_keep_task_and_raw_rewards_isolated():
     assert first["cumulative_reward"] == pytest.approx(1.2)
     assert second["task_id"] == "task-b"
     assert second["cumulative_reward"] == 0.8
+
+
+def test_complete_fallback_is_degraded_but_still_reward_valid():
+    task = TravelRewardTask(
+        task_id="task-fallback",
+        aspects=("flight",),
+        best_ids={"flight": "F1"},
+        correct_ids={"flight": frozenset({"F1"})},
+        preference_ids_by_aspect={"flight": frozenset({"P1"})},
+    )
+    before = UserBenchRewardSnapshot(
+        frozenset({"P1"}), 0, 0, frozenset({"flight"}), frozenset()
+    )
+    after = UserBenchRewardSnapshot(
+        frozenset(), 1, 0, frozenset(), frozenset()
+    )
+    state = UserBenchSessionState(
+        "request-fallback",
+        "task-fallback",
+        CloseOnlyWrapper(),
+        reward_task=task,
+        reward_snapshot=before,
+    )
+    state.record_step(
+        UserBenchStepResult(
+            "task-fallback",
+            UserBenchObservation("fallback response", 1, False, 0.2, {}),
+            0.2,
+            False,
+            False,
+            {"userbench_search_fallbacks": 1},
+        ),
+        snapshot=after,
+    )
+    report = state.reward_report()
+    assert report["reward_valid"] is True
+    assert report["reward_degraded"] is True
+    assert report["simulator_fallback_counts"] == {
+        "userbench_search_fallbacks": 1
+    }
+    assert report["infrastructure_errors"] == []
+
+
+def test_fallback_with_missing_snapshot_is_hard_invalid():
+    task = TravelRewardTask(
+        task_id="task-invalid",
+        aspects=("flight",),
+        best_ids={"flight": "F1"},
+        correct_ids={"flight": frozenset({"F1"})},
+        preference_ids_by_aspect={"flight": frozenset({"P1"})},
+    )
+    before = UserBenchRewardSnapshot(
+        frozenset({"P1"}), 0, 0, frozenset({"flight"}), frozenset()
+    )
+    state = UserBenchSessionState(
+        "request-invalid",
+        "task-invalid",
+        CloseOnlyWrapper(),
+        reward_task=task,
+        reward_snapshot=before,
+    )
+    state.record_step(
+        UserBenchStepResult(
+            "task-invalid",
+            UserBenchObservation("missing evidence", 1, False, 0.0, {}),
+            0.0,
+            False,
+            False,
+            {"userbench_search_fallbacks": 1},
+        ),
+        snapshot=None,
+    )
+    report = state.reward_report()
+    assert report["reward_valid"] is False
+    assert report["terminal_reward"] == 0.0
+    assert report["reward_degraded"] is False
+    assert "missing_reward_evidence" in report["infrastructure_errors"]

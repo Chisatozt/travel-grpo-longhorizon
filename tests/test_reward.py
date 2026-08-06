@@ -10,6 +10,7 @@ from travel_grpo.envs.reward import (
     TravelRewardTask,
     UserBenchRewardError,
     compute_travel_reward,
+    squash_terminal_reward,
 )
 
 
@@ -42,25 +43,30 @@ def _score(**overrides):
     return compute_travel_reward(**values)
 
 
-def test_fully_grounded_gold_is_one_and_correct_alternative_is_point_seven():
+def test_fully_grounded_gold_is_one_and_correct_alternative_is_point_seventy_four():
     gold = _score()
     alternative = _score(answers={"flight": "F2", "hotel": "H2"})
     assert gold["reward_version"] == REWARD_VERSION
     assert gold["terminal_reward"] == pytest.approx(1.0)
     assert gold["user_aligned_success"] is True
-    assert alternative["terminal_reward"] == pytest.approx(0.7)
+    assert alternative["terminal_reward"] == pytest.approx(0.74)
 
 
 def test_ungrounded_guess_and_incomplete_trajectory_are_negative():
     guess = _score(
-        active_preference_ids=set(), searched_aspects=set(), steps=2
+        active_preference_ids=set(),
+        searched_aspects=set(),
+        steps=2,
+        unsearched_answers=2,
     )
     incomplete = _score(answers={}, active_preference_ids=set(), searched_aspects=set(), steps=0)
-    assert guess["terminal_reward"] == pytest.approx(-0.65)
-    assert incomplete["terminal_reward"] == -1.0
+    assert guess["raw_terminal_reward"] < 0.0
+    assert guess["terminal_reward"] < 0.0
+    assert -1.0 < incomplete["terminal_reward"] < 0.0
+    assert guess["terminal_reward"] > incomplete["terminal_reward"]
 
 
-def test_policy_penalties_are_decomposed_and_capped():
+def test_policy_penalties_are_decomposed_without_a_total_or_component_cap():
     report = _score(
         invalid_actions=4,
         exact_repeats=4,
@@ -69,8 +75,41 @@ def test_policy_penalties_are_decomposed_and_capped():
         unsearched_answers=4,
         wrong_answers=4,
     )
-    assert report["policy_penalty"] == 0.75
-    assert report["penalty_components"]["invalid_action"] == 0.30
+    assert report["policy_penalty"] == pytest.approx(2.0)
+    assert report["penalty_components"]["invalid_action"] == pytest.approx(0.40)
+
+
+def test_error_counts_remain_monotonic_after_many_repeated_errors():
+    r1 = _score(invalid_actions=1)["terminal_reward"]
+    r4 = _score(invalid_actions=4)["terminal_reward"]
+    r8 = _score(invalid_actions=8)["terminal_reward"]
+    assert r1 > r4 > r8
+
+
+def test_negative_terminal_rewards_are_smooth_and_distinct():
+    values = tuple(squash_terminal_reward(value) for value in (-1.0, -1.1, -1.4))
+    assert values[0] > values[1] > values[2]
+    assert len(set(values)) == 3
+    assert all(-1.0 < value < 0.0 for value in values)
+
+
+def test_search_coverage_distinguishes_progress_and_actor_attempts_affect_efficiency():
+    no_progress = _score(
+        answers={}, active_preference_ids=set(), searched_aspects=set(), steps=0
+    )
+    searched = _score(
+        answers={},
+        active_preference_ids={"P1", "P2", "P3", "P4"},
+        searched_aspects={"flight", "hotel"},
+        steps=4,
+    )
+    efficient = _score(steps=8, actor_attempts=8)
+    inefficient = _score(steps=8, actor_attempts=20)
+    assert searched["search_coverage"] == pytest.approx(1.0)
+    assert searched["terminal_reward"] > no_progress["terminal_reward"]
+    assert efficient["effective_steps"] == 8
+    assert inefficient["effective_steps"] == 20
+    assert inefficient["efficiency"] < efficient["efficiency"]
 
 
 def test_infrastructure_invalid_is_zero_not_a_negative_training_example():

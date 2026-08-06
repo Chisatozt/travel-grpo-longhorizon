@@ -96,6 +96,7 @@ def valid_record(task_id="hotel:2-1"):
         "reward_version": REWARD_VERSION,
         "reward_valid": True,
         "terminal_reward": 1.0,
+        "raw_terminal_reward": 1.0,
         "completion_rate": 1.0,
         "correct_itinerary": True,
         "gold_itinerary": True,
@@ -146,6 +147,40 @@ def valid_record(task_id="hotel:2-1"):
         "answered_aspects": ["hotel"],
         "reward_breakdown": reward,
         **reward,
+    }
+
+
+def test_legacy_reward_v2_fixture_without_new_diagnostics_remains_sft_compatible():
+    fixture = ROOT / "tests/fixtures/teacher_reward_v2_legacy.jsonl"
+    record = json.loads(fixture.read_text(encoding="utf-8").splitlines()[0])
+    assert record["reward_version"] == "userbench-travel-reward-v2"
+    assert record["reward_breakdown"]["reward_version"] == (
+        "userbench-travel-reward-v2"
+    )
+    assert "search_coverage" not in record["reward_breakdown"]
+    assert "effective_steps" not in record["reward_breakdown"]
+    assert "reward_degraded" not in record["reward_breakdown"]
+    assert sft_admission_reasons(
+        record, accepted_quality_tiers=("gold", "silver")
+    ) == ()
+    audit = audit_trajectory_file(
+        fixture, accepted_quality_tiers=("gold", "silver")
+    )
+    assert audit.summary()["total_trajectories"] == 1
+    assert audit.summary()["accepted_trajectories"] == 1
+    examples, overlong = build_action_only_dataset(
+        [record], FakeQwenTokenizer(), load_tool_schema(TOOL_CONFIG), max_sequence_length=4096,
+        accepted_quality_tiers=("gold", "silver"),
+    )
+    assert not overlong
+    assert examples
+    assert set(examples[0].to_trainer_dict()) == {
+        "input_ids",
+        "attention_mask",
+        "labels",
+        "task_id",
+        "trajectory_id",
+        "assistant_turn_index",
     }
 
 

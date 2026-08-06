@@ -47,6 +47,7 @@ async def rollout_task(
         )
         for _ in range(20):
             attempts += 1
+            session.actor_attempts = attempts
             try:
                 call = await actor.generate_action(messages)
             except TeacherProtocolError as exc:

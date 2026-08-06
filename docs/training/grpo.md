@@ -16,7 +16,7 @@ python scripts/train/grpo/prepare_data.py --verify-only
 
 ## AgentLoop 与 Reward
 
-veRL 0.8 直接实例化 `UserBenchAgentLoop`。每条 rollout 独占 `TravelEnv` 和 ContextVar session；工具只返回 Actor 可见的 `feedback`，tool reward 始终为 0。终局由现有 Travel Reward v2 写入 `reward_score`。`reward_valid=false` 是采样无效而不是有效零分。
+veRL 0.8 直接实例化 `UserBenchAgentLoop`。每条 rollout 独占 `TravelEnv` 和 ContextVar session；工具只返回 Actor 可见的 `feedback`，tool reward 始终为 0。终局由现有 Travel Reward v2 写入 `reward_score`。`reward_valid=false` 是采样无效而不是有效零分；证据完整的 simulator fallback 可以保持 valid，并由可选的 degraded 诊断标记。
 
 同一 completion 多工具调用不会执行；环境终止后不会额外生成 Actor 回合；所有异常路径都会在 `finally` 关闭 wrapper 并清除 ContextVar。
 

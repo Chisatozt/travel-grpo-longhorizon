@@ -1462,7 +1462,11 @@ def test_one_judgment_fallback_is_admitted_as_silver_and_loss_masked(tmp_path):
     assert outcome.quality_tier == "silver"
     assert outcome.trajectory is not None
     assert outcome.trajectory.quality_tier == "silver"
-    assert outcome.trajectory.reward_breakdown["reward_valid"] is False
+    assert outcome.trajectory.reward_breakdown["reward_valid"] is True
+    assert outcome.trajectory.reward_breakdown["reward_degraded"] is True
+    assert outcome.trajectory.reward_breakdown["simulator_fallback_counts"] == {
+        "userbench_judgment_fallbacks": 1
+    }
     assert outcome.trajectory.reward_breakdown["raw_terminal_reward"] >= 0.7
     assert any(
         message.get("loss_mask") is True

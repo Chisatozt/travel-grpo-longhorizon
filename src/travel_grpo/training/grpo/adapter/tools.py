@@ -84,6 +84,12 @@ async def execute_userbench_action(
         snapshot = session.wrapper.reward_snapshot()
     except AttributeError:
         snapshot = None
+    except Exception:
+        # A transition without a readable post-step snapshot cannot be scored
+        # from the evidence ledger.  Keep the rollout observable to veRL, but
+        # classify it as hard-invalid rather than letting the worker crash.
+        session.infrastructure_errors.append("reward_snapshot_unavailable")
+        snapshot = None
     session.record_step(result, action, snapshot)
     report = session.reward_report()
     return UserBenchToolExecution(

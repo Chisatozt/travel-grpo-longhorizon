@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 REWARD_VERSION = "userbench-travel-reward-v2"
+NEGATIVE_REWARD_TEMPERATURE = 1.5
 
 
 class UserBenchRewardError(ValueError):
@@ -144,6 +145,38 @@ def _ratio(numerator: int, denominator: int) -> float:
     return 0.0 if denominator <= 0 else min(1.0, max(0.0, numerator / denominator))
 
 
+def squash_terminal_reward(
+    raw_reward: float,
+    *,
+    negative_temperature: float = NEGATIVE_REWARD_TEMPERATURE,
+) -> float:
+    """Keep positive rewards bounded while smoothly compressing negative ones."""
+
+    try:
+        normalized_raw = float(raw_reward)
+    except (TypeError, ValueError) as exc:
+        raise UserBenchRewardError("raw reward must be finite") from exc
+    if not math.isfinite(normalized_raw):
+        raise UserBenchRewardError("raw reward must be finite")
+    try:
+        normalized_temperature = float(negative_temperature)
+    except (TypeError, ValueError) as exc:
+        raise UserBenchRewardError(
+            "negative reward temperature must be positive and finite"
+        ) from exc
+    if (
+        not math.isfinite(normalized_temperature)
+        or normalized_temperature <= 0.0
+    ):
+        raise UserBenchRewardError(
+            "negative reward temperature must be positive and finite"
+        )
+
+    if normalized_raw >= 0.0:
+        return min(1.0, normalized_raw)
+    return -math.tanh((-normalized_raw) / normalized_temperature)
+
+
 def compute_travel_reward(
     *,
     task: TravelRewardTask,
@@ -152,6 +185,7 @@ def compute_travel_reward(
     passive_preference_ids: AbstractSet[str],
     searched_aspects: AbstractSet[str],
     steps: int,
+    actor_attempts: int | None = None,
     max_steps: int = 20,
     invalid_actions: int = 0,
     exact_repeats: int = 0,
@@ -199,42 +233,56 @@ def compute_travel_reward(
     grounded_quality = sum(grounded_quality_by_aspect.values()) / len(aspects)
     active_coverage = _ratio(len(active), len(all_preferences))
     passive_coverage = _ratio(len(passive), len(all_preferences))
+    search_coverage = _ratio(len(searched), len(aspects))
     completion_rate = _ratio(sum(aspect in answers for aspect in aspects), len(aspects))
 
+    environment_steps = max(0, steps)
+    normalized_actor_attempts = (
+        environment_steps
+        if actor_attempts is None
+        else max(0, actor_attempts)
+    )
+    effective_steps = max(environment_steps, normalized_actor_attempts)
     useful_turn_budget = len(all_preferences) + 2 * len(aspects)
-    if steps <= useful_turn_budget:
+    if effective_steps <= useful_turn_budget:
         efficiency = 1.0
     elif useful_turn_budget >= max_steps:
         efficiency = 0.0
     else:
         efficiency = max(
-            0.0, 1.0 - (steps - useful_turn_budget) / (max_steps - useful_turn_budget)
+            0.0,
+            1.0
+            - (effective_steps - useful_turn_budget)
+            / (max_steps - useful_turn_budget),
         )
 
     penalty_components = {
         # Parallel calls are one separate protocol event, not N malformed calls.
         "invalid_action": 0.0
         if parallel_tool_calls
-        else min(0.30, max(0, invalid_actions) * 0.10),
+        else max(0, invalid_actions) * 0.10,
         "parallel_tool_calls": 0.25 if parallel_tool_calls else 0.0,
-        "exact_repeat": min(0.15, max(0, exact_repeats) * 0.05),
-        "semantic_repeat": min(0.15, max(0, semantic_repeats) * 0.05),
-        "ambiguous_action": min(0.15, max(0, ambiguous_actions) * 0.05),
-        "unsearched_answer": min(0.30, max(0, unsearched_answers) * 0.10),
-        "wrong_answer": min(0.45, max(0, wrong_answers) * 0.15),
+        "exact_repeat": max(0, exact_repeats) * 0.05,
+        "semantic_repeat": max(0, semantic_repeats) * 0.05,
+        "ambiguous_action": max(0, ambiguous_actions) * 0.05,
+        "unsearched_answer": max(0, unsearched_answers) * 0.10,
+        "wrong_answer": max(0, wrong_answers) * 0.15,
         "no_tool_output": 0.15 if no_tool_output else 0.0,
         "max_steps": 0.15 if max_steps_reached else 0.0,
     }
-    policy_penalty = min(0.75, sum(penalty_components.values()))
+    policy_penalty = sum(penalty_components.values())
     raw_reward = (
-        0.75 * (2.0 * grounded_quality - 1.0)
+        0.65 * (2.0 * grounded_quality - 1.0)
         + 0.15 * active_coverage
+        + 0.10 * search_coverage
         + 0.10 * efficiency
         - 0.10 * passive_coverage
-        - 0.40 * (1.0 - completion_rate)
+        - 0.30 * (1.0 - completion_rate)
         - policy_penalty
     )
-    terminal_reward = min(1.0, max(-1.0, raw_reward)) if reward_valid else 0.0
+    if not math.isfinite(raw_reward):
+        raise UserBenchRewardError("raw reward must be finite")
+    terminal_reward = squash_terminal_reward(raw_reward) if reward_valid else 0.0
     if not math.isfinite(terminal_reward):
         raise UserBenchRewardError("terminal reward must be finite")
 
@@ -260,7 +308,13 @@ def compute_travel_reward(
         "completion_rate": completion_rate,
         "active_preference_coverage": active_coverage,
         "passive_preference_coverage": passive_coverage,
+        "search_coverage": search_coverage,
         "efficiency": efficiency,
+        "environment_steps": environment_steps,
+        "actor_attempts": (
+            None if actor_attempts is None else normalized_actor_attempts
+        ),
+        "effective_steps": effective_steps,
         "policy_penalty": policy_penalty,
         "penalty_components": penalty_components,
         "searched_aspects": sorted(searched),

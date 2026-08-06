@@ -15,15 +15,20 @@ Q_g = mean(q_a * g_a)
 令 `A` 为全局主动偏好覆盖率、`P` 为被动偏好覆盖率、`C` 为已回答维度比例。有效步数预算 `B = 隐藏偏好数 + 2 * 维度数`；在 `B` 步内效率 `E=1`，之后线性衰减，到第 20 步为 0。
 
 ```text
-raw = 0.75 * (2 * Q_g - 1)
+raw = 0.65 * (2 * Q_g - 1)
     + 0.15 * A
+    + 0.10 * search_coverage
     + 0.10 * E
     - 0.10 * P
-    - 0.40 * (1 - C)
+    - 0.30 * (1 - C)
     - policy_penalty
 
-reward = clip(raw, -1, 1)
+terminal_reward = raw if raw >= 0 else -tanh((-raw) / 1.5)
 ```
+
+`policy_penalty` is the uncapped sum of the per-event components. Negative
+terminal rewards use the deterministic temperature `1.5` squash, so finite
+negative raw rewards remain ordered instead of collapsing to `-1.0`.
 
 完整搜索、主动澄清全部相关偏好并选择所有最佳选项时恰好得到 `1.0`。没有搜索和偏好证据的猜测即使碰巧命中，也会得到负分。
 
@@ -33,6 +38,6 @@ reward = clip(raw, -1, 1)
 
 ## 有效性与诊断
 
-包装层从冻结的任务标签和 TravelEnv 内部状态建立证据账本；这些字段不会出现在 Actor observation 中。任务/状态 schema 不匹配、模拟器判断 fallback、响应 fallback 或搜索后端 fallback 会令 `reward_valid=false`，终局分固定为 `0.0`，并在 `reward_breakdown.infrastructure_errors` 中说明原因。抛出的 reset/step/API 异常保持 fail-loud，由 rollout 调度层重试，不转换成可训练失败样本。
+包装层从冻结的任务标签和 TravelEnv 内部状态建立证据账本；这些字段不会出现在 Actor observation 中。任务/状态 schema 不匹配、快照缺失、证据账本无法更新或 reset/step/API 异常会令 `reward_valid=false`，终局分固定为 `0.0`，并在 `reward_breakdown.infrastructure_errors` 中说明原因。若模拟器判断、响应或搜索后端出现 fallback，但前后快照和账本仍完整可验证，则保留 `reward_valid=true`，并通过可选的 `reward_degraded` 与 `simulator_fallback_counts` 记录退化诊断；这类轨迹不是严格 Gold。抛出的 reset/step/API 异常保持 fail-loud，由 rollout 调度层重试，不转换成可训练失败样本。
 
 评测和训练同时记录原始 `step_rewards`、`raw_cumulative_reward`、各维度质量/证据、覆盖率、效率和逐项罚分，以便复算和审计。

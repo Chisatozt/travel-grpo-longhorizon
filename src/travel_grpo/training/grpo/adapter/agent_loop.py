@@ -16,6 +16,7 @@ from travel_grpo.training.grpo.adapter.session import (
     task_id_from_run_kwargs,
 )
 from travel_grpo.training.grpo.compat import require_verl_080
+from travel_grpo.training.grpo.preflight import is_validation_sampling
 from travel_grpo.envs.userbench_tools import (
     TOOL_NAME,
     UserBenchAction,
@@ -36,6 +37,32 @@ def session_requests_termination() -> bool:
     return session is not None and session.done
 
 
+def _parse_bool(value: Any, *, name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    raise ValueError(f"{name} must be a boolean")
+
+
+def _parse_threshold(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ValueError("stall_no_progress_threshold must be an integer >= 1")
+    if isinstance(value, int):
+        threshold = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        threshold = int(value.strip())
+    else:
+        raise ValueError("stall_no_progress_threshold must be an integer >= 1")
+    if threshold < 1:
+        raise ValueError("stall_no_progress_threshold must be an integer >= 1")
+    return threshold
+
+
 def select_post_tool_state(default_state: Any, terminated_state: Any) -> Any:
     return terminated_state if session_requests_termination() else default_state
 
@@ -50,14 +77,27 @@ def reject_parallel_tool_calls(state: Any) -> bool:
     session.invalid_actions += 1
     session.parallel_tool_calls = True
     session.protocol_error = "parallel_tool_calls"
-    session.termination_reason = "parallel_tool_calls"
     session.terminated = True
+    if session.answer_only_pending:
+        session.hard_stop_stalled()
+    else:
+        session.termination_reason = "parallel_tool_calls"
     return True
 
 
 def finalize_actor_stop(session: Any) -> None:
     """Classify a rollout that returned without an environment terminal step."""
 
+    if (
+        not session.done
+        and not getattr(session, "infrastructure_errors", ())
+        and (
+            getattr(session, "answer_only_pending", False)
+            or getattr(session, "answer_only_generation_started", False)
+        )
+    ):
+        session.hard_stop_stalled()
+        return
     if session.num_tool_calls == 0 and session.protocol_error is None:
         session.invalid_actions += 1
         session.protocol_error = "no_tool_output"
@@ -75,11 +115,19 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         environment_config_path: str | Path = "configs/interaction_config/userbench.yaml",
         simulator_config_path: str | Path = "configs/interaction_config/simulator_train.yaml",
         max_steps: int = 20,
+        stall_recovery_enabled: bool | str = False,
+        stall_no_progress_threshold: int | str = 4,
         **kwargs: Any,
     ) -> None:
         require_verl_080()
         if int(max_steps) != 20:
             raise ValueError("the UserBench rollout contract requires max_steps=20")
+        self.stall_recovery_enabled = _parse_bool(
+            stall_recovery_enabled, name="stall_recovery_enabled"
+        )
+        self.stall_no_progress_threshold = _parse_threshold(
+            stall_no_progress_threshold
+        )
         super().__init__(*args, **kwargs)
         self.userbench_runtime = UserBenchRolloutRuntime.from_config_files(
             environment_config_path, simulator_config_path
@@ -97,7 +145,16 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         session = get_current_session()
         if session is None:
             raise RuntimeError("Actor generation has no active UserBench session")
+        if self.stall_recovery_enabled:
+            session.configure_stall_recovery(
+                enabled=not is_validation_sampling(sampling_params),
+                threshold=self.stall_no_progress_threshold,
+            )
         session.actor_attempts += 1
+        if session.answer_only_pending:
+            session.begin_answer_only_generation()
+            if session.done:
+                return AgentState.TERMINATED
         return await super()._handle_generating_state(
             state, sampling_params, ignore_termination=ignore_termination
         )
@@ -113,8 +170,13 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         name = getattr(tool_call, "name", None)
         if name != TOOL_NAME:
             session.invalid_actions += 1
+            session.record_non_progress("unknown_tool")
             return (
-                ToolResponse(text=f"Error: unsupported tool {name!r}; use {TOOL_NAME}."),
+                ToolResponse(
+                    text=session.append_recovery_instruction(
+                        f"Error: unsupported tool {name!r}; use {TOOL_NAME}."
+                    )
+                ),
                 0.0,
                 {"validation_error": "unknown_tool"},
             )
@@ -126,8 +188,13 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
             UserBenchAction.from_parameters(parameters)
         except (json.JSONDecodeError, UserBenchActionError) as exc:
             session.invalid_actions += 1
+            session.record_non_progress("malformed_tool_call")
             return (
-                ToolResponse(text=f"Error: invalid {TOOL_NAME} call: {exc}"),
+                ToolResponse(
+                    text=session.append_recovery_instruction(
+                        f"Error: invalid {TOOL_NAME} call: {exc}"
+                    )
+                ),
                 0.0,
                 {"validation_error": str(exc)},
             )
@@ -137,6 +204,11 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         task_id = task_id_from_run_kwargs(kwargs)
         session = await self.userbench_runtime.astart_session(task_id)
         try:
+            if self.stall_recovery_enabled:
+                session.configure_stall_recovery(
+                    enabled=not is_validation_sampling(sampling_params),
+                    threshold=self.stall_no_progress_threshold,
+                )
             output = await super().run(sampling_params, **kwargs)
             finalize_actor_stop(session)
             reward = session.reward_report()
@@ -181,6 +253,14 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                     reward.get("simulator_fallback_counts", {})
                 ),
                 "termination_reason": session.termination_reason,
+                "stall_recovery_enabled": session.stall_recovery_enabled,
+                "stall_recovery_triggered": session.stall_recovery_triggered,
+                "stall_recovery_used": session.stall_recovery_used,
+                "stall_hard_truncated": session.stall_hard_truncated,
+                "consecutive_no_progress": session.consecutive_no_progress,
+                "max_consecutive_no_progress": session.max_consecutive_no_progress,
+                "answer_only_generation_started": session.answer_only_generation_started,
+                "visible_answer_option_count": len(session.visible_answer_options),
             }
             return output
         finally:

@@ -14,6 +14,7 @@ from travel_grpo.envs.userbench_context import (
     set_current_session,
     validate_embedded_userbench,
 )
+from travel_grpo.envs.userbench_tools import UserBenchAction
 from travel_grpo.envs.userbench_interaction import (
     SimulatorBoundaryError,
     SimulatorRole,
@@ -29,6 +30,55 @@ class CloseOnlyWrapper:
 
     def close(self):
         self.closed = True
+
+
+def _stall_state(*, threshold=2, aspects=("hotel",)):
+    preferences = {
+        aspect: frozenset({f"P{index}"})
+        for index, aspect in enumerate(aspects, start=1)
+    }
+    task = TravelRewardTask(
+        task_id="stall-task",
+        aspects=tuple(aspects),
+        best_ids={aspect: f"{aspect[0].upper()}1" for aspect in aspects},
+        correct_ids={
+            aspect: frozenset({f"{aspect[0].upper()}1", f"{aspect[0].upper()}2"})
+            for aspect in aspects
+        },
+        preference_ids_by_aspect=preferences,
+    )
+    before = UserBenchRewardSnapshot(
+        frozenset().union(*preferences.values()),
+        0,
+        0,
+        frozenset(aspects),
+        frozenset(),
+    )
+    state = UserBenchSessionState(
+        "stall-request",
+        "stall-task",
+        CloseOnlyWrapper(),
+        reward_task=task,
+        reward_snapshot=before,
+        stall_recovery_enabled=True,
+        stall_no_progress_threshold=threshold,
+    )
+    return state, before
+
+
+def _step(state, snapshot, *, action=None, feedback="no change", step=1):
+    state.record_step(
+        UserBenchStepResult(
+            state.task_id,
+            UserBenchObservation(feedback, step, False, 0.0, {}),
+            0.0,
+            False,
+            False,
+            {},
+        ),
+        action,
+        snapshot,
+    )
 
 
 def test_embedded_source_commit_and_license_are_pinned():
@@ -203,3 +253,139 @@ def test_fallback_with_missing_snapshot_is_hard_invalid():
     assert report["terminal_reward"] == 0.0
     assert report["reward_degraded"] is False
     assert "missing_reward_evidence" in report["infrastructure_errors"]
+
+
+def test_progress_from_preference_search_and_answer_resets_streak():
+    preference_state, before = _stall_state()
+    preference_after = UserBenchRewardSnapshot(
+        frozenset(), 1, 0, before.remaining_search_aspects, frozenset()
+    )
+    _step(
+        preference_state,
+        preference_after,
+        action=UserBenchAction.from_parameters(
+            {"thought": "ask", "choice": "action", "content": "hotel name"}
+        ),
+    )
+    assert preference_state.consecutive_no_progress == 0
+
+    search_state, search_before = _stall_state()
+    search_after = UserBenchRewardSnapshot(
+        search_before.remaining_preference_ids,
+        0,
+        0,
+        frozenset(),
+        frozenset(),
+    )
+    _step(
+        search_state,
+        search_after,
+        action=UserBenchAction.from_parameters(
+            {"thought": "search", "choice": "search", "content": "hotel"}
+        ),
+        feedback="Search results: H1 and H2",
+    )
+    assert search_state.consecutive_no_progress == 0
+    assert search_state.visible_answer_options == {"H1", "H2"}
+
+    answer_state, answer_before = _stall_state()
+    answer_after = UserBenchRewardSnapshot(
+        answer_before.remaining_preference_ids,
+        0,
+        0,
+        answer_before.remaining_search_aspects,
+        frozenset({"H"}),
+    )
+    _step(
+        answer_state,
+        answer_after,
+        action=UserBenchAction.from_parameters(
+            {"thought": "answer", "choice": "answer", "content": "H1"}
+        ),
+    )
+    assert answer_state.answers == {"hotel": "H1"}
+    assert answer_state.consecutive_no_progress == 0
+
+
+def test_no_progress_and_invalid_protocol_events_increment_streak():
+    state, before = _stall_state(threshold=3)
+    for step in range(1, 3):
+        _step(
+            state,
+            before,
+            action=UserBenchAction.from_parameters(
+                {"thought": "repeat", "choice": "search", "content": "hotel"}
+            ),
+            step=step,
+        )
+    state.record_non_progress("malformed_tool_call")
+    assert state.consecutive_no_progress == 3
+    assert state.max_consecutive_no_progress == 3
+    assert state.terminated is True
+    assert state.truncated is False
+    assert state.termination_reason == "stalled_no_progress"
+
+
+def test_stall_without_visible_answer_evidence_hard_cuts_valid_reward():
+    state, before = _stall_state(threshold=2)
+    _step(state, before, step=1)
+    _step(state, before, step=2)
+    assert state.terminated is True
+    assert state.truncated is False
+    assert state.termination_reason == "stalled_no_progress"
+    report = state.reward_report()
+    assert report["reward_valid"] is True
+    assert report["terminal_reward"] != 0.0
+    assert report["penalty_components"]["max_steps"] == 0.0
+
+
+def test_stall_with_visible_options_enters_one_recovery_pending_state():
+    state, before = _stall_state(threshold=2)
+    searched = UserBenchRewardSnapshot(
+        before.remaining_preference_ids,
+        0,
+        0,
+        frozenset(),
+        frozenset(),
+    )
+    _step(
+        state,
+        searched,
+        action=UserBenchAction.from_parameters(
+            {"thought": "search", "choice": "search", "content": "hotel"}
+        ),
+        feedback="H1 H2 H3",
+    )
+    _step(state, searched, step=2)
+    _step(state, searched, step=3)
+    assert state.stall_recovery_triggered is True
+    assert state.answer_only_pending is True
+    assert state.terminated is False
+    assert state.visible_answer_options == {"H1", "H2", "H3"}
+
+
+def test_infrastructure_invalid_does_not_become_stall():
+    state, _ = _stall_state(threshold=1)
+    _step(state, None)
+    assert state.infrastructure_errors == ["missing_reward_evidence"]
+    assert state.termination_reason is None
+    assert state.stall_recovery_triggered is False
+
+
+def test_feature_off_keeps_no_progress_control_flow_unchanged():
+    state, before = _stall_state(threshold=1)
+    state.configure_stall_recovery(enabled=False, threshold=1)
+    _step(state, before)
+    state.record_non_progress("invalid_tool_call")
+    assert state.done is False
+    assert state.consecutive_no_progress == 0
+    assert state.stall_recovery_triggered is False
+
+
+def test_second_stall_after_recovery_use_hard_cuts_without_retry():
+    state, before = _stall_state(threshold=2)
+    state.stall_recovery_used = True
+    _step(state, before, step=1)
+    _step(state, before, step=2)
+    assert state.termination_reason == "stalled_no_progress"
+    assert state.stall_hard_truncated is True

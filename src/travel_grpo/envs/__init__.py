@@ -12,6 +12,7 @@ from travel_grpo.envs.userbench_tools import (
     ActionChoice,
     UserBenchAction,
     UserBenchActionError,
+    extract_visible_option_ids,
     get_interact_with_env_schema,
 )
 from travel_grpo.envs.userbench_wrapper import (
@@ -36,5 +37,6 @@ __all__ = [
     "UserBenchWrapper",
     "UserSimulatorRuntime",
     "bind_user_simulator_process",
+    "extract_visible_option_ids",
     "get_interact_with_env_schema",
 ]

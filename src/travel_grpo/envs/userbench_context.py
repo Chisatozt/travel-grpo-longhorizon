@@ -19,9 +19,11 @@ from travel_grpo.envs.reward import (
 )
 from travel_grpo.envs.userbench_tools import (
     ActionChoice,
+    OPTION_ID,
     UserBenchAction,
     action_query_issue,
     aspect_from_option_id,
+    extract_visible_option_ids,
     normalized_action_signature,
     semantic_action_signature,
 )
@@ -242,12 +244,167 @@ class UserBenchSessionState:
     infrastructure_errors: list[str] = field(default_factory=list)
     reward_degraded: bool = False
     simulator_fallback_counts: dict[str, int] = field(default_factory=dict)
+    # Runtime-only GRPO training control.  These fields are intentionally not
+    # part of any teacher/SFT/Parquet contract.
+    stall_recovery_enabled: bool = False
+    stall_no_progress_threshold: int = 4
+    consecutive_no_progress: int = 0
+    max_consecutive_no_progress: int = 0
+    stall_recovery_triggered: bool = False
+    stall_recovery_used: bool = False
+    answer_only_pending: bool = False
+    answer_only_generation_started: bool = False
+    stall_hard_truncated: bool = False
+    visible_option_ids_by_aspect: dict[str, set[str]] = field(default_factory=dict)
     _action_signatures: set[str] = field(default_factory=set, repr=False)
     _semantic_signatures: set[tuple[str, str]] = field(default_factory=set, repr=False)
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.stall_no_progress_threshold, bool)
+            or not isinstance(self.stall_no_progress_threshold, int)
+            or self.stall_no_progress_threshold < 1
+        ):
+            raise ValueError("stall_no_progress_threshold must be an integer >= 1")
 
     @property
     def done(self) -> bool:
         return self.terminated or self.truncated
+
+    def configure_stall_recovery(self, *, enabled: bool, threshold: int) -> None:
+        """Set effective per-rollout control after sampling mode is known."""
+
+        if not isinstance(enabled, bool):
+            raise TypeError("stall recovery enabled must be a bool")
+        if isinstance(threshold, bool) or not isinstance(threshold, int) or threshold < 1:
+            raise ValueError("stall recovery threshold must be an integer >= 1")
+        self.stall_recovery_enabled = enabled
+        self.stall_no_progress_threshold = threshold
+
+    @property
+    def visible_answer_options(self) -> set[str]:
+        """Return actor-visible options for aspects not answered yet."""
+
+        return {
+            option_id
+            for aspect, option_ids in self.visible_option_ids_by_aspect.items()
+            if aspect not in self.answers
+            for option_id in option_ids
+        }
+
+    def append_recovery_instruction(self, feedback: str) -> str:
+        """Append only the non-answer-specific recovery instruction."""
+
+        if not self.answer_only_pending:
+            return feedback
+        return f"{feedback}\n\n{self.recovery_instruction()}"
+
+    def validate_answer_only_action(self, action: UserBenchAction) -> str | None:
+        """Return a rejection reason without consulting hidden task labels."""
+
+        if not self.answer_only_pending:
+            return None
+        if action.choice is not ActionChoice.ANSWER:
+            return "answer-only recovery accepts choice=answer only"
+        submitted = [value.strip() for value in action.content.split(",")]
+        if not submitted or any(not OPTION_ID.fullmatch(value) for value in submitted):
+            return "answer-only recovery requires official option IDs"
+        unseen = set(submitted) - self.visible_answer_options
+        if unseen:
+            return "answer-only recovery received an unseen or already answered option"
+        return None
+
+    @staticmethod
+    def recovery_instruction() -> str:
+        return (
+            "Recovery instruction:\n"
+            "You have made no verifiable progress for several consecutive turns.\n"
+            'Your next interact_with_env call must use choice="answer".\n'
+            "Only submit option IDs that were explicitly shown in previous successful\n"
+            "search results for unanswered travel aspects.\n"
+            "Do not search or ask another question."
+        )
+
+    def begin_answer_only_generation(self) -> None:
+        """Consume the one recovery generation opportunity."""
+
+        if not self.answer_only_pending or self.answer_only_generation_started:
+            self.hard_stop_stalled()
+            return
+        self.answer_only_generation_started = True
+
+    def hard_stop_stalled(self) -> None:
+        """End a valid-but-stalled trajectory without marking max steps."""
+
+        self.terminated = True
+        self.truncated = False
+        self.termination_reason = "stalled_no_progress"
+        self.stall_hard_truncated = True
+        self.answer_only_pending = False
+
+    def _stall_evidence_is_valid(self) -> bool:
+        return (
+            _is_complete_reward_task(self.reward_task)
+            and _is_complete_reward_snapshot(self.reward_snapshot)
+            and _snapshot_matches_task(self.reward_task, self.reward_snapshot)
+        )
+
+    def _maybe_trigger_stall(self) -> None:
+        if (
+            not self.stall_recovery_enabled
+            or self.infrastructure_errors
+            or not self._stall_evidence_is_valid()
+            or self.done
+            or self.consecutive_no_progress < self.stall_no_progress_threshold
+        ):
+            return
+        if self.stall_recovery_used or self.stall_recovery_triggered:
+            self.stall_recovery_triggered = True
+            self.hard_stop_stalled()
+            return
+        self.stall_recovery_triggered = True
+        if self.visible_answer_options:
+            self.answer_only_pending = True
+            self.answer_only_generation_started = False
+        else:
+            self.hard_stop_stalled()
+
+    def _record_no_progress(self) -> None:
+        if (
+            not self.stall_recovery_enabled
+            or self.infrastructure_errors
+            or not self._stall_evidence_is_valid()
+            or self.done
+        ):
+            return
+        self.consecutive_no_progress += 1
+        self.max_consecutive_no_progress = max(
+            self.max_consecutive_no_progress,
+            self.consecutive_no_progress,
+        )
+        self._maybe_trigger_stall()
+
+    def record_non_progress(self, reason: str | None = None) -> None:
+        """Account for a trusted protocol event that never reached UserBench."""
+
+        del reason  # The existing protocol/invalid-action diagnostics remain authoritative.
+        if self.infrastructure_errors or not self._stall_evidence_is_valid():
+            return
+        if self.answer_only_pending:
+            self.consecutive_no_progress += 1
+            self.max_consecutive_no_progress = max(
+                self.max_consecutive_no_progress,
+                self.consecutive_no_progress,
+            )
+            self.hard_stop_stalled()
+            return
+        self._record_no_progress()
+
+    def _complete_answer_only_recovery(self) -> None:
+        self.consecutive_no_progress = 0
+        self.answer_only_pending = False
+        self.answer_only_generation_started = False
+        self.stall_recovery_used = True
 
     def record_step(
         self,
@@ -261,6 +418,8 @@ class UserBenchSessionState:
             raise UserBenchSessionError(
                 f"step task ID {result.task_id!r} does not match session {self.task_id!r}"
             )
+        recovery_pending = self.answer_only_pending
+        previous_answers = set(self.answers)
         self.rewards.append(result.reward)
         self.num_tool_calls += 1
         self.terminated = result.terminated
@@ -333,14 +492,18 @@ class UserBenchSessionState:
         passive_candidates = [
             value for value in newly_elicited if value not in set(active_values)
         ]
+        preference_progress = active_delta > 0 or passive_delta > 0
+        newly_searched_aspects = (
+            before.remaining_search_aspects - snapshot.remaining_search_aspects
+        )
+        search_progress = bool(newly_searched_aspects)
         self.active_preference_ids.update(active_values)
         self.passive_preference_ids.update(
             passive_candidates[:passive_delta]
         )
-        self.searched_aspects.update(
-            before.remaining_search_aspects - snapshot.remaining_search_aspects
-        )
+        self.searched_aspects.update(newly_searched_aspects)
 
+        newly_chosen: frozenset[str] = frozenset()
         if action is not None and action.choice is ActionChoice.ANSWER:
             newly_chosen = snapshot.choice_initials - before.choice_initials
             feedback = result.observation.feedback
@@ -359,11 +522,42 @@ class UserBenchSessionState:
                 if option_id not in self.reward_task.correct_ids.get(aspect, frozenset()):
                     self.wrong_answers += 1
 
+        if (
+            self.stall_recovery_enabled
+            and action is not None
+            and action.choice is ActionChoice.SEARCH
+        ):
+            for option_id in extract_visible_option_ids(result.observation.feedback):
+                aspect = aspect_from_option_id(option_id)
+                if aspect is not None:
+                    self.visible_option_ids_by_aspect.setdefault(aspect, set()).add(
+                        option_id
+                    )
+
         if fallback_counts:
             # A pinned simulator fallback is soft degradation only when both
             # snapshots and the evidence-ledger deltas above were valid.
             self.reward_degraded = True
         self.reward_snapshot = snapshot
+
+        answer_progress = bool(newly_chosen) and bool(
+            set(self.answers) - previous_answers
+        )
+        made_progress = preference_progress or search_progress or answer_progress
+        if not self.stall_recovery_enabled or self.infrastructure_errors:
+            return
+        if recovery_pending:
+            if action is not None and action.choice is ActionChoice.ANSWER and answer_progress:
+                self._complete_answer_only_recovery()
+            else:
+                self.hard_stop_stalled()
+            return
+        if self.done:
+            return
+        if made_progress:
+            self.consecutive_no_progress = 0
+        else:
+            self._record_no_progress()
 
     def reward_report(self) -> dict[str, Any]:
         if not _is_complete_reward_task(self.reward_task):
@@ -456,6 +650,14 @@ class UserBenchSessionState:
             "termination_reason": self.termination_reason,
             "reward_degraded": report["reward_degraded"],
             "simulator_fallback_counts": report["simulator_fallback_counts"],
+            "stall_recovery_enabled": self.stall_recovery_enabled,
+            "stall_recovery_triggered": self.stall_recovery_triggered,
+            "stall_recovery_used": self.stall_recovery_used,
+            "stall_hard_truncated": self.stall_hard_truncated,
+            "consecutive_no_progress": self.consecutive_no_progress,
+            "max_consecutive_no_progress": self.max_consecutive_no_progress,
+            "answer_only_generation_started": self.answer_only_generation_started,
+            "visible_answer_option_count": len(self.visible_answer_options),
         }
 
 

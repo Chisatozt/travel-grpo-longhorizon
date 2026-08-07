@@ -16,6 +16,7 @@ from travel_grpo.training.grpo.dynamic_sampling import (
     select_reward_varying_groups,
 )
 from travel_grpo.training.grpo.preflight import run_preflight
+from travel_grpo.training.grpo.preflight import is_validation_sampling
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,6 +55,30 @@ def test_reward_valid_false_is_sampling_invalid():
     assert rewards == [0.0]
     assert invalid == [True]
     assert reasons == [("reward_invalid",)]
+
+
+def test_stalled_valid_trajectory_remains_a_dynamic_sampling_candidate():
+    rewards, invalid, reasons = extract_userbench_group_signals(
+        [
+            {
+                "reward": {
+                    "terminal_reward": 0.2,
+                    "reward_valid": True,
+                    "termination_reason": "stalled_no_progress",
+                }
+            }
+        ]
+    )
+    assert rewards == [0.2]
+    assert invalid == [False]
+    assert reasons == [()]
+
+
+def test_training_and_validation_sampling_profiles_are_disjoint():
+    assert is_validation_sampling(
+        {"temperature": 0.0, "top_p": 1.0, "do_sample": False}
+    ) is True
+    assert is_validation_sampling({"temperature": 0.7, "top_p": 0.9}) is False
 
 
 def test_groups_are_restored_to_original_prompt_order():
@@ -394,6 +419,149 @@ def test_grpo_profile_dry_preflight_is_static_only(tmp_path):
         "strict_runtime": False,
         "runtime": "skipped by dry-run",
     }
+
+
+def test_preflight_rejects_sampling_profile_drift(tmp_path):
+    yaml = pytest.importorskip("yaml")
+    profile = yaml.safe_load((ROOT / "configs/train/grpo/grpo.yaml").read_text(encoding="utf-8"))
+    profile["rollout"]["temperature"] = 0.0
+    with pytest.raises(RuntimeError, match="sampling profile classification failed"):
+        run_preflight(
+            profile,
+            project_root=ROOT,
+            output_dir=tmp_path / "drift-output",
+            resume=False,
+            strict_runtime=False,
+            environ={},
+        )
+
+
+@pytest.mark.parametrize(
+    "flags, enabled",
+    [
+        (["--no-stall-recovery"], False),
+        (["--stall-recovery", "--stall-threshold", "4"], True),
+    ],
+)
+def test_grpo_dry_run_exposes_stall_configuration(tmp_path, flags, enabled):
+    command = [
+        sys.executable,
+        str(ROOT / "scripts/train/grpo/train_grpo.py"),
+        "--config",
+        "configs/train/grpo/grpo.yaml",
+        "--dry-run",
+        *flags,
+        "--output",
+        str(tmp_path / ("enabled" if enabled else "disabled")),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert completed.returncode == 0, completed.stderr
+    document = json.loads(completed.stdout)
+    assert document["preflight"]["static_contract"] == "ok"
+    assert document["stall_recovery"] == {"enabled": enabled, "threshold": 4}
+    assert document["agent_loop_env"] == {
+        "TRAVEL_GRPO_STALL_RECOVERY": "true" if enabled else "false",
+        "TRAVEL_GRPO_STALL_THRESHOLD": "4",
+    }
+
+
+def _write_fake_sft_adapter(path: Path) -> None:
+    path.mkdir()
+    (path / "adapter_config.json").write_text("{}", encoding="utf-8")
+    (path / "adapter_model.safetensors").write_bytes(b"dry-run placeholder")
+
+
+def test_grpo_from_sft_dry_run_chains_merge_data_and_training(tmp_path):
+    adapter = tmp_path / "stage2-adapter"
+    _write_fake_sft_adapter(adapter)
+    script = ROOT / "scripts/train/grpo/run_grpo_from_sft.py"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--sft-adapter",
+            str(adapter),
+            "--merged-model",
+            str(tmp_path / "merged"),
+            "--data-output",
+            str(tmp_path / "grpo-data"),
+            "--output",
+            str(tmp_path / "grpo-output"),
+            "--dry-run",
+            "--stall-recovery",
+            "--stall-threshold",
+            "5",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert "merge_lora.py" in completed.stdout
+    assert "prepare_data.py" in completed.stdout
+    assert "train_grpo.py" in completed.stdout
+    assert '"status": "dry-run"' in completed.stdout
+    assert '"enabled": true' in completed.stdout
+    assert '"threshold": 5' in completed.stdout
+    assert not (tmp_path / "merged").exists()
+    assert not (tmp_path / "grpo-data").exists()
+
+
+def test_grpo_from_sft_rejects_missing_adapter_before_any_write(tmp_path):
+    script = ROOT / "scripts/train/grpo/run_grpo_from_sft.py"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--sft-adapter",
+            str(tmp_path / "not-generated-yet"),
+            "--merged-model",
+            str(tmp_path / "merged"),
+            "--data-output",
+            str(tmp_path / "grpo-data"),
+            "--dry-run",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 2
+    assert "not generated yet" in completed.stderr
+    assert not (tmp_path / "merged").exists()
+    assert not (tmp_path / "grpo-data").exists()
+
+
+def test_grpo_dry_run_accepts_custom_model_and_data_paths(tmp_path):
+    data_output = tmp_path / "prepared-data"
+    model_path = tmp_path / "merged-model"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/train/grpo/train_grpo.py"),
+            "--config",
+            "configs/train/grpo/grpo.yaml",
+            "--model-path",
+            str(model_path),
+            "--data-output",
+            str(data_output),
+            "--dry-run",
+            "--output",
+            str(tmp_path / "run"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    document = json.loads(completed.stdout)
+    assert (
+        f"data.train_files=['{data_output.resolve() / 'train.parquet'}']"
+        in document["command"]
+    )
+    assert (
+        f"actor_rollout_ref.model.path={model_path.resolve()}"
+        in document["command"]
+    )
 
 
 def test_verl_data_has_no_hidden_labels():

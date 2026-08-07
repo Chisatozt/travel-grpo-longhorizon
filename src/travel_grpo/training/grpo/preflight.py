@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import importlib.metadata
-import json
+import math
 import os
 import platform
 import sys
@@ -34,6 +34,68 @@ def _check(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def _sampling_value(sampling_params: Mapping[str, Any], name: str) -> Any:
+    if isinstance(sampling_params, Mapping):
+        return sampling_params.get(name)
+    return getattr(sampling_params, name, None)
+
+
+def _sampling_float(sampling_params: Mapping[str, Any], name: str) -> float:
+    raw = _sampling_value(sampling_params, name)
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"sampling profile is missing numeric {name}") from exc
+    if not math.isfinite(value):
+        raise ValueError(f"sampling profile {name} must be finite")
+    return value
+
+
+def _sampling_profile(sampling_params: Mapping[str, Any]) -> str:
+    """Classify only the pinned training and validation sampling profiles."""
+
+    temperature = _sampling_float(sampling_params, "temperature")
+    top_p = _sampling_float(sampling_params, "top_p")
+    do_sample = _sampling_value(sampling_params, "do_sample")
+    if do_sample is not None and not isinstance(do_sample, bool):
+        raise ValueError("sampling profile do_sample must be a boolean when present")
+    if temperature == 0.0 and top_p == 1.0:
+        if do_sample is not None and do_sample is not False:
+            raise ValueError("validation sampling must set do_sample=false")
+        return "validation"
+    if temperature == 0.7 and top_p == 0.9:
+        return "training"
+    raise ValueError(
+        "sampling profile is neither the pinned GRPO training profile "
+        "(temperature=0.7, top_p=0.9) nor validation profile "
+        "(temperature=0.0, top_p=1.0, do_sample=false)"
+    )
+
+
+def is_validation_sampling(sampling_params: Mapping[str, Any]) -> bool:
+    """Return whether a rollout uses the pinned deterministic validation profile."""
+
+    return _sampling_profile(sampling_params) == "validation"
+
+
+def validate_sampling_profiles(
+    training_sampling: Mapping[str, Any],
+    validation_sampling: Mapping[str, Any],
+) -> None:
+    """Fail loudly if the two fixed profiles stop being distinguishable."""
+
+    try:
+        training_profile = _sampling_profile(training_sampling)
+        validation_profile = _sampling_profile(validation_sampling)
+    except ValueError as exc:
+        raise RuntimeError(f"GRPO sampling profile classification failed: {exc}") from exc
+    _check(training_profile == "training", "GRPO training sampling profile drifted")
+    _check(
+        validation_profile == "validation",
+        "GRPO validation sampling profile drifted or is not deterministic",
+    )
+
+
 def _complete_model(path: Path) -> None:
     _check(path.is_dir(), f"merged SFT model directory is missing: {path}")
     _check((path / "config.json").is_file(), f"model config.json is missing: {path}")
@@ -62,12 +124,23 @@ def run_preflight(
     resume: bool,
     strict_runtime: bool,
     environ: Mapping[str, str] | None = None,
+    stall_threshold: int = 4,
+    data_output_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Validate the training contract; strict mode is used only for real runs."""
 
     env = os.environ if environ is None else environ
     data = profile["data"]
     rollout = profile["rollout"]
+    if isinstance(stall_threshold, bool) or int(stall_threshold) < 1:
+        raise RuntimeError("stall threshold must be an integer >= 1")
+    validate_sampling_profiles(
+        {
+            "temperature": rollout["temperature"],
+            "top_p": rollout["top_p"],
+        },
+        profile["validation"],
+    )
     _check(profile.get("profile_version") == "travel-grpo-verl08-v1", "unknown GRPO profile version")
     _check(int(data["train_batch_size"]) == 2 and int(data["val_batch_size"]) == 2, "GRPO batch sizes must be 2/2")
     _check(int(rollout["n"]) == 4 and int(rollout["max_parallel_calls"]) == 1, "rollout must use n=4 and one tool call")
@@ -106,7 +179,9 @@ def run_preflight(
     _complete_model(model_path)
     source = validate_embedded_userbench(project_root / "environments/UserBench")
     _check(not any(source.root.rglob(".git")), "embedded UserBench contains a nested .git")
-    verify_verl_datasets(project_root / "outputs/grpo/data")
+    verify_verl_datasets(
+        (data_output_dir or (project_root / "outputs/grpo/data")).resolve()
+    )
     _simulator_environment(env)
     from travel_grpo.training.grpo.compat import (
         require_verl_080,

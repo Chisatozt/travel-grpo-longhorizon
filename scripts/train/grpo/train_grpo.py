@@ -95,15 +95,49 @@ def hydra_overrides(profile: dict[str, Any], output: Path, resume: bool, logger:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument(
+        "--model-path",
+        type=Path,
+        help="override the local merged model path from the GRPO profile",
+    )
+    parser.add_argument(
+        "--data-output",
+        type=Path,
+        help="override the prepared GRPO data directory from the profile",
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--logger", choices=("console", "swanlab"), default="console")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--stall-recovery",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument("--stall-threshold", type=int, default=4)
     parser.add_argument("overrides", nargs="*")
     args = parser.parse_args()
+    if args.stall_threshold < 1:
+        parser.error("--stall-threshold must be >= 1")
     profile = load_profile((ROOT / args.config).resolve() if not args.config.is_absolute() else args.config)
+    if args.model_path is not None:
+        profile["model_path"] = str(args.model_path.expanduser().resolve())
+    data_output = None
+    if args.data_output is not None:
+        data_output = args.data_output.expanduser().resolve()
+        profile["data"] = dict(profile["data"])
+        profile["data"]["train_files"] = str(data_output / "train.parquet")
+        profile["data"]["val_files"] = str(data_output / "validation.parquet")
     output = (ROOT / (args.output or Path(profile["output_dir"]))).resolve()
-    report = run_preflight(profile, project_root=ROOT, output_dir=output, resume=args.resume, strict_runtime=not args.dry_run)
+    report = run_preflight(
+        profile,
+        project_root=ROOT,
+        output_dir=output,
+        resume=args.resume,
+        strict_runtime=not args.dry_run,
+        stall_threshold=args.stall_threshold,
+        data_output_dir=data_output,
+    )
     if not args.dry_run and args.logger == "swanlab":
         try:
             __import__("swanlab")
@@ -112,11 +146,40 @@ def main() -> int:
                 "SwanLab logging is optional; install `pip install -e .[logging]`"
             ) from exc
     command = [sys.executable, "-m", "verl.trainer.main_ppo", *hydra_overrides(profile, output, args.resume, args.logger), *args.overrides]
+    launch_env = {
+        **os.environ,
+        "PYTHONPATH": str(SRC),
+        "TRAVEL_GRPO_STALL_RECOVERY": (
+            "true" if args.stall_recovery else "false"
+        ),
+        "TRAVEL_GRPO_STALL_THRESHOLD": str(args.stall_threshold),
+    }
     if args.dry_run:
-        print(json.dumps({"valid": True, "preflight": report, "command": command}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "valid": True,
+                    "preflight": report,
+                    "command": command,
+                    "stall_recovery": {
+                        "enabled": args.stall_recovery,
+                        "threshold": args.stall_threshold,
+                    },
+                    "agent_loop_env": {
+                        "TRAVEL_GRPO_STALL_RECOVERY": launch_env[
+                            "TRAVEL_GRPO_STALL_RECOVERY"
+                        ],
+                        "TRAVEL_GRPO_STALL_THRESHOLD": launch_env[
+                            "TRAVEL_GRPO_STALL_THRESHOLD"
+                        ],
+                    },
+                },
+                indent=2,
+            )
+        )
         return 0
     output.mkdir(parents=True, exist_ok=True)
-    return subprocess.call(command, cwd=ROOT, env={**os.environ, "PYTHONPATH": str(SRC)})
+    return subprocess.call(command, cwd=ROOT, env=launch_env)
 
 
 if __name__ == "__main__":

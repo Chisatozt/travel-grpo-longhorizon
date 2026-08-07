@@ -35,6 +35,27 @@ class UserBenchToolExecution:
     metadata: dict[str, Any]
 
 
+def _rejected_tool_execution(
+    session: Any,
+    message: str,
+    *,
+    reason: str,
+) -> UserBenchToolExecution:
+    """Return an actor-visible error without touching the environment."""
+
+    session.invalid_actions += 1
+    session.record_non_progress(reason)
+    return UserBenchToolExecution(
+        text=session.append_recovery_instruction(f"Error: {message}"),
+        reward=0.0,
+        metadata={
+            "validation_error": message,
+            "task_id": session.task_id,
+            "environment_executed": False,
+        },
+    )
+
+
 async def execute_userbench_action(
     parameters: Mapping[str, Any],
 ) -> UserBenchToolExecution:
@@ -48,11 +69,18 @@ async def execute_userbench_action(
     try:
         action = UserBenchAction.from_parameters(parameters)
     except UserBenchActionError as exc:
-        session.invalid_actions += 1
-        return UserBenchToolExecution(
-            text=f"Error: invalid {TOOL_NAME} call: {exc}",
-            reward=0.0,
-            metadata={"validation_error": str(exc), "task_id": session.task_id},
+        return _rejected_tool_execution(
+            session,
+            f"invalid {TOOL_NAME} call: {exc}",
+            reason="invalid_tool_call",
+        )
+
+    recovery_error = session.validate_answer_only_action(action)
+    if recovery_error is not None:
+        return _rejected_tool_execution(
+            session,
+            recovery_error,
+            reason="answer_only_violation",
         )
 
     try:
@@ -92,8 +120,9 @@ async def execute_userbench_action(
         snapshot = None
     session.record_step(result, action, snapshot)
     report = session.reward_report()
+    feedback = session.append_recovery_instruction(result.observation.to_tool_text())
     return UserBenchToolExecution(
-        text=result.observation.to_tool_text(),
+        text=feedback,
         reward=0.0,
         metadata={
             "task_id": session.task_id,

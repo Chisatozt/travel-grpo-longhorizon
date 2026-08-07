@@ -13,6 +13,7 @@ TOOL_NAME = "interact_with_env"
 _REQUIRED_PARAMETERS = frozenset({"thought", "choice", "content"})
 _ACTION_PREFIX = re.compile(r"^\[(search|action|answer|finish)\]\s*", re.IGNORECASE)
 OPTION_ID = re.compile(r"^[ACFHR]\d+$")
+_VISIBLE_OPTION_ID = re.compile(r"(?<![A-Za-z0-9])([ACFHR]\d+)(?![A-Za-z0-9])")
 ASPECT_BY_OPTION_PREFIX = {
     "F": "flight",
     "H": "hotel",
@@ -428,3 +429,20 @@ def aspect_from_option_id(option_id: object) -> str | None:
     if not isinstance(option_id, str) or not OPTION_ID.fullmatch(option_id.strip()):
         return None
     return ASPECT_BY_OPTION_PREFIX.get(option_id.strip()[0])
+
+
+def extract_visible_option_ids(feedback: str) -> set[str]:
+    """Extract only official option IDs literally present in actor-visible text.
+
+    This helper deliberately has no access to task labels or reward state.  The
+    boundary checks prevent IDs embedded in arbitrary alphanumeric strings from
+    being treated as evidence.
+    """
+
+    if not isinstance(feedback, str):
+        return set()
+    return {
+        option_id
+        for match in _VISIBLE_OPTION_ID.finditer(feedback)
+        if (option_id := match.group(1)) and OPTION_ID.fullmatch(option_id)
+    }

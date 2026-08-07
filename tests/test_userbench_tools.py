@@ -10,6 +10,7 @@ from travel_grpo.envs.userbench_tools import (
     UserBenchActionError,
     action_field_matches,
     action_query_issue,
+    extract_visible_option_ids,
     get_interact_with_env_schema,
 )
 
@@ -117,3 +118,9 @@ def test_delivery_is_a_restaurant_tags_question():
     assert action_field_matches(
         "Would restaurant delivery be important for you?", ("restaurant",)
     ) == {("restaurant", "tags")}
+
+
+def test_visible_option_extraction_uses_official_boundaries_only():
+    assert extract_visible_option_ids(
+        "Results: H1, H2, C3 and R4. Ignore xH9 and H4A."
+    ) == {"H1", "H2", "C3", "R4"}

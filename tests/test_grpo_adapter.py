@@ -50,6 +50,43 @@ class FakeWrapper:
         self.closed = True
 
 
+def _recovery_session(*, answered_aspect=False):
+    task = TravelRewardTask(
+        "recovery-task",
+        ("hotel",),
+        {"hotel": "H2"},
+        {"hotel": frozenset({"H2"})},
+        {"hotel": frozenset({"P1"})},
+    )
+    before = UserBenchRewardSnapshot(
+        frozenset({"P1"}), 0, 0, frozenset({"hotel"}), frozenset()
+    )
+    after = UserBenchRewardSnapshot(
+        frozenset({"P1"}), 0, 0, frozenset({"hotel"}), frozenset({"H"})
+    )
+    observation = UserBenchObservation("accepted", 1, False, 0.0, {})
+    wrapper = FakeWrapper(
+        "recovery-task",
+        UserBenchStepResult("recovery-task", observation, 0.0, False, False, {}),
+        after,
+    )
+    session = UserBenchSessionState(
+        "recovery-request",
+        "recovery-task",
+        wrapper,
+        reward_task=task,
+        reward_snapshot=before,
+        stall_recovery_enabled=True,
+        stall_no_progress_threshold=2,
+    )
+    session.visible_option_ids_by_aspect = {"hotel": {"H1", "H2"}}
+    session.answer_only_pending = True
+    session.answer_only_generation_started = True
+    if answered_aspect:
+        session.answers = {"hotel": "H2"}
+    return session, wrapper
+
+
 def test_rollout_extra_info_duplicates_and_validates_task_id():
     extra = build_rollout_extra_info("task-7")
     assert validate_rollout_extra_info(extra) == "task-7"
@@ -148,6 +185,86 @@ def test_no_tool_output_is_a_penalized_protocol_error():
     assert session.invalid_actions == 1
 
 
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {"thought": "search", "choice": "search", "content": "hotel"},
+        {"thought": "ask", "choice": "action", "content": "hotel name"},
+        {"thought": "answer", "choice": "answer", "content": "H99"},
+        {"thought": "answer", "choice": "answer", "content": "H1,,H2"},
+        {"thought": "answer", "choice": "answer"},
+    ],
+)
+def test_answer_only_recovery_rejects_without_environment_step(parameters):
+    async def scenario():
+        session, wrapper = _recovery_session()
+        set_current_session(session)
+        try:
+            result = await execute_userbench_action(parameters)
+            assert result.metadata["environment_executed"] is False
+            assert wrapper.calls == 0
+            assert session.termination_reason == "stalled_no_progress"
+            assert session.truncated is False
+        finally:
+            clear_current_session()
+
+    asyncio.run(scenario())
+
+
+def test_visible_but_wrong_answer_is_executed_and_recovery_succeeds():
+    async def scenario():
+        session, wrapper = _recovery_session()
+        set_current_session(session)
+        try:
+            result = await execute_userbench_action(
+                {"thought": "choose", "choice": "answer", "content": "H1"}
+            )
+            assert result.text == "accepted"
+            assert wrapper.calls == 1
+            assert session.answers == {"hotel": "H1"}
+            assert session.wrong_answers == 1
+            assert session.answer_only_pending is False
+            assert session.answer_only_generation_started is False
+            assert session.stall_recovery_used is True
+            assert session.consecutive_no_progress == 0
+            assert session.done is False
+            await execute_userbench_action(
+                {"thought": "continue", "choice": "search", "content": "rental car"}
+            )
+            assert wrapper.calls == 2
+            assert session.done is False
+        finally:
+            clear_current_session()
+
+    asyncio.run(scenario())
+
+
+def test_answer_only_rejects_an_already_answered_aspect():
+    async def scenario():
+        session, wrapper = _recovery_session(answered_aspect=True)
+        set_current_session(session)
+        try:
+            await execute_userbench_action(
+                {"thought": "repeat", "choice": "answer", "content": "H1"}
+            )
+            assert wrapper.calls == 0
+            assert session.termination_reason == "stalled_no_progress"
+        finally:
+            clear_current_session()
+
+    asyncio.run(scenario())
+
+
+def test_recovery_generation_cannot_be_started_twice():
+    session, _ = _recovery_session()
+    session.answer_only_generation_started = False
+    session.begin_answer_only_generation()
+    assert session.answer_only_generation_started is True
+    session.begin_answer_only_generation()
+    assert session.termination_reason == "stalled_no_progress"
+    assert session.truncated is False
+
+
 def test_verl_yaml_paths_and_simulator_roles_are_consistent():
     config_root = ROOT / "configs"
     grpo = yaml.safe_load(
@@ -179,6 +296,8 @@ def test_verl_yaml_paths_and_simulator_roles_are_consistent():
     )[0]
     module_name, class_name = loop["_target_"].rsplit(".", 1)
     assert hasattr(importlib.import_module(module_name), class_name)
+    assert loop["stall_recovery_enabled"] == "${oc.env:TRAVEL_GRPO_STALL_RECOVERY,false}"
+    assert loop["stall_no_progress_threshold"] == "${oc.env:TRAVEL_GRPO_STALL_THRESHOLD,4}"
 
     train = yaml.safe_load(
         (config_root / "interaction_config/simulator_train.yaml").read_text(

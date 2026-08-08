@@ -12,6 +12,14 @@ VERL_INSTALL_HINT = (
     "run `bash scripts/setup.sh` on the supported Linux Python 3.12 runtime"
 )
 VERL_TRAINER_PATCHED_SHA256 = "84C334738B82ABA8B57A2D735DD0C17CC48C6D5852247E12546CBC7987C7DC36"
+# Ray resolves this dotted path in every worker process created for the GRPO
+# job.  Keep it in the project-owned compatibility boundary so the launch
+# script cannot accidentally point at an external veRL implementation.
+TORCH_PADDING_WORKER_SETUP_HOOK = (
+    "travel_grpo.training.grpo.compat.install_torch_padding_fallback"
+)
+
+_TORCH_PADDING_FALLBACK_INSTALLED = False
 
 
 class VerlCompatibilityError(RuntimeError):
@@ -60,8 +68,30 @@ def install_torch_padding_fallback() -> None:
     process setup configuration.
     """
 
+    global _TORCH_PADDING_FALLBACK_INSTALLED
+    if _TORCH_PADDING_FALLBACK_INSTALLED:
+        return
+
     require_verl_080()
     from verl.utils import attention_utils
+
+    # Keep the pinned baseline unchanged when a working FlashAttention
+    # installation is available.  The fallback is only for environments such
+    # as the supported cu130 image where flash-attn is intentionally absent (or
+    # cannot be imported because its compiled extension is incompatible).
+    try:
+        from flash_attn.bert_padding import (  # noqa: F401
+            index_first_axis,
+            pad_input,
+            rearrange,
+            unpad_input,
+        )
+    except (ImportError, ModuleNotFoundError, OSError):
+        pass
+    else:
+        _TORCH_PADDING_FALLBACK_INSTALLED = True
+        return
+
     from verl.utils import npu_flash_attn_utils as fallback
 
     functions = (
@@ -71,3 +101,4 @@ def install_torch_padding_fallback() -> None:
         fallback.unpad_input,
     )
     attention_utils._get_attention_functions = lambda: functions
+    _TORCH_PADDING_FALLBACK_INSTALLED = True

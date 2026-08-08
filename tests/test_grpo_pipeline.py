@@ -15,11 +15,82 @@ from travel_grpo.training.grpo.dynamic_sampling import (
     install_verl_bounded_sampler,
     select_reward_varying_groups,
 )
+from travel_grpo.training.grpo import compat
+from travel_grpo.training.grpo.compat import TORCH_PADDING_WORKER_SETUP_HOOK
 from travel_grpo.training.grpo.preflight import run_preflight
 from travel_grpo.training.grpo.preflight import is_validation_sampling
 from travel_grpo.training.grpo.preflight import PINNED
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _fake_verl_padding_modules():
+    attention_utils = types.ModuleType("verl.utils.attention_utils")
+    original_get_functions = lambda: ("original",)
+    attention_utils._get_attention_functions = original_get_functions
+    fallback = types.ModuleType("verl.utils.npu_flash_attn_utils")
+    fallback_functions = tuple(object() for _ in range(4))
+    for name, function in zip(
+        ("index_first_axis", "pad_input", "rearrange", "unpad_input"),
+        fallback_functions,
+        strict=True,
+    ):
+        setattr(fallback, name, function)
+    utils = types.ModuleType("verl.utils")
+    utils.__path__ = []
+    utils.attention_utils = attention_utils
+    utils.npu_flash_attn_utils = fallback
+    verl = types.ModuleType("verl")
+    verl.__path__ = []
+    verl.utils = utils
+    return verl, utils, attention_utils, fallback_functions, original_get_functions
+
+
+def test_grpo_worker_padding_hook_uses_pure_torch_only_when_flash_attn_is_missing(monkeypatch):
+    verl, utils, attention_utils, fallback_functions, original_get_functions = (
+        _fake_verl_padding_modules()
+    )
+    monkeypatch.setitem(sys.modules, "verl", verl)
+    monkeypatch.setitem(sys.modules, "verl.utils", utils)
+    monkeypatch.setitem(sys.modules, "verl.utils.attention_utils", attention_utils)
+    monkeypatch.setitem(
+        sys.modules, "verl.utils.npu_flash_attn_utils", utils.npu_flash_attn_utils
+    )
+    monkeypatch.delitem(sys.modules, "flash_attn", raising=False)
+    monkeypatch.delitem(sys.modules, "flash_attn.bert_padding", raising=False)
+    monkeypatch.setattr(compat.metadata, "version", lambda _: "0.8.0")
+    monkeypatch.setattr(compat, "_TORCH_PADDING_FALLBACK_INSTALLED", False)
+
+    compat.install_torch_padding_fallback()
+
+    assert attention_utils._get_attention_functions() == fallback_functions
+    assert attention_utils._get_attention_functions() is not original_get_functions
+
+
+def test_grpo_worker_padding_hook_preserves_flash_attn_baseline(monkeypatch):
+    verl, utils, attention_utils, fallback_functions, original_get_functions = (
+        _fake_verl_padding_modules()
+    )
+    flash_attn = types.ModuleType("flash_attn")
+    flash_attn.__path__ = []
+    bert_padding = types.ModuleType("flash_attn.bert_padding")
+    for name in ("index_first_axis", "pad_input", "rearrange", "unpad_input"):
+        setattr(bert_padding, name, object())
+    monkeypatch.setitem(sys.modules, "verl", verl)
+    monkeypatch.setitem(sys.modules, "verl.utils", utils)
+    monkeypatch.setitem(sys.modules, "verl.utils.attention_utils", attention_utils)
+    monkeypatch.setitem(
+        sys.modules, "verl.utils.npu_flash_attn_utils", utils.npu_flash_attn_utils
+    )
+    monkeypatch.setitem(sys.modules, "flash_attn", flash_attn)
+    monkeypatch.setitem(sys.modules, "flash_attn.bert_padding", bert_padding)
+    monkeypatch.setattr(compat.metadata, "version", lambda _: "0.8.0")
+    monkeypatch.setattr(compat, "_TORCH_PADDING_FALLBACK_INSTALLED", False)
+
+    compat.install_torch_padding_fallback()
+
+    assert attention_utils._get_attention_functions is original_get_functions
+    assert fallback_functions != attention_utils._get_attention_functions()
 
 
 def test_grpo_numpy_override_tracks_vllm_and_verl_metadata_conflict():
@@ -476,6 +547,10 @@ def test_grpo_dry_run_exposes_stall_configuration(tmp_path, flags, enabled):
         "TRAVEL_GRPO_STALL_RECOVERY": "true" if enabled else "false",
         "TRAVEL_GRPO_STALL_THRESHOLD": "4",
     }
+    assert (
+        "+ray_kwargs.ray_init.runtime_env.worker_process_setup_hook="
+        + TORCH_PADDING_WORKER_SETUP_HOOK
+    ) in document["command"]
 
 
 def _write_fake_sft_adapter(path: Path) -> None:

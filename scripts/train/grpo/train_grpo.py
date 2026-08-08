@@ -18,6 +18,7 @@ if str(SRC) not in sys.path:
 
 import yaml
 
+from travel_grpo.training.grpo.compat import TORCH_PADDING_WORKER_SETUP_HOOK
 from travel_grpo.training.grpo.preflight import run_preflight
 
 
@@ -89,6 +90,14 @@ def hydra_overrides(profile: dict[str, Any], output: Path, resume: bool, logger:
     overrides.append(f"+travel_dynamic_sampling.enable={str(bool(profile.get('dynamic_sampling'))).lower()}")
     for key, value in dynamic.items():
         overrides.append(f"+travel_dynamic_sampling.{key}={value}")
+    # veRL 0.8 calls attention_utils from Ray workers.  Install the project's
+    # pure-Torch padding implementation in those workers so flash-attn remains
+    # optional.  This is injected only by the GRPO launcher; SFT and evaluation
+    # entry points do not receive this runtime environment.
+    overrides.append(
+        "+ray_kwargs.ray_init.runtime_env.worker_process_setup_hook="
+        f"{TORCH_PADDING_WORKER_SETUP_HOOK}"
+    )
     return overrides
 
 

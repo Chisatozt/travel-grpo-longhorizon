@@ -24,7 +24,8 @@ PINNED = {
     "torchaudio": "2.11.0",
     "ray": "2.56.1",
     "tensordict": "0.10.0",
-    "numpy": "1.26.4",
+    "opencv-python-headless": "4.13.0.90",
+    "numpy": "2.2.6",
 }
 TRANSFORMERS_COMMIT = "7ea2320c76117e6742364808a666ef6f2fb40a67"
 

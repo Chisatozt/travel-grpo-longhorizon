@@ -22,10 +22,16 @@ from travel_grpo.training.grpo.preflight import PINNED
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_grpo_numpy_pin_is_compatible_with_verl_080():
+def test_grpo_numpy_override_tracks_vllm_and_verl_metadata_conflict():
     project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert '"numpy==1.26.4; platform_system == \'Linux\'"' in project
-    assert PINNED["numpy"] == "1.26.4"
+    assert '"numpy==2.2.6; platform_system == \'Linux\'"' in project
+    assert '"opencv-python-headless==4.13.0.90; platform_system == \'Linux\'"' in project
+    assert PINNED["numpy"] == "2.2.6"
+    assert PINNED["opencv-python-headless"] == "4.13.0.90"
+    override = (ROOT / "configs/train/grpo/uv-overrides.txt").read_text(encoding="utf-8")
+    assert "numpy==2.2.6" in override
+    setup = (ROOT / "scripts/setup.sh").read_text(encoding="utf-8")
+    assert '--overrides "$GRPO_OVERRIDES"' in setup
 
 
 def test_dynamic_sampling_discards_invalid_and_equal_groups():

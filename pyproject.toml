@@ -42,9 +42,11 @@ grpo = [
   "torchaudio==2.11.0; platform_system == 'Linux'",
   "ray[default]==2.56.1; platform_system == 'Linux'",
   "tensordict==0.10.0; platform_system == 'Linux'",
-  # veRL 0.8.0 requires NumPy <2.0. Keep this exact pin in the 1.x line so
-  # uv can resolve the complete Linux GRPO environment reproducibly.
-  "numpy==1.26.4; platform_system == 'Linux'",
+  "opencv-python-headless==4.13.0.90; platform_system == 'Linux'",
+  # vLLM 0.25.1 requires OpenCV >=4.13, whose Python 3.12 wheels require
+  # NumPy >=2. The setup script documents an explicit uv override for the
+  # stale veRL 0.8.0 NumPy<2 metadata.
+  "numpy==2.2.6; platform_system == 'Linux'",
   "transformers @ git+https://github.com/huggingface/transformers.git@7ea2320c76117e6742364808a666ef6f2fb40a67 ; platform_system == 'Linux'",
 ]
 logging = [

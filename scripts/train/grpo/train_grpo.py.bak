@@ -39,6 +39,7 @@ def hydra_overrides(profile: dict[str, Any], output: Path, resume: bool, logger:
         "data.max_prompt_length": d["max_prompt_length"],
         "data.max_response_length": d["max_response_length"],
         "data.truncation": d["truncation"],
+        "data.apply_chat_template_kwargs.enable_thinking": False,
         "actor_rollout_ref.model.path": absolute(profile["model_path"]),
         "actor_rollout_ref.model.lora_rank": a["lora_rank"],
         "actor_rollout_ref.model.lora_alpha": a["lora_alpha"],
@@ -84,7 +85,6 @@ def hydra_overrides(profile: dict[str, Any], output: Path, resume: bool, logger:
         "trainer.resume_mode": "auto" if resume else "disable",
     }
     overrides = [f"{key}={str(value).lower() if isinstance(value, bool) else value}" for key, value in values.items()]
-    overrides.append("+data.apply_chat_template_kwargs.enable_thinking=false")
     dynamic = profile.get("dynamic", {})
     overrides.append(f"+travel_dynamic_sampling.enable={str(bool(profile.get('dynamic_sampling'))).lower()}")
     for key, value in dynamic.items():

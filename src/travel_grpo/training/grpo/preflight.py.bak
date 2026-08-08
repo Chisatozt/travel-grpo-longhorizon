@@ -191,13 +191,9 @@ def run_preflight(
 
     require_verl_080()
     require_verl_dynamic_sampling_patch()
-    from vllm.tool_parsers import ToolParserManager
+    from vllm.entrypoints.openai.tool_parsers import ToolParserManager
 
-    try:
-        ToolParserManager.get_tool_parser("qwen3_coder")
-    except (KeyError, ImportError, AttributeError) as exc:
-        raise RuntimeError(
-            "vLLM qwen3_coder tool parser is unavailable"
-        ) from exc
+    parsers = getattr(ToolParserManager, "tool_parsers", getattr(ToolParserManager, "_tool_parsers", {}))
+    _check("qwen3_coder" in parsers, "vLLM qwen3_coder tool parser is unavailable")
     report.update({"runtime": "ok", "gpu_memory_gib": round(gib, 2), "userbench_root": str(source.root)})
     return report

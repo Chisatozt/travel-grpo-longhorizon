@@ -224,6 +224,8 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
             }
             # veRL's validation logger flattens this mapping into the generation
             # JSONL.  It contains metrics only, never hidden IDs or snapshots.
+            quality_by_aspect = dict(reward.get("quality_by_aspect", {}))
+            fallback_counts = dict(reward.get("simulator_fallback_counts", {}))
             extra_fields["reward_extra_info"] = {
                 "task_id": session.task_id,
                 "terminal_reward": float(reward["terminal_reward"]),
@@ -241,7 +243,11 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 ),
                 "efficiency": float(reward.get("efficiency", 0.0)),
                 "policy_penalty": float(reward.get("policy_penalty", 0.0)),
-                "quality_by_aspect": dict(reward.get("quality_by_aspect", {})),
+                "quality_flight": float(quality_by_aspect.get("flight", 0.0)),
+                "quality_hotel": float(quality_by_aspect.get("hotel", 0.0)),
+                "quality_restaurant": float(quality_by_aspect.get("restaurant", 0.0)),
+                "quality_apartment": float(quality_by_aspect.get("apartment", 0.0)),
+                "quality_rental_car": float(quality_by_aspect.get("rental_car", 0.0)),
                 "actor_attempts": session.actor_attempts,
                 "environment_steps": session.num_tool_calls,
                 "effective_steps": int(reward.get("effective_steps", session.num_tool_calls)),
@@ -249,8 +255,14 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 "exact_repeats": session.exact_repeats,
                 "semantic_repeats": session.semantic_repeats,
                 "reward_degraded": bool(reward.get("reward_degraded", False)),
-                "simulator_fallback_counts": dict(
-                    reward.get("simulator_fallback_counts", {})
+                "userbench_judgment_fallbacks": int(
+                    fallback_counts.get("userbench_judgment_fallbacks", 0)
+                ),
+                "userbench_response_fallbacks": int(
+                    fallback_counts.get("userbench_response_fallbacks", 0)
+                ),
+                "userbench_search_fallbacks": int(
+                    fallback_counts.get("userbench_search_fallbacks", 0)
                 ),
                 "termination_reason": session.termination_reason,
                 "stall_recovery_enabled": session.stall_recovery_enabled,

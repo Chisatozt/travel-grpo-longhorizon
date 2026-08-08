@@ -313,7 +313,13 @@ def _verl_sampling_signals(output: Any) -> tuple[list[Any], list[float], list[bo
     uids = [_python_value(value) for value in output.non_tensor_batch.get("uid", ())]
     metadata = [_python_value(value) for value in output.non_tensor_batch.get("userbench", ())]
     if len(uids) != len(rewards) or len(metadata) != len(rewards):
-        raise ValueError("veRL rollout output is missing aligned uid/userbench metadata")
+        raise ValueError(
+            "veRL rollout output is missing aligned uid/userbench metadata: "
+            f"rewards={len(rewards)}, "
+            f"uids={len(uids)}, "
+            f"userbench={len(metadata)}, "
+            f"non_tensor_keys={sorted(output.non_tensor_batch.keys())}"
+        )
     _, invalid, reasons = extract_userbench_group_signals(metadata)
     return uids, [float(value) for value in rewards], invalid, reasons
 
@@ -394,7 +400,35 @@ def install_verl_bounded_sampler(manager: Any, config: Mapping[str, Any]) -> Non
             generation_batch = state.generation_batches
             output = original(batch)
             last_output = output
-            uids, rewards, invalid, reasons, degraded = _verl_candidate_signals(output)
+
+            # veRL 0.8 may omit input non-tensor metadata such as `uid`
+            # from AgentLoop output on some reward-loop paths.  The rollout
+            # output preserves input row order, so restore the original UID
+            # vector when it is absent.
+            output_uids = output.non_tensor_batch.get("uid")
+
+            if output_uids is None or len(output_uids) == 0:
+                source_uids = batch.non_tensor_batch.get("uid")
+
+                if source_uids is None:
+                    raise ValueError(
+                        "dynamic sampler input batch is missing uid"
+                    )
+
+                output_rows = int(output.batch["responses"].shape[0])
+
+                if len(source_uids) != output_rows:
+                    raise ValueError(
+                        "cannot restore rollout uid metadata: "
+                        f"input_uids={len(source_uids)}, "
+                        f"output_rows={output_rows}"
+                    )
+
+                output.non_tensor_batch["uid"] = source_uids.copy()
+
+            uids, rewards, invalid, reasons, degraded = (
+                _verl_candidate_signals(output)
+            )
             if tuple(uids) != tuple(input_uids):
                 raise ValueError(
                     "veRL rollout generation must reuse the original task UID batch"

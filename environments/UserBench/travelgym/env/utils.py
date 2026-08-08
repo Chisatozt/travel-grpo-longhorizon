@@ -135,6 +135,15 @@ You are an expert judge evaluating the type of an agent's conversation utterance
 - Type "3": Agent explicitly and concretely asking for preferences, but the specific preference is not available. Similarly, the way how agent asks must also be concrete and specific.
 - Type "4": Agent making a very vague and general query about preference instead of focusing on a specific aspect (e.g. "Do you have any preferences for the car? (vague and general, type 4)" instead of "what exact model of the car do you like? (concrete and specific, type 2)")
 - For Type "2", you must provide the exact one preference_id from the available preferences. If there's multiple preferences that match, choose the one that is most relevant to the conversation context.
+- The "Available Preferences" section is the ONLY authoritative source
+  of valid preference IDs for the current turn.
+- NEVER output a preference_id that is not explicitly present in the
+  current Available Preferences section.
+- Preferences mentioned or revealed in the conversation history may
+  already have been elicited and are therefore unavailable.
+- If the agent asks for a preference that was previously elicited or is
+  otherwise absent from the current Available Preferences section,
+  classify it as Type "3", not Type "2".
 - Be precise in identifying preference requests vs general conversation"""
 
 JUDGE_PROMPT_USER = """**Travel Scenario:**

@@ -34,30 +34,11 @@ async def async_model_call(
                 messages=messages,
                 temperature=model_config["temperature"],
                 max_tokens=model_config["max_tokens"],
-                timeout=model_config["timeout"],
-                extra_body={
-                    "thinking": {
-                        "type": "disabled"
-                    }
-                },
+                timeout=model_config["timeout"] 
             )
-            # Extract response text [Modified]
-            message = response.choices[0].message
-            response_text = (message.content or "").strip()
+            # Extract response text
+            response_text = response.choices[0].message.content.strip()
             response_json = parse_output_as_json(response_text)
-
-            if response_json is None:
-                finish_reason = response.choices[0].finish_reason
-                usage = getattr(response, "usage", None)
-
-                print(
-                    "[TravelGym - Async Model Call] JSON parse failed: "
-                    f"finish_reason={finish_reason!r}, "
-                    f"content_len={len(response_text)}, "
-                    f"content_preview={response_text[:500]!r}, "
-                    f"usage={usage!r}"
-                )
-
             return response_json
         except Exception as e:
             print(f"[TravelGym - Async Model Call] Error calling model: {e}")
@@ -99,7 +80,7 @@ async def async_generate_judge_response(
     """
     Async version of generate_judge_response.
     """
-    conversation_history_str = build_history_into_prompt(conversation_history, with_note=False)
+    conversation_history_str = build_history_into_prompt(conversation_history, with_note=True)
     scenario_str = task["scenario"]
     preferences_str = ""
     for preference in available_preferences:
@@ -265,7 +246,6 @@ async def async_evaluate_action(
                 response_json = await async_model_call(system_prompt, user_prompt, model_config)
                 # process the model call
                 assert response_json is not None and "response" in response_json, f"Invalid response: {response_json}\nMissing response"
-                response = response_json["response"].strip()
                 conversation_history.append({"role": "agent", "content": action, "note": "The agent's latest utterance is not related to any preference I have, and the topic is off the target for several turns. I will respond naturally and coherently, but also proactively elicit a preference in an implicit and indirect manner."})
                 conversation_history.append({"role": "user", "content": response})
                 return response, [preference_id], reward

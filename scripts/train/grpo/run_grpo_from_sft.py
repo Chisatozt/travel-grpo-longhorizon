@@ -13,6 +13,7 @@ artifacts are never deleted or silently overwritten.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import shlex
 import subprocess
@@ -108,6 +109,18 @@ def _data_artifact_state(output: Path) -> str:
 
 def _command_text(command: Sequence[str]) -> str:
     return shlex.join(str(value) for value in command)
+
+
+def _require_grpo_data_dependency() -> None:
+    if importlib.util.find_spec("pyarrow") is not None:
+        return
+    raise RuntimeError(
+        "the selected Python interpreter is missing pyarrow: "
+        f"{sys.executable}. Install the project data/GRPO environment with "
+        "`bash scripts/setup.sh`, or run `python -m pip install -e '.[data]'` "
+        "using the same interpreter. The wrapper uses `.venv/bin/python` when "
+        "that environment exists; override it with PYTHON_BIN if needed."
+    )
 
 
 def _run(label: str, command: Sequence[str]) -> None:
@@ -214,6 +227,7 @@ def _train_command(
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    _require_grpo_data_dependency()
     if args.stall_threshold < 1:
         raise ValueError("--stall-threshold must be >= 1")
     adapter = _project_path(args.sft_adapter, field="SFT adapter")

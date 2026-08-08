@@ -210,7 +210,7 @@ fi
 
 tokenizer_probe=(
   "from transformers import AutoTokenizer; "
-  "AutoTokenizer.from_pretrained(";
+  "AutoTokenizer.from_pretrained("
   "'Qwen/Qwen3.5-2B', local_files_only=True, "
   "cache_dir=r'$HF_CACHE_DIR'); print('cached')"
 )

@@ -81,6 +81,11 @@ Stage 2 使用非默认路径时可传 `--sft-adapter`、`--merged-model`；GRPO
 数据目录。该入口不会启动
 SFT，也不会删除任何已有产物；需要重建已有 GRPO 数据时必须显式传 `--force-data`。
 
+GRPO wrapper 会优先使用仓库内的 `.venv/bin/python`，因此不要求每次先激活环境；
+如需指定其他解释器，可设置 `PYTHON_BIN=/path/to/python`。正式安装应先运行
+`bash scripts/setup.sh`，它会安装 `[data]` 和 `[grpo]` extra。若入口提示缺少
+`pyarrow`，说明实际选中的 Python 没有安装项目 data extra。
+
 非 dry-run 会在 Ray/CUDA 启动前检查 Linux/Python、精确依赖、单卡显存、BF16、合并模型、UserBench 来源、数据 hash、模拟器变量、唯一工具及 vLLM qwen3_coder parser。输出目录必须为空，或带合法 checkpoint 标记并显式 `--resume`。
 
 正式参数位于 `configs/train/grpo/grpo.yaml`：batch 2、n=4、总上下文 32768、temperature 0.7、500 step，每 50 step 保存和验证，不使用 KL reward/loss，GRPO advantage 不按组标准差归一化。

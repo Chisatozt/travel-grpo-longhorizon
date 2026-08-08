@@ -17,8 +17,15 @@ from travel_grpo.training.grpo.dynamic_sampling import (
 )
 from travel_grpo.training.grpo.preflight import run_preflight
 from travel_grpo.training.grpo.preflight import is_validation_sampling
+from travel_grpo.training.grpo.preflight import PINNED
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_grpo_numpy_pin_is_compatible_with_verl_080():
+    project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert '"numpy==1.26.4; platform_system == \'Linux\'"' in project
+    assert PINNED["numpy"] == "1.26.4"
 
 
 def test_dynamic_sampling_discards_invalid_and_equal_groups():

@@ -10,6 +10,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from travel_grpo.prompts.actor_policy import (
+    ACTOR_RUNTIME_POLICY_VERSION,
+    ensure_actor_runtime_policy,
+)
+
 VERL_DATASET_VERSION = "userbench-verl-grpo-v1"
 VERL_RUNTIME_VERSION = "0.8.0"
 VERL_DATA_GENERATOR_VERSION = "travel-grpo-verl-data-generator-v1"
@@ -111,7 +116,9 @@ def build_verl_records(
             raise GRPODataError(
                 f"GRPO {project_split} task {task_id!r} must come from official train"
             )
-        prompt = _validate_prompt(raw.get("prompt"), task_id)
+        prompt = ensure_actor_runtime_policy(
+            _validate_prompt(raw.get("prompt"), task_id)
+        )
         create_kwargs = {"env_name": ENVIRONMENT_NAME, "id": task_id}
         records.append(
             {
@@ -137,6 +144,7 @@ def build_verl_records(
                     "difficulty": _non_empty(raw.get("difficulty"), "difficulty"),
                     "source_split": source_split,
                     "project_split": project_split,
+                    "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
                     "need_tools_kwargs": True,
                     "tools_kwargs": {
                         "interact_with_env": {"create_kwargs": create_kwargs}
@@ -192,7 +200,15 @@ def _validate_derived_records(
             raise GRPODataError(f"derived task {task_id!r} leaks ground_truth")
         if create.get("env_name") != ENVIRONMENT_NAME:
             raise GRPODataError(f"derived task {task_id!r} has wrong env_name")
-        _validate_prompt(record.get("prompt"), task_id)
+        prompt = _validate_prompt(record.get("prompt"), task_id)
+        if ensure_actor_runtime_policy(prompt) != prompt:
+            raise GRPODataError(
+                f"derived task {task_id!r} does not contain exactly one current Actor policy"
+            )
+        if extra.get("actor_policy_version") != ACTOR_RUNTIME_POLICY_VERSION:
+            raise GRPODataError(
+                f"derived task {task_id!r} has an incompatible Actor policy version"
+            )
 
 
 def _atomic_write_parquet(records: Sequence[Mapping[str, Any]], destination: Path) -> None:
@@ -265,6 +281,7 @@ def prepare_verl_datasets(
         "counts": {key: len(value) for key, value in records.items()},
         "sources": {key: str(value) for key, value in sources.items()},
         "output_root": str(output),
+        "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
     }
     if dry_run:
         return summary
@@ -278,6 +295,7 @@ def prepare_verl_datasets(
         "verl_version": VERL_RUNTIME_VERSION,
         "data_source": VERL_DATA_SOURCE,
         "agent_name": VERL_AGENT_NAME,
+        "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
         "pyarrow_version": pa.__version__,
         "sources": {
             split: {
@@ -323,6 +341,8 @@ def verify_verl_datasets(output_root: str | Path) -> dict[str, Any]:
         raise GRPODataError("GRPO PyArrow version drifted")
     if manifest.get("hidden_ground_truth_embedded") is not False:
         raise GRPODataError("GRPO manifest does not prove hidden-label isolation")
+    if manifest.get("actor_policy_version") != ACTOR_RUNTIME_POLICY_VERSION:
+        raise GRPODataError("GRPO manifest Actor policy version drifted")
     for split in ("train", "validation"):
         source_entry = manifest.get("sources", {}).get(split, {})
         if source_entry.get("rows") != EXPECTED_SPLIT_COUNTS[split]:

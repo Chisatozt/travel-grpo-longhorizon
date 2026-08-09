@@ -166,13 +166,14 @@ class UserBenchRolloutRuntime:
             source_root=self.source_root,
         )
         try:
-            wrapper.reset()
+            initial_observation = wrapper.reset()
             state = UserBenchSessionState(
                 request_id=request_id or uuid.uuid4().hex,
                 task_id=normalized,
                 wrapper=wrapper,
                 reward_task=wrapper.reward_task(),
                 reward_snapshot=wrapper.reward_snapshot(),
+                public_initial_message=getattr(initial_observation, "feedback", None),
             )
         except Exception:
             wrapper.close()
@@ -201,17 +202,18 @@ class UserBenchRolloutRuntime:
         try:
             async_reset = getattr(wrapper, "areset", None)
             if callable(async_reset):
-                await async_reset()
+                initial_observation = await async_reset()
             else:
                 import asyncio
 
-                await asyncio.to_thread(wrapper.reset)
+                initial_observation = await asyncio.to_thread(wrapper.reset)
             state = UserBenchSessionState(
                 request_id=request_id or uuid.uuid4().hex,
                 task_id=normalized,
                 wrapper=wrapper,
                 reward_task=wrapper.reward_task(),
                 reward_snapshot=wrapper.reward_snapshot(),
+                public_initial_message=getattr(initial_observation, "feedback", None),
             )
         except Exception:
             wrapper.close()

@@ -31,6 +31,13 @@ from travel_grpo.models.openai_compatible import (
     TeacherClientProtocol,
     TeacherRequestConstraint,
 )
+from travel_grpo.prompts.actor_policy import (
+    ACTOR_RUNTIME_POLICY,
+    ACTOR_RUNTIME_POLICY_VERSION,
+    TEACHER_GENERATION_INSTRUCTION,
+    ensure_teacher_generation_messages,
+    strip_teacher_generation_instruction,
+)
 from travel_grpo.envs.userbench_tools import (
     normalized_action_signature,
     semantic_action_signature,
@@ -49,13 +56,11 @@ SIMULATOR_FALLBACK_TEXT = (
     "I'm sorry, I'm not sure how to respond to your latest utterance right now. "
     "Please try again."
 )
-TEACHER_ACTOR_POLICY = """Teacher policy for strict UserBench trajectories:
-- Emit exactly one interact_with_env call per turn. Keep thought to one short operational sentence of at most 200 characters.
-- Follow the controller's current phase, aspect, and preference field exactly.
-- Ask one concrete preference field per action; never ask vague "other preferences" questions or bundle fields.
-- Search each travel aspect at most once, after its preferences are complete.
-- Answer immediately after search with exactly one visible option ID for the current aspect.
-- Never repeat an exact action, semantic preference field, search aspect, or answered aspect."""
+# Compatibility export: old scripts imported this name for the Actor-facing
+# suffix. It now resolves to the production runtime policy; Teacher-only
+# generation controls are exposed separately and are never archived in Actor
+# messages.
+TEACHER_ACTOR_POLICY = ACTOR_RUNTIME_POLICY
 
 
 class TeacherCollectionError(RuntimeError):
@@ -145,6 +150,12 @@ def validate_teacher_collection_config(path: str | Path) -> Mapping[str, Any]:
         raise TeacherCollectionError(
             f"teacher collection policy_version must be {POLICY_VERSION}"
         )
+    configured_actor_policy_version = collection.get("actor_policy_version")
+    if configured_actor_policy_version not in (None, ACTOR_RUNTIME_POLICY_VERSION):
+        raise TeacherCollectionError(
+            "teacher collection actor_policy_version must be "
+            f"{ACTOR_RUNTIME_POLICY_VERSION}"
+        )
     if collection.get("fail_fast_on_strict_violation") is not True:
         raise TeacherCollectionError(
             "teacher collection must fail fast on strict violations"
@@ -196,6 +207,7 @@ class TeacherTrajectory:
     trajectory_attempt: int = 1
     reward_breakdown: Mapping[str, Any] | None = None
     policy_version: str = POLICY_VERSION
+    actor_policy_version: str = ACTOR_RUNTIME_POLICY_VERSION
     attempt_strategy: str = AttemptStrategy.NATURAL.value
     teacher_request_count: int = 0
     teacher_usage: Mapping[str, int] | None = None
@@ -229,6 +241,7 @@ class TeacherTrajectory:
             "simulator_search_fallbacks": self.simulator_search_fallbacks,
             "trajectory_attempt": self.trajectory_attempt,
             "policy_version": self.policy_version,
+            "actor_policy_version": self.actor_policy_version,
             "attempt_strategy": self.attempt_strategy,
             "teacher_request_count": self.teacher_request_count,
             "teacher_usage": teacher_usage,
@@ -285,6 +298,7 @@ class TeacherTrajectory:
             trajectory_attempt=int(record.get("trajectory_attempt", 1)),
             reward_breakdown=copy.deepcopy(record.get("reward_breakdown")),
             policy_version=str(record.get("policy_version", "")),
+            actor_policy_version=str(record.get("actor_policy_version", "legacy-unknown")),
             attempt_strategy=str(record.get("attempt_strategy", "")),
             teacher_request_count=int(record.get("teacher_request_count", 0)),
             teacher_usage=copy.deepcopy(record.get("teacher_usage", {})),
@@ -303,6 +317,7 @@ class TeacherAttemptDiagnostic:
     error_message: str | None = None
     partial_trajectory: Mapping[str, Any] | None = None
     policy_version: str = POLICY_VERSION
+    actor_policy_version: str = ACTOR_RUNTIME_POLICY_VERSION
     attempt_strategy: str = AttemptStrategy.NATURAL.value
     quality_tier: str = "rejected"
 
@@ -313,6 +328,7 @@ class TeacherAttemptDiagnostic:
             "attempt": self.attempt,
             "accepted": self.accepted,
             "policy_version": self.policy_version,
+            "actor_policy_version": self.actor_policy_version,
             "attempt_strategy": self.attempt_strategy,
             "quality_tier": self.quality_tier,
             "rejection_reasons": list(self.rejection_reasons),
@@ -348,6 +364,7 @@ class TeacherAttemptDiagnostic:
             ),
             partial_trajectory=copy.deepcopy(record.get("partial_trajectory")),
             policy_version=str(record.get("policy_version", "")),
+            actor_policy_version=str(record.get("actor_policy_version", "legacy-unknown")),
             attempt_strategy=str(record.get("attempt_strategy", "")),
             quality_tier=str(record.get("quality_tier", "rejected")),
         )
@@ -378,6 +395,7 @@ class TeacherTaskOutcome:
             "error_type": final.error_type,
             "error_message": final.error_message,
             "policy_version": final.policy_version,
+            "actor_policy_version": final.actor_policy_version,
             "attempt_strategy": final.attempt_strategy,
             "quality_tier": self.quality_tier,
         }
@@ -386,6 +404,7 @@ class TeacherTaskOutcome:
         return {
             "schema_version": "userbench-teacher-task-checkpoint-v1",
             "policy_version": POLICY_VERSION,
+            "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
             "task_id": self.task_id,
             "trajectory": None if self.trajectory is None else self.trajectory.to_record(),
             "attempts": [value.to_record() for value in self.attempts],
@@ -658,14 +677,12 @@ def task_dimensions(task_id: str) -> tuple[str, ...]:
 def _prepare_teacher_messages(
     prompt: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    messages = copy.deepcopy(list(prompt))
-    if not messages or messages[0].get("role") != "system":
-        raise TeacherCollectionError("teacher prompt must begin with a system message")
-    system_content = messages[0].get("content")
-    if not isinstance(system_content, str):
-        raise TeacherCollectionError("teacher system message must contain text")
-    messages[0]["content"] = f"{system_content}\n\n{TEACHER_ACTOR_POLICY}"
-    return messages
+    """Build the Teacher request while keeping Teacher-only text request-local."""
+
+    try:
+        return ensure_teacher_generation_messages(prompt)
+    except ValueError as exc:
+        raise TeacherCollectionError(str(exc)) from exc
 
 
 def _simulator_fallback(result: Any) -> bool:
@@ -708,7 +725,8 @@ def _partial_trajectory_record(
         "trajectory_attempt": trajectory_attempt,
         "failure_environment_turn": len(rewards) + 1,
         "environment_steps_completed": len(rewards),
-        "messages": copy.deepcopy(list(messages)),
+        "messages": strip_teacher_generation_instruction(messages),
+        "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
         "step_rewards": list(rewards),
         "cumulative_reward": float(sum(rewards)),
         "expected_aspects": list(dimensions),
@@ -1364,7 +1382,9 @@ async def collect_teacher_trajectory(
         source_split=str(task["source_split"]),
         teacher_model=teacher.runtime.model,
         simulator_model=simulator.model,
-        messages=tuple(messages),
+        # The Teacher request contains an extra generation-only system block;
+        # archive only the Actor-visible runtime policy for future SFT.
+        messages=tuple(strip_teacher_generation_instruction(messages)),
         step_rewards=tuple(rewards),
         terminated=terminated,
         truncated=truncated,
@@ -1377,6 +1397,7 @@ async def collect_teacher_trajectory(
         trajectory_attempt=trajectory_attempt,
         reward_breakdown=reward_breakdown,
         policy_version=POLICY_VERSION,
+        actor_policy_version=ACTOR_RUNTIME_POLICY_VERSION,
         attempt_strategy=strategy.value,
         teacher_request_count=teacher_request_count,
         teacher_usage=dict(teacher_usage),
@@ -1569,6 +1590,7 @@ def initialize_teacher_run(
     expected = {
         "schema_version": "userbench-teacher-run-v1",
         "policy_version": POLICY_VERSION,
+        "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
         "task_ids": list(task_ids),
     }
     if manifest_path.exists():
@@ -1580,7 +1602,10 @@ def initialize_teacher_run(
             current = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise TeacherCollectionError("teacher run manifest is unreadable") from exc
-        if current != expected:
+        legacy_expected = {
+            key: value for key, value in expected.items() if key != "actor_policy_version"
+        }
+        if current not in (expected, legacy_expected):
             raise TeacherCollectionError(
                 "teacher run manifest does not match policy or ordered task IDs"
             )

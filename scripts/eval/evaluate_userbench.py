@@ -30,6 +30,7 @@ from travel_grpo.evaluation.contracts import STAGES, build_contract
 from travel_grpo.evaluation.rollout import rollout_task
 from travel_grpo.evaluation.summary import summarize_results
 from travel_grpo.models.vllm_policy import ActorRuntime, OpenAICompatibleActorClient
+from travel_grpo.prompts.actor_policy import ACTOR_RUNTIME_POLICY_VERSION
 
 MODELS = {
     "baseline": "Qwen/Qwen3.5-2B",
@@ -113,6 +114,7 @@ async def run(args: argparse.Namespace) -> int:
     selected = records[: args.limit] if args.limit is not None else records
     output = args.output or ROOT / "outputs/evaluation" / args.stage
     contract_document = contract.to_dict(stage=args.stage, model=args.model)
+    contract_document["actor_policy_version"] = ACTOR_RUNTIME_POLICY_VERSION
     if args.dry_run:
         print(
             json.dumps(
@@ -125,6 +127,7 @@ async def run(args: argparse.Namespace) -> int:
                     "would_run": len(selected),
                     "concurrency": args.concurrency,
                     "output": str(output),
+                    "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
                 },
                 indent=2,
             )
@@ -182,7 +185,7 @@ async def run(args: argparse.Namespace) -> int:
         expected_compositions=contract.compositions,
     )
     atomic_json(output / "summary.json", summary)
-    atomic_json(output / "run_manifest.json", {"schema_version": "travel-evaluation-run-v1", "stage": args.stage, "model": args.model, "contract_hash": contract.contract_hash, "completed_tasks": len(ordered), "formal_complete": len(ordered) == 471})
+    atomic_json(output / "run_manifest.json", {"schema_version": "travel-evaluation-run-v1", "stage": args.stage, "model": args.model, "contract_hash": contract.contract_hash, "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION, "completed_tasks": len(ordered), "formal_complete": len(ordered) == 471})
     print(json.dumps(summary, indent=2))
     return 0
 

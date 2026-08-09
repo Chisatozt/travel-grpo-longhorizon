@@ -62,6 +62,9 @@ async def execute_userbench_action(
     """Validate and execute one action in the session held by the current context."""
 
     session = require_current_session()
+    # A terminal answered/blocked aspect is advanced before the next call;
+    # all guard decisions remain public-only and happen before UserBench.
+    session.prepare_public_action()
     if session.done:
         raise RuntimeError(
             "cannot execute a tool call after the UserBench episode ended"
@@ -73,6 +76,14 @@ async def execute_userbench_action(
             session,
             f"invalid {TOOL_NAME} call: {exc}",
             reason="invalid_tool_call",
+        )
+
+    public_error = session.validate_public_action(action)
+    if public_error is not None:
+        return _rejected_tool_execution(
+            session,
+            public_error,
+            reason="public_phase_guard",
         )
 
     recovery_error = session.validate_answer_only_action(action)

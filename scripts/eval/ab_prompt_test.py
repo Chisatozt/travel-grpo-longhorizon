@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Small paired A/B test for the SFT Actor prompt suffix.
+"""Small paired A/B test for the production Actor runtime policy.
 
 Both conditions use the same SFT-merged Actor and the same frozen UserBench
-task rows.  Condition A sends the task prompt unchanged.  Condition B appends
-the exact ``TEACHER_ACTOR_POLICY`` suffix used during SFT data collection.
+task rows.  Condition A sends the task prompt without the runtime policy;
+condition B sends the exact versioned policy used by SFT, GRPO, and evaluation.
 """
 
 from __future__ import annotations
@@ -28,7 +28,11 @@ from travel_grpo.envs.userbench_interaction import SimulatorRole, UserSimulatorR
 from travel_grpo.evaluation.artifacts import atomic_json
 from travel_grpo.evaluation.rollout import rollout_task
 from travel_grpo.models.vllm_policy import ActorRuntime, OpenAICompatibleActorClient
-from travel_grpo.training.sft_collection import TEACHER_ACTOR_POLICY
+from travel_grpo.prompts.actor_policy import (
+    ACTOR_RUNTIME_POLICY,
+    ACTOR_RUNTIME_POLICY_VERSION,
+    ensure_actor_runtime_policy,
+)
 
 
 CHOICES = frozenset(("action", "search", "answer"))
@@ -78,8 +82,7 @@ def with_condition_prompt(task: Mapping[str, Any], condition: str) -> dict[str, 
     value = copy.deepcopy(dict(task))
     value["prompt"] = copy.deepcopy(list(task["prompt"]))
     if condition == "B":
-        system = value["prompt"][0]
-        system["content"] = f"{system['content']}\n\n{TEACHER_ACTOR_POLICY}"
+        value["prompt"] = ensure_actor_runtime_policy(value["prompt"])
     return value
 
 
@@ -181,7 +184,8 @@ async def run(args: argparse.Namespace) -> None:
         "compositions": [str(task["composition"]) for task in tasks],
         "excluded_compositions": ["333", "334", "444", "2222"],
         "model": args.model,
-        "suffix": TEACHER_ACTOR_POLICY,
+        "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
+        "actor_runtime_policy": ACTOR_RUNTIME_POLICY,
     })
     actor_runtime = ActorRuntime.from_environment()
     actor_runtime.require_model(args.model)
@@ -198,6 +202,7 @@ async def run(args: argparse.Namespace) -> None:
                     actor=actor,
                     simulator=simulator,
                     source_root=ROOT / "environments/UserBench",
+                    apply_actor_policy=condition == "B",
                 )
                 result["ab_condition"] = condition
                 result["action_choices"] = action_choices(result)

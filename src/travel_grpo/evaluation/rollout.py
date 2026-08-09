@@ -13,6 +13,10 @@ from travel_grpo.envs.userbench_tools import UserBenchAction
 from travel_grpo.envs.userbench_wrapper import UserBenchEnvironmentConfig, UserBenchWrapper
 from travel_grpo.evaluation.metrics import sanitize_reward
 from travel_grpo.models.openai_compatible import TeacherApiError, TeacherProtocolError
+from travel_grpo.prompts.actor_policy import (
+    ACTOR_RUNTIME_POLICY_VERSION,
+    ensure_actor_runtime_policy,
+)
 
 
 async def rollout_task(
@@ -22,6 +26,7 @@ async def rollout_task(
     simulator: UserSimulatorRuntime,
     source_root: str | Path | None = None,
     wrapper_factory: Any = UserBenchWrapper,
+    apply_actor_policy: bool = True,
 ) -> dict[str, Any]:
     if simulator.role is not SimulatorRole.EVAL:
         raise ValueError("frozen evaluation requires the eval simulator role")
@@ -29,7 +34,11 @@ async def rollout_task(
     prompt = task.get("prompt")
     if not isinstance(prompt, Sequence) or isinstance(prompt, (str, bytes)):
         raise ValueError("evaluation task prompt must be a message sequence")
-    messages = [dict(value) for value in prompt]
+    messages = (
+        ensure_actor_runtime_policy(prompt)
+        if apply_actor_policy
+        else [dict(value) for value in prompt]
+    )
     wrapper = wrapper_factory(task_id, simulator, UserBenchEnvironmentConfig(), source_root=source_root)
     session: UserBenchSessionState | None = None
     attempts = 0
@@ -92,6 +101,9 @@ async def rollout_task(
         reward = session.reward_report()
         return {
             "schema_version": "travel-evaluation-task-v1",
+            "actor_policy_version": (
+                ACTOR_RUNTIME_POLICY_VERSION if apply_actor_policy else "none"
+            ),
             "task_id": task_id,
             "composition": str(task["composition"]),
             "infrastructure_valid": reward.get("reward_valid") is True,

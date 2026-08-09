@@ -5,12 +5,25 @@ from __future__ import annotations
 import contextvars
 import json
 from collections.abc import Mapping as ABCMapping, Set as AbstractSet
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from travel_grpo.envs.observation import UserBenchStepResult
+from travel_grpo.envs.public_control import (
+    PublicAspectStatus,
+    PublicControlState,
+    PublicControlEvent,
+    RecoveryMode,
+    advance_public_aspect,
+    classify_public_observation,
+    new_public_control_state,
+    note_public_non_progress,
+    reduce_public_control_state,
+    render_actor_control_info,
+    validate_public_action,
+)
 from travel_grpo.envs.reward import (
     RawRewardTrace,
     TravelRewardTask,
@@ -258,6 +271,11 @@ class UserBenchSessionState:
     visible_option_ids_by_aspect: dict[str, set[str]] = field(default_factory=dict)
     _action_signatures: set[str] = field(default_factory=set, repr=False)
     _semantic_signatures: set[tuple[str, str]] = field(default_factory=set, repr=False)
+    # Public control is an independent, actor-visible ledger. It is optional
+    # for legacy/offline callers that construct a session without reset text;
+    # runtime AgentLoop sessions always initialize it from the reset feedback.
+    public_control_state: PublicControlState | None = None
+    public_initial_message: str | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -266,10 +284,86 @@ class UserBenchSessionState:
             or self.stall_no_progress_threshold < 1
         ):
             raise ValueError("stall_no_progress_threshold must be an integer >= 1")
+        if self.public_control_state is not None and not isinstance(
+            self.public_control_state, PublicControlState
+        ):
+            raise TypeError("public_control_state must be PublicControlState or None")
+        if self.public_control_state is None and self.public_initial_message is not None:
+            if not isinstance(self.public_initial_message, str):
+                raise TypeError("public_initial_message must be a string or None")
+            self.public_control_state = new_public_control_state(
+                self.public_initial_message,
+                no_progress_threshold=self.stall_no_progress_threshold,
+            )
 
     @property
     def done(self) -> bool:
         return self.terminated or self.truncated
+
+    def _sync_public_control_metrics(self) -> None:
+        state = self.public_control_state
+        if state is None:
+            return
+        self.consecutive_no_progress = state.consecutive_no_progress
+        self.max_consecutive_no_progress = state.max_consecutive_no_progress
+        self.stall_recovery_triggered = state.phase is RecoveryMode.SEARCH_REQUIRED
+        if state.all_aspects_terminal:
+            self.termination_reason = (
+                self.termination_reason or "public_control_complete"
+            )
+            self.terminated = True
+
+    def _advance_public_control_if_needed(self) -> None:
+        state = self.public_control_state
+        if state is None:
+            return
+        if state.phase is RecoveryMode.SWITCH_ASPECT_REQUIRED and state.current is not None:
+            if state.current.status in {
+                PublicAspectStatus.ANSWERED,
+                PublicAspectStatus.BLOCKED,
+            }:
+                self.public_control_state = advance_public_aspect(state)
+        self._sync_public_control_metrics()
+
+    def prepare_public_action(self) -> None:
+        """Advance a terminal public aspect before the next actor call."""
+
+        self._advance_public_control_if_needed()
+
+    def validate_public_action(self, action: UserBenchAction) -> str | None:
+        """Validate an actor call without consulting reward state."""
+
+        self.prepare_public_action()
+        if self.public_control_state is None:
+            return None
+        return validate_public_action(self.public_control_state, action)
+
+    def record_public_non_progress(self, reason: str | None = None) -> None:
+        del reason
+        if self.public_control_state is None:
+            return
+        self.public_control_state = note_public_non_progress(
+            self.public_control_state
+        )
+        self._sync_public_control_metrics()
+
+    def _record_public_step(
+        self,
+        result: UserBenchStepResult,
+        action: UserBenchAction | None,
+    ) -> None:
+        state = self.public_control_state
+        if state is None or action is None:
+            return
+        observation = classify_public_observation(
+            result.observation.feedback,
+            choice=action.choice,
+        )
+        self.public_control_state = reduce_public_control_state(
+            state,
+            PublicControlEvent(action=action, observation=observation),
+        )
+        self._sync_public_control_metrics()
 
     def configure_stall_recovery(self, *, enabled: bool, threshold: int) -> None:
         """Set effective per-rollout control after sampling mode is known."""
@@ -280,11 +374,23 @@ class UserBenchSessionState:
             raise ValueError("stall recovery threshold must be an integer >= 1")
         self.stall_recovery_enabled = enabled
         self.stall_no_progress_threshold = threshold
+        if self.public_control_state is not None:
+            self.public_control_state = replace(
+                self.public_control_state,
+                no_progress_threshold=threshold,
+            )
 
     @property
     def visible_answer_options(self) -> set[str]:
         """Return actor-visible options for aspects not answered yet."""
 
+        if self.public_control_state is not None:
+            return {
+                option_id
+                for aspect_state in self.public_control_state.aspects
+                if aspect_state.status is PublicAspectStatus.OPEN
+                for option_id in aspect_state.visible_option_ids
+            }
         return {
             option_id
             for aspect, option_ids in self.visible_option_ids_by_aspect.items()
@@ -293,15 +399,22 @@ class UserBenchSessionState:
         }
 
     def append_recovery_instruction(self, feedback: str) -> str:
-        """Append only the non-answer-specific recovery instruction."""
+        """Append public recovery guidance or the legacy fallback hint."""
 
+        if self.public_control_state is not None:
+            phase = self.public_control_state.phase
+            if phase not in {RecoveryMode.NONE, RecoveryMode.ELICITING}:
+                return f"{feedback}\n\n{render_actor_control_info(self.public_control_state)}"
+            return feedback
         if not self.answer_only_pending:
             return feedback
         return f"{feedback}\n\n{self.recovery_instruction()}"
 
     def validate_answer_only_action(self, action: UserBenchAction) -> str | None:
-        """Return a rejection reason without consulting hidden task labels."""
+        """Return a legacy recovery rejection for sessions without public state."""
 
+        if self.public_control_state is not None:
+            return None
         if not self.answer_only_pending:
             return None
         if action.choice is not ActionChoice.ANSWER:
@@ -350,6 +463,11 @@ class UserBenchSessionState:
         )
 
     def _maybe_trigger_stall(self) -> None:
+        # Runtime sessions with a public ledger use RecoveryMode instead. The
+        # hidden reward evidence below remains only as a legacy compatibility
+        # path for offline callers that have no public initial message.
+        if self.public_control_state is not None:
+            return
         if (
             not self.stall_recovery_enabled
             or self.infrastructure_errors
@@ -370,6 +488,8 @@ class UserBenchSessionState:
             self.hard_stop_stalled()
 
     def _record_no_progress(self) -> None:
+        if self.public_control_state is not None:
+            return
         if (
             not self.stall_recovery_enabled
             or self.infrastructure_errors
@@ -385,8 +505,11 @@ class UserBenchSessionState:
         self._maybe_trigger_stall()
 
     def record_non_progress(self, reason: str | None = None) -> None:
-        """Account for a trusted protocol event that never reached UserBench."""
+        """Account for a protocol event without consulting hidden state."""
 
+        if self.public_control_state is not None:
+            self.record_public_non_progress(reason)
+            return
         del reason  # The existing protocol/invalid-action diagnostics remain authoritative.
         if self.infrastructure_errors or not self._stall_evidence_is_valid():
             return
@@ -424,6 +547,9 @@ class UserBenchSessionState:
         self.num_tool_calls += 1
         self.terminated = result.terminated
         self.truncated = result.truncated
+        # Public phase transitions happen before reward-evidence validation and
+        # therefore cannot be gated by hidden snapshots.
+        self._record_public_step(result, action)
         if result.terminated and self.termination_reason is None:
             self.termination_reason = "environment_terminated"
         if result.truncated:
@@ -470,6 +596,7 @@ class UserBenchSessionState:
             if "missing_reward_evidence" not in self.infrastructure_errors:
                 self.infrastructure_errors.append("missing_reward_evidence")
             self.reward_snapshot = snapshot
+            self._sync_public_control_metrics()
             return
 
         newly_elicited = sorted(
@@ -544,6 +671,9 @@ class UserBenchSessionState:
             set(self.answers) - previous_answers
         )
         made_progress = preference_progress or search_progress or answer_progress
+        if self.public_control_state is not None:
+            self._sync_public_control_metrics()
+            return
         if not self.stall_recovery_enabled or self.infrastructure_errors:
             return
         if recovery_pending:
@@ -629,6 +759,7 @@ class UserBenchSessionState:
 
     def metrics(self) -> dict[str, Any]:
         report = self.reward_report()
+        public_state = self.public_control_state
         return {
             "task_id": self.task_id,
             "reward_version": report["reward_version"],
@@ -658,6 +789,24 @@ class UserBenchSessionState:
             "max_consecutive_no_progress": self.max_consecutive_no_progress,
             "answer_only_generation_started": self.answer_only_generation_started,
             "visible_answer_option_count": len(self.visible_answer_options),
+            "public_control_phase": (
+                public_state.phase.value if public_state is not None else None
+            ),
+            "public_control_recovery_mode": (
+                public_state.recovery_mode.value if public_state is not None else None
+            ),
+            "public_control_episode_done": (
+                bool(public_state.episode_done) if public_state is not None else False
+            ),
+            "public_answered_aspect_count": (
+                public_state.answered_count if public_state is not None else 0
+            ),
+            "public_blocked_aspect_count": (
+                public_state.blocked_count if public_state is not None else 0
+            ),
+            "public_open_aspect_count": (
+                len(public_state.open_aspects) if public_state is not None else 0
+            ),
         }
 
 

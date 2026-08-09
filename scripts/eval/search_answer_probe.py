@@ -2,9 +2,10 @@
 """Probe one-step search-to-answer behavior without running live UserBench.
 
 Contexts are cut from accepted SFT trajectories immediately after a normal
-search result.  The Actor receives only that transcript and must emit exactly
-one next tool call.  A removes the SFT Teacher-policy suffix from the system
-message; B preserves it.
+search result. The Actor receives only that transcript and must emit exactly
+one next tool call. A removes the shared runtime policy; B restores the
+versioned production runtime policy. Teacher-only generation instructions are
+never added to either Actor context.
 """
 
 from __future__ import annotations
@@ -26,7 +27,12 @@ if str(SRC) not in sys.path:
 
 from travel_grpo.evaluation.artifacts import atomic_json
 from travel_grpo.models.vllm_policy import ActorRuntime, OpenAICompatibleActorClient
-from travel_grpo.training.sft_collection import TEACHER_ACTOR_POLICY
+from travel_grpo.prompts.actor_policy import (
+    ACTOR_RUNTIME_POLICY,
+    ACTOR_RUNTIME_POLICY_VERSION,
+    ensure_actor_runtime_policy,
+    strip_actor_runtime_policy,
+)
 
 
 ID_RE = re.compile(r"^[ACFHR]\d+$")
@@ -64,25 +70,15 @@ def clean_messages(messages: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def without_teacher_suffix(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    result = copy.deepcopy(messages)
-    system = result[0]
-    suffix = f"\n\n{TEACHER_ACTOR_POLICY}"
-    content = system.get("content")
-    if isinstance(content, str) and content.endswith(suffix):
-        system["content"] = content[: -len(suffix)]
-    return result
+    """Compatibility name: remove current or historical policy blocks."""
+
+    return strip_actor_runtime_policy(messages)
 
 
 def with_teacher_suffix(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    result = copy.deepcopy(messages)
-    system = result[0]
-    suffix = f"\n\n{TEACHER_ACTOR_POLICY}"
-    content = system.get("content")
-    if not isinstance(content, str):
-        raise ValueError("context system prompt must contain text")
-    if not content.endswith(suffix):
-        system["content"] = f"{content}{suffix}"
-    return result
+    """Compatibility name: append exactly one production runtime policy."""
+
+    return ensure_actor_runtime_policy(messages)
 
 
 def collect_contexts(
@@ -231,7 +227,8 @@ async def run(args: argparse.Namespace) -> None:
         "model": args.model,
         "contexts": len(contexts),
         "sources": [str(path.relative_to(ROOT)) for path in args.source],
-        "teacher_policy_suffix": TEACHER_ACTOR_POLICY,
+        "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
+        "actor_runtime_policy": ACTOR_RUNTIME_POLICY,
         "contexts_metadata": [
             {key: value for key, value in context.items() if key != "messages"}
             for context in contexts

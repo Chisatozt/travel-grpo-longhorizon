@@ -1,5 +1,33 @@
 """UserBench task loading and reproducible project-level dataset splits."""
 
+from travel_grpo.data.recovery_targets import (
+    TARGET_GENERATOR_VERSION,
+    TARGET_SCHEMA_VERSION,
+    TARGET_STATUS_ACCEPTED,
+    TARGET_STATUS_EXCLUDED_EVALUATION,
+    TARGET_STATUS_REJECTED,
+    TargetDecision,
+    build_target_dataset,
+    build_targets_from_boundary_file,
+    construct_target,
+    validate_target,
+    write_target_dataset,
+)
+
+from travel_grpo.data.recovery_boundaries import (
+    BOUNDARY_TYPES,
+    SCHEMA_VERSION as RECOVERY_BOUNDARY_SCHEMA_VERSION,
+    SourceSpec,
+    discover_sources,
+    extract_message_boundaries,
+    extract_recovery_boundaries,
+    load_task_split_map,
+    normalize_actor_messages,
+    parse_grpo_transcript,
+    public_state_payload,
+    write_extraction,
+)
+
 from travel_grpo.data.userbench import (
     CompositionSpec,
     DatasetSplitError,
@@ -26,4 +54,26 @@ __all__ = [
     "load_split_spec",
     "verify_dataset_splits",
     "write_dataset_splits",
+    "BOUNDARY_TYPES",
+    "RECOVERY_BOUNDARY_SCHEMA_VERSION",
+    "SourceSpec",
+    "discover_sources",
+    "extract_message_boundaries",
+    "extract_recovery_boundaries",
+    "load_task_split_map",
+    "normalize_actor_messages",
+    "parse_grpo_transcript",
+    "public_state_payload",
+    "write_extraction",
+    "TARGET_GENERATOR_VERSION",
+    "TARGET_SCHEMA_VERSION",
+    "TARGET_STATUS_ACCEPTED",
+    "TARGET_STATUS_EXCLUDED_EVALUATION",
+    "TARGET_STATUS_REJECTED",
+    "TargetDecision",
+    "build_target_dataset",
+    "build_targets_from_boundary_file",
+    "construct_target",
+    "validate_target",
+    "write_target_dataset",
 ]

@@ -398,17 +398,38 @@ class UserBenchSessionState:
             for option_id in option_ids
         }
 
-    def append_recovery_instruction(self, feedback: str) -> str:
-        """Append public recovery guidance or the legacy fallback hint."""
+    def render_actor_feedback(self, observation_text: str) -> str:
+        """Render one actor-visible observation plus public control guidance.
 
+        Public sessions always receive the same compact control summary,
+        including ordinary elicitation turns.  The renderer only consumes the
+        independent public ledger; reward snapshots and hidden preference
+        fields are never consulted or serialized here.  The operation is
+        idempotent so an adapter boundary cannot append the same summary
+        twice.
+        """
+
+        if not isinstance(observation_text, str):
+            raise TypeError("observation_text must be a string")
         if self.public_control_state is not None:
-            phase = self.public_control_state.phase
-            if phase not in {RecoveryMode.NONE, RecoveryMode.ELICITING}:
-                return f"{feedback}\n\n{render_actor_control_info(self.public_control_state)}"
-            return feedback
+            control = render_actor_control_info(self.public_control_state)
+            if observation_text.endswith(control):
+                return observation_text
+            if not observation_text:
+                return control
+            return f"{observation_text}\n\n{control}"
         if not self.answer_only_pending:
-            return feedback
-        return f"{feedback}\n\n{self.recovery_instruction()}"
+            return observation_text
+        instruction = self.recovery_instruction()
+        if observation_text.endswith(instruction):
+            return observation_text
+        return f"{observation_text}\n\n{instruction}"
+
+    def append_recovery_instruction(self, feedback: str) -> str:
+        """Compatibility alias for :meth:`render_actor_feedback`."""
+
+        return self.render_actor_feedback(feedback)
+
 
     def validate_answer_only_action(self, action: UserBenchAction) -> str | None:
         """Return a legacy recovery rejection for sessions without public state."""

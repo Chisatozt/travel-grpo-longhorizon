@@ -20,6 +20,8 @@ from travel_grpo.envs.public_control import (
     reduce_public_feedback,
     render_actor_control_info,
 )
+from travel_grpo.envs.reward import TravelRewardTask, UserBenchRewardSnapshot
+from travel_grpo.envs.userbench_context import UserBenchSessionState
 from travel_grpo.envs.userbench_tools import ActionChoice, UserBenchAction
 
 
@@ -185,6 +187,157 @@ def test_renderer_contains_public_evidence_only():
     ):
         assert secret not in rendered
 
+
+class _FeedbackWrapper:
+    def close(self):
+        return None
+
+
+def test_session_feedback_entry_is_unified_and_idempotent():
+    session = UserBenchSessionState(
+        "feedback-request",
+        "feedback-task",
+        _FeedbackWrapper(),
+        public_initial_message="I need a hotel.",
+    )
+    rendered = session.render_actor_feedback("Candidates: H1")
+    assert rendered.startswith("Candidates: H1\n\nPublic control |")
+    assert rendered.count("Public control |") == 1
+    assert "Current control state: ELICITING" in rendered
+    assert session.render_actor_feedback(rendered) == rendered
+    assert session.append_recovery_instruction("Candidates: H1") == rendered
+
+
+def test_actor_control_renderer_has_stable_normal_snapshot():
+    state = new_public_control_state("I need a hotel.")
+    assert render_actor_control_info(state) == (
+        "Public control | Current public aspect: hotel | "
+        "Current control state: ELICITING | Current aspect fallback count: 0 | "
+        "Current visible option IDs: none | "
+        "Allowed next tool calls: action, search, answer (visible ID only)\n"
+        "Constraint: Ask only for a missing preference visible in the conversation; "
+        "do not repeat an answered or declined preference."
+    )
+
+
+def test_actor_control_renderer_names_each_recovery_phase_and_allowlist():
+    def action(choice: str, content: str) -> UserBenchAction:
+        return _action(choice, content)
+
+    search_required = new_public_control_state(
+        "I need a hotel.", no_progress_threshold=1
+    )
+    search_required = reduce_public_control_state(
+        search_required,
+        PublicControlEvent(action=action("action", "hotel")),
+    )
+    rendered = render_actor_control_info(search_required)
+    assert "Current control state: SEARCH_REQUIRED" in rendered
+    assert "Allowed next tool calls: search" in rendered
+    assert "Do not call action" in rendered
+
+    retry = new_public_control_state("I need a hotel.")
+    retry = reduce_public_feedback(
+        retry,
+        action("search", "hotel Madrid"),
+        "The search backend is experiencing some issues.",
+    )
+    rendered = render_actor_control_info(retry)
+    assert "Current control state: SEARCH_RETRY_REQUIRED" in rendered
+    assert "Current aspect fallback count: 1" in rendered
+    assert "Allowed next tool calls: search (revised query)" in rendered
+    assert "Rewrite the query materially once" in rendered
+
+    answer = new_public_control_state("I need a hotel.")
+    answer = reduce_public_feedback(
+        answer, action("search", "hotel Madrid"), "Candidates: H2, H1"
+    )
+    rendered = render_actor_control_info(answer)
+    assert "Current control state: ANSWER_REQUIRED" in rendered
+    assert "Current visible option IDs: H1,H2" in rendered
+    assert "Allowed next tool calls: answer (one visible option ID)" in rendered
+    assert "exactly one ID" in rendered
+    assert "do not search or call action" in rendered
+
+    switched = new_public_control_state("I need a hotel and a flight.")
+    switched = reduce_public_feedback(
+        switched, action("search", "hotel Madrid"), "Candidates: H1"
+    )
+    switched = reduce_public_feedback(switched, action("answer", "H1"), "accepted")
+    rendered = render_actor_control_info(switched)
+    assert "Current control state: SWITCH_ASPECT_REQUIRED" in rendered
+    assert "Allowed next tool calls: none for this aspect; next public aspect only" in rendered
+    assert "continue with the next public aspect" in rendered
+
+    blocked = new_public_control_state("I need a hotel and a flight.")
+    blocked = reduce_public_feedback(
+        blocked,
+        action("search", "hotel Madrid"),
+        "The search backend is experiencing some issues.",
+    )
+    blocked = reduce_public_feedback(
+        blocked,
+        action("search", "hotel Madrid airport"),
+        "The search backend is experiencing some issues again.",
+    )
+    rendered = render_actor_control_info(blocked)
+    assert "Current control state: SWITCH_ASPECT_REQUIRED" in rendered
+    assert "Current aspect fallback count: 2" in rendered
+    assert "current aspect is blocked" in rendered
+    assert "do not search or answer it" in rendered
+
+
+def test_actor_control_renderer_never_serializes_hidden_reward_fields():
+    state = new_public_control_state("I need a hotel.")
+    rendered = render_actor_control_info(state)
+    for secret in (
+        "remaining_preference_ids",
+        "correct_ids",
+        "best_ids",
+        "reward_snapshot",
+        "reward_delta",
+        "hidden",
+    ):
+        assert secret not in rendered
+
+
+def test_session_feedback_leakage_guard_excludes_hidden_values_and_reward_fields():
+    hidden_value = "SECRET_HIDDEN_PREFERENCE_VALUE"
+    task = TravelRewardTask(
+        "leak-task",
+        ("hotel",),
+        {"hotel": "H1"},
+        {"hotel": frozenset({"H1"})},
+        {"hotel": frozenset({"P-secret"})},
+        {"hotel": (hidden_value,)},
+    )
+    snapshot = UserBenchRewardSnapshot(
+        frozenset({"P-secret"}),
+        0,
+        0,
+        frozenset({"hotel"}),
+        frozenset(),
+    )
+    session = UserBenchSessionState(
+        "leak-request",
+        "leak-task",
+        _FeedbackWrapper(),
+        reward_task=task,
+        reward_snapshot=snapshot,
+        public_initial_message="I need a hotel.",
+    )
+    rendered = session.render_actor_feedback("Candidates: H1")
+    for secret in (
+        "remaining_preference_ids",
+        "correct_ids",
+        "best_ids",
+        "reward_snapshot",
+        "reward delta",
+        "reward_delta",
+        hidden_value,
+        "P-secret",
+    ):
+        assert secret not in rendered
 
 def test_public_reducer_api_has_no_hidden_reward_inputs():
     parameters = set(inspect.signature(reduce_public_control_state).parameters)

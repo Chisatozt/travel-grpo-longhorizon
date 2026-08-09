@@ -258,7 +258,7 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
             session.record_non_progress("unknown_tool")
             return (
                 ToolResponse(
-                    text=session.append_recovery_instruction(
+                    text=session.render_actor_feedback(
                         f"Error: unsupported tool {name!r}; use {TOOL_NAME}."
                     )
                 ),
@@ -276,7 +276,7 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
             session.record_non_progress("malformed_tool_call")
             return (
                 ToolResponse(
-                    text=session.append_recovery_instruction(
+                    text=session.render_actor_feedback(
                         f"Error: invalid {TOOL_NAME} call: {exc}"
                     )
                 ),

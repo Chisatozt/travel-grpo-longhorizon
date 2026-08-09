@@ -28,7 +28,8 @@ from travel_grpo.training.sft_collection import (
 IGNORE_INDEX = -100
 MIN_TERMINAL_REWARD = 0.7
 PREFIX_SCHEMA_VERSION = "userbench-teacher-prefix-v1"
-SFT_RECORD_FORMATS = frozenset({"trajectory", "prefix"})
+RECOVERY_SFT_SCHEMA_VERSION = "recovery-sft-v1"
+SFT_RECORD_FORMATS = frozenset({"trajectory", "prefix", "recovery"})
 _PREFIX_FINAL_ANSWER_FAILURE_PREFIXES = (
     "environment.wrong_answer",
     "environment.answer_not_recorded",
@@ -499,6 +500,100 @@ def prefix_admission_reasons(record: Any) -> tuple[str, ...]:
     return tuple(sorted(reasons))
 
 
+def recovery_admission_reasons(record: Any) -> tuple[str, ...]:
+    """Validate a rendered recovery record without reward-state admission.
+
+    Recovery examples are one-step records. Historical assistant calls remain
+    in the prompt with ``loss_mask=True`` and the final assistant call is the
+    only unmasked target. A private synthetic response lets us reuse the
+    ordinary paired-message/tool schema checker without serializing a result.
+    """
+
+    if not isinstance(record, Mapping):
+        return ("record_not_mapping",)
+    reasons: set[str] = set()
+    if record.get("schema_version") != RECOVERY_SFT_SCHEMA_VERSION:
+        reasons.add("legacy_or_unknown_recovery_schema")
+    if record.get("source_schema_version") != "recovery-target-v1":
+        reasons.add("wrong_recovery_source_schema")
+    for field in (
+        "task_id",
+        "composition",
+        "boundary_type",
+        "project_split",
+        "policy_version",
+        "actor_policy_version",
+    ):
+        if not isinstance(record.get(field), str) or not str(record[field]).strip():
+            reasons.add(f"missing_{field}")
+    if record.get("project_split") == "evaluation":
+        reasons.add("evaluation_record_not_trainable")
+    if record.get("target_status") != "accepted":
+        reasons.add("target_not_accepted")
+    if not isinstance(record.get("public_state_before"), Mapping):
+        reasons.add("missing_public_state")
+    if not isinstance(record.get("target_assistant"), Mapping):
+        reasons.add("missing_target_assistant")
+
+    messages = record.get("messages")
+    if not isinstance(messages, list) or len(messages) < 3:
+        reasons.add("invalid_messages")
+        return tuple(sorted(reasons))
+    if [
+        message.get("role")
+        for message in messages[:2]
+        if isinstance(message, Mapping)
+    ] != ["system", "user"]:
+        reasons.add("invalid_message_prefix")
+    if not isinstance(messages[-1], Mapping) or messages[-1].get("role") != "assistant":
+        reasons.add("recovery_target_must_be_final_assistant")
+        return tuple(sorted(reasons))
+    assistants = [
+        message
+        for message in messages
+        if isinstance(message, Mapping) and message.get("role") == "assistant"
+    ]
+    if not assistants:
+        reasons.add("missing_target_assistant_message")
+        return tuple(sorted(reasons))
+    if any(message.get("loss_mask") is not True for message in assistants[:-1]):
+        reasons.add("historical_assistant_must_be_loss_masked")
+    if assistants[-1].get("loss_mask") is True:
+        reasons.add("target_assistant_must_not_be_loss_masked")
+    if sum(message.get("loss_mask") is not True for message in assistants) != 1:
+        reasons.add("recovery_requires_one_unmasked_assistant")
+
+    validation_messages = copy.deepcopy(messages)
+    target = validation_messages[-1]
+    calls = target.get("tool_calls") if isinstance(target, Mapping) else None
+    call_id = None
+    if isinstance(calls, list) and len(calls) == 1 and isinstance(calls[0], Mapping):
+        call_id = calls[0].get("id")
+    validation_messages.append(
+        {
+            "role": "tool",
+            "name": TOOL_NAME,
+            "tool_call_id": call_id,
+            "content": "",
+        }
+    )
+    # These simulator feedback strings are public history. They are useful
+    # recovery evidence and must not be treated as trajectory-level admission
+    # failures for a one-step boundary target. Structural/tool errors remain
+    # enforced by the shared validator.
+    recovery_history_warnings = {
+        "vague_action_feedback",
+        "duplicate_recommendation_feedback",
+        "invalid_option_id_feedback",
+    }
+    reasons.update(
+        reason
+        for reason in _message_reasons(validation_messages)
+        if reason not in recovery_history_warnings
+    )
+    return tuple(sorted(reasons))
+
+
 def sft_record_admission_reasons(
     record: Any,
     *,
@@ -511,6 +606,8 @@ def sft_record_admission_reasons(
         )
     if record_format == "prefix":
         return prefix_admission_reasons(record)
+    if record_format == "recovery":
+        return recovery_admission_reasons(record)
     return sft_admission_reasons(
         record, accepted_quality_tiers=accepted_quality_tiers
     )

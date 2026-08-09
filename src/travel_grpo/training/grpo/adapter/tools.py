@@ -46,7 +46,7 @@ def _rejected_tool_execution(
     session.invalid_actions += 1
     session.record_non_progress(reason)
     return UserBenchToolExecution(
-        text=session.append_recovery_instruction(f"Error: {message}"),
+        text=session.render_actor_feedback(f"Error: {message}"),
         reward=0.0,
         metadata={
             "validation_error": message,
@@ -66,6 +66,15 @@ async def execute_userbench_action(
     # all guard decisions remain public-only and happen before UserBench.
     session.prepare_public_action()
     if session.done:
+        # Public sessions return a recoverable actor-visible rejection instead
+        # of raising after the public ledger has reached a terminal state.
+        # Legacy sessions retain the strict lifecycle exception.
+        if getattr(session, "public_control_state", None) is not None:
+            return _rejected_tool_execution(
+                session,
+                "the rollout is terminal; no further tool call is allowed",
+                reason="public_control_complete",
+            )
         raise RuntimeError(
             "cannot execute a tool call after the UserBench episode ended"
         )
@@ -109,7 +118,9 @@ async def execute_userbench_action(
         session.termination_reason = "simulator_infrastructure_failure"
         session.terminated = True
         return UserBenchToolExecution(
-            text="Error: UserBench simulator infrastructure failure; trajectory invalid.",
+            text=session.render_actor_feedback(
+                "Error: UserBench simulator infrastructure failure; trajectory invalid."
+            ),
             reward=0.0,
             metadata={
                 "task_id": session.task_id,
@@ -131,7 +142,7 @@ async def execute_userbench_action(
         snapshot = None
     session.record_step(result, action, snapshot)
     report = session.reward_report()
-    feedback = session.append_recovery_instruction(result.observation.to_tool_text())
+    feedback = session.render_actor_feedback(result.observation.to_tool_text())
     return UserBenchToolExecution(
         text=feedback,
         reward=0.0,

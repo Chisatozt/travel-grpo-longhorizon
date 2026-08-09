@@ -1004,42 +1004,98 @@ def advance_public_aspect(state: PublicControlState) -> PublicControlState:
     )
 
 
+def _render_phase_label(state: PublicControlState) -> str:
+    """Return the stable public name for the current finite-state phase."""
+
+    phase = state.phase
+    # ``ELICITING`` is an identity-compatible alias of ``NONE``.  The
+    # renderer must use the state-machine name rather than Enum.name (which
+    # would expose the legacy ``NONE`` spelling to the actor).
+    if phase is RecoveryMode.NONE and not state.episode_done:
+        return "ELICITING"
+    return phase.value.upper()
+
+
+def _render_allowed_tool_calls(state: PublicControlState) -> str:
+    """Return a public-only, human-readable allow-list for the next call."""
+
+    if state.episode_done:
+        return "none"
+    current = state.current
+    if current is None:
+        # With no explicitly named aspect, only a public clarification/action
+        # is safe; search and answer require a concrete public target.
+        return "action"
+    phase = state.phase
+    if phase is RecoveryMode.SEARCH_REQUIRED:
+        return "search"
+    if phase is RecoveryMode.SEARCH_RETRY_REQUIRED:
+        return "search (revised query)"
+    if phase is RecoveryMode.ANSWER_REQUIRED:
+        return "answer (one visible option ID)"
+    if phase is RecoveryMode.SWITCH_ASPECT_REQUIRED:
+        return "none for this aspect; next public aspect only"
+    if phase is RecoveryMode.ANSWERED:
+        return "none for this aspect"
+    return "action, search, answer (visible ID only)"
+
+
+def _render_constraint(state: PublicControlState) -> str | None:
+    """Return the phase-specific public constraint, if one is needed."""
+
+    if state.episode_done:
+        return "Do not issue another tool call or fabricate completion."
+    current = state.current
+    phase = state.phase
+    if phase is RecoveryMode.SEARCH_REQUIRED:
+        return "Do not call action; search using information already visible in the conversation."
+    if phase is RecoveryMode.SEARCH_RETRY_REQUIRED:
+        return "Rewrite the query materially once; do not repeat the previous query."
+    if phase is RecoveryMode.ANSWER_REQUIRED:
+        return "Answer with exactly one ID from the visible option list; do not search or call action."
+    if phase is RecoveryMode.SWITCH_ASPECT_REQUIRED:
+        if current is not None and current.status is PublicAspectStatus.BLOCKED:
+            return "The current aspect is blocked; do not search or answer it, and do not fabricate an answer."
+        return "The current aspect is terminal; do not call it again; continue with the next public aspect."
+    if phase is RecoveryMode.ANSWERED:
+        return "This aspect is answered; do not call a tool for it again."
+    if phase is RecoveryMode.NONE and current is not None:
+        return (
+            "Ask only for a missing preference visible in the conversation; "
+            "do not repeat an answered or declined preference."
+        )
+    return None
+
+
 def render_actor_control_info(state: PublicControlState) -> str:
-    """Render a stable hint containing only public evidence."""
+    """Render stable actor feedback using public evidence only.
+
+    The first line intentionally has a fixed field order so rollout logs and
+    snapshot tests can compare it byte-for-byte.  The optional constraint line
+    is phase-specific and never contains reward, hidden preference, or
+    correctness fields.
+    """
 
     if not isinstance(state, PublicControlState):
         raise TypeError("state must be PublicControlState")
-    if state.episode_done:
-        return "Public control: all publicly tracked aspects are terminal."
     current = state.current
-    aspect = current.aspect if current is not None else "the publicly named travel aspects"
-    lines = [f"Public control for {aspect}:"]
-    phase = state.phase
-    if phase is RecoveryMode.ANSWER_REQUIRED and current is not None:
-        ids = ", ".join(sorted(current.visible_option_ids)) or "the visible option IDs"
-        lines.append(f"Submit exactly one option ID from this public candidate list: {ids}.")
-    elif phase is RecoveryMode.SEARCH_RETRY_REQUIRED:
-        lines.append(
-            "The last public search did not produce a normal list; revise the query once."
-        )
-        if current is not None and current.last_search_signature:
-            lines.append("Do not repeat the previous public query.")
-    elif phase is RecoveryMode.SEARCH_REQUIRED:
-        lines.append("Use one search based only on information already visible in the conversation.")
-    elif phase is RecoveryMode.SWITCH_ASPECT_REQUIRED:
-        if current is not None and current.status is PublicAspectStatus.BLOCKED:
-            lines.append("This publicly observed aspect is blocked; switch without fabricating an answer.")
-        else:
-            lines.append("This publicly observed aspect is terminal; advance to the next public aspect.")
-    elif phase is RecoveryMode.BLOCKED:
-        lines.append("This publicly observed aspect is blocked; do not fabricate an answer.")
-    elif phase is RecoveryMode.ANSWERED:
-        lines.append("This public aspect is answered; do not call a tool for it again.")
-    elif phase is RecoveryMode.ELICITING:
-        lines.append("Ask only for a missing preference that is visible in the conversation.")
-    else:
-        lines.append("No public recovery constraint is active.")
-    return "\n".join(lines)
+    aspect = current.aspect if current is not None else "none"
+    fallback_count = current.search_fallbacks if current is not None else 0
+    visible_ids = (
+        ",".join(sorted(current.visible_option_ids))
+        if current is not None and current.visible_option_ids
+        else "none"
+    )
+    summary = (
+        "Public control | "
+        f"Current public aspect: {aspect} | "
+        f"Current control state: {_render_phase_label(state)} | "
+        f"Current aspect fallback count: {fallback_count} | "
+        f"Current visible option IDs: {visible_ids} | "
+        f"Allowed next tool calls: {_render_allowed_tool_calls(state)}"
+    )
+    constraint = _render_constraint(state)
+    return summary if constraint is None else f"{summary}\nConstraint: {constraint}"
 
 
 __all__ = [

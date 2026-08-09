@@ -99,5 +99,13 @@ def test_grpo_rows_use_the_same_runtime_policy_without_hidden_labels() -> None:
     assert row["prompt"][0]["content"].count(ACTOR_RUNTIME_POLICY_MARKER) == 1
     assert ACTOR_RUNTIME_POLICY in row["prompt"][0]["content"]
     serialized = str(row)
-    assert "correct_ids" not in serialized
-    assert "remaining_preference_ids" not in serialized
+    for secret in (
+        "remaining_preference_ids",
+        "correct_ids",
+        "best_ids",
+        "reward_snapshot",
+        "reward delta",
+        "reward_delta",
+        "SECRET_HIDDEN_PREFERENCE_VALUE",
+    ):
+        assert secret not in serialized

@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +46,65 @@ def load_tasks(path: Path) -> list[dict]:
     return table.to_pylist()
 
 
+async def _run_pending_tasks(
+    pending: Sequence[dict],
+    *,
+    selected_count: int,
+    completed: dict[str, dict],
+    actor: OpenAICompatibleActorClient,
+    simulator: UserSimulatorRuntime,
+    output: Path,
+    concurrency: int,
+    retry_infrastructure_invalid: bool,
+) -> None:
+    """Run independent tasks with a bounded number of active rollouts.
+
+    Each task keeps its existing sequential 20-turn rollout. The semaphore
+    only overlaps different tasks, so per-task environment state and atomic
+    checkpoints remain isolated while the Actor and eval simulator can serve
+    more than one task at a time.
+    """
+
+    semaphore = asyncio.Semaphore(concurrency)
+    finished = selected_count - len(pending)
+
+    async def run_one(task: dict) -> None:
+        nonlocal finished
+        async with semaphore:
+            task_id = str(task["task_id"])
+            old = completed.get(task_id)
+            if old is not None and (
+                old.get("infrastructure_valid") is True
+                or not retry_infrastructure_invalid
+            ):
+                return
+            result = await rollout_task(
+                task,
+                actor=actor,
+                simulator=simulator,
+                source_root=ROOT / "environments/UserBench",
+            )
+            result = attach_attempt_history(result, old)
+            atomic_json(task_path(output, task_id), result)
+            completed[task_id] = result
+            finished += 1
+            print(
+                f"[evaluation] completed {finished}/{selected_count} task={task_id} "
+                f"valid={result.get('infrastructure_valid') is True}",
+                flush=True,
+            )
+
+    # Wait for every task before propagating an exception. This lets already
+    # successful tasks finish and persist their checkpoints, so --resume can
+    # continue cleanly after a single task failure.
+    outcomes = await asyncio.gather(
+        *(run_one(task) for task in pending), return_exceptions=True
+    )
+    for outcome in outcomes:
+        if isinstance(outcome, BaseException):
+            raise outcome
+
+
 async def run(args: argparse.Namespace) -> int:
     records = load_tasks(args.dataset)
     contract = build_contract(
@@ -54,7 +114,21 @@ async def run(args: argparse.Namespace) -> int:
     output = args.output or ROOT / "outputs/evaluation" / args.stage
     contract_document = contract.to_dict(stage=args.stage, model=args.model)
     if args.dry_run:
-        print(json.dumps({"valid": True, "stage": args.stage, "model": args.model, "contract_hash": contract.contract_hash, "frozen_tasks": len(records), "would_run": len(selected), "output": str(output)}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "valid": True,
+                    "stage": args.stage,
+                    "model": args.model,
+                    "contract_hash": contract.contract_hash,
+                    "frozen_tasks": len(records),
+                    "would_run": len(selected),
+                    "concurrency": args.concurrency,
+                    "output": str(output),
+                },
+                indent=2,
+            )
+        )
         return 0
     simulator = UserSimulatorRuntime.from_environment(SimulatorRole.EVAL)
     actor_runtime = ActorRuntime.from_environment()
@@ -72,14 +146,32 @@ async def run(args: argparse.Namespace) -> int:
     completed = load_completed(output)
     actor = OpenAICompatibleActorClient(actor_runtime)
     try:
-        for task in selected:
-            old = completed.get(task["task_id"])
-            if old is not None and (old.get("infrastructure_valid") is True or not args.retry_infrastructure_invalid):
-                continue
-            result = await rollout_task(task, actor=actor, simulator=simulator, source_root=ROOT / "environments/UserBench")
-            result = attach_attempt_history(result, old)
-            atomic_json(task_path(output, task["task_id"]), result)
-            completed[task["task_id"]] = result
+        pending = [
+            task
+            for task in selected
+            if not (
+                (old := completed.get(task["task_id"])) is not None
+                and (
+                    old.get("infrastructure_valid") is True
+                    or not args.retry_infrastructure_invalid
+                )
+            )
+        ]
+        print(
+            f"[evaluation] stage={args.stage} selected={len(selected)} "
+            f"pending={len(pending)} concurrency={args.concurrency}",
+            flush=True,
+        )
+        await _run_pending_tasks(
+            pending,
+            selected_count=len(selected),
+            completed=completed,
+            actor=actor,
+            simulator=simulator,
+            output=output,
+            concurrency=args.concurrency,
+            retry_infrastructure_invalid=args.retry_infrastructure_invalid,
+        )
     finally:
         await actor.close()
     ordered = [completed[task_id] for task_id in contract.task_ids if task_id in completed]
@@ -102,6 +194,12 @@ def main() -> int:
     parser.add_argument("--dataset", type=Path, default=ROOT / "data/evaluation/tasks.parquet")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--limit", type=int)
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="maximum number of tasks evaluated concurrently (default: 1)",
+    )
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--retry-infrastructure-invalid", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -109,6 +207,8 @@ def main() -> int:
     args.model = args.model or MODELS[args.stage]
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be positive")
+    if args.concurrency <= 0:
+        parser.error("--concurrency must be positive")
     return asyncio.run(run(args))
 
 

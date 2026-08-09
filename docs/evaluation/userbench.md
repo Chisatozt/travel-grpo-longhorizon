@@ -24,6 +24,17 @@ python scripts/eval/compare_stages.py
 
 每个任务原子写入 `outputs/evaluation/{stage}/tasks/`。`--resume` 不重复有效任务；`--retry-infrastructure-invalid` 只重试基础设施无效任务。结果不会保存 API key、best ID、隐藏偏好或内部 snapshot。
 
+评测默认逐题运行（`--concurrency 1`）。如果 Actor 服务和 EVAL 用户模拟器允许并发，可以用受控任务并发重叠不同任务；每个任务内部仍保持最多 20 轮串行，且每题继续原子写盘：
+
+```bash
+bash scripts/eval/run_evaluation.sh baseline \
+  --concurrency 4 \
+  --resume \
+  --retry-infrastructure-invalid
+```
+
+建议先从 `--concurrency 2` 开始观察 API 限流、超时和 GPU 显存，再提高到 4。并发评测时必须继续使用独立的 Actor 和 EVAL simulator 进程；不要把 `GRPO_USER_SIM_*` 变量用于评测。`--concurrency` 只控制任务之间的并发，不改变 Actor temperature、simulator temperature、seed 或单题最大轮数。
+
 主汇总固定分母 471：缺失和 infrastructure-invalid 任务按 0 计入，同时报告 valid-only diagnostics。指标包括 UserBench `micro_avg`、`micro_max`、`avg_number_of_1`、`avg_number_of_08`，各 aspect option quality，Travel Reward v2、成功率、覆盖、效率、policy penalty、调用/重复/终止诊断及 composition 分项。
 
 只有三阶段都完整覆盖 471 条且 contract hash 一致，`compare_stages.py` 才生成 `comparison.json` 和 `comparison.md`。否则失败，不允许称为正式结果。

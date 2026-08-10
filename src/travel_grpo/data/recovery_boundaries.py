@@ -29,6 +29,7 @@ from travel_grpo.envs.public_control import (
     RecoveryMode,
     advance_public_aspect,
     classify_public_observation,
+    mark_public_preference_complete,
     new_public_control_state,
     reduce_public_feedback,
 )
@@ -580,9 +581,18 @@ def public_state_payload(state: PublicControlState) -> dict[str, Any]:
         "visible_option_ids": sorted(current.visible_option_ids) if current is not None else [],
         "answered_aspects": list(state.answered_aspects),
         "blocked_aspects": list(state.blocked_aspects),
+        "preference_complete_aspects": [
+            item.aspect for item in state.aspects if item.preferences_complete
+        ],
         "search_attempts": current.search_attempts if current is not None else 0,
         "normal_search_seen": bool(current.normal_search_seen) if current is not None else False,
         "consecutive_no_progress": state.consecutive_no_progress,
+        "last_transition_aspect": state.last_transition_aspect,
+        "last_transition_status": (
+            state.last_transition_status.value.upper()
+            if state.last_transition_status is not None
+            else None
+        ),
     }
 
 
@@ -623,6 +633,11 @@ def _candidate(
 ) -> _Candidate:
     if boundary_type not in BOUNDARY_TYPES:
         raise ValueError(f"unsupported boundary type {boundary_type!r}")
+    # A preference-complete boundary is an explicit public phase hint derived
+    # from the accepted, actor-visible search transition. Persist it in the
+    # derived record so offline renderers do not fall back to ELICITING.
+    if boundary_type == "preference_complete_to_search" and state.current_aspect is not None:
+        state = mark_public_preference_complete(state, state.current_aspect)
     return _Candidate(
         task_id=task_id,
         boundary_type=boundary_type,

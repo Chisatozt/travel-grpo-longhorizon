@@ -29,6 +29,7 @@ from travel_grpo.envs.public_control import (
     PublicObservationKind,
     RecoveryMode,
     extract_public_aspects,
+    mark_public_preference_complete,
     render_actor_control_info,
 )
 from travel_grpo.envs.userbench_tools import (
@@ -209,9 +210,18 @@ def _coerce_recovery_mode(value: Any) -> RecoveryMode:
 
 
 def public_state_from_payload(
-    payload: Mapping[str, Any], messages: Sequence[Mapping[str, Any]]
+    payload: Mapping[str, Any],
+    messages: Sequence[Mapping[str, Any]],
+    *,
+    phase_hint: str | None = None,
 ) -> PublicControlState:
-    """Rebuild the public renderer state from the boundary snapshot only."""
+    """Rebuild public renderer state from a boundary snapshot only.
+
+    ``phase_hint`` is an offline, public-boundary label. All known boundary
+    labels are accepted as no-op compatibility hints; only
+    ``preference_complete_to_search`` changes the reconstructed phase. It is
+    not a hidden reward signal and is never read from a reward/task ledger.
+    """
 
     public_aspects = extract_public_aspects(_initial_user_message(messages))
     current = payload.get("current_aspect")
@@ -219,8 +229,25 @@ def public_state_from_payload(
         raise RecoverySFTError("current aspect is not named in the public user message")
     answered = set(payload.get("answered_aspects", ()))
     blocked = set(payload.get("blocked_aspects", ()))
+    complete = set(payload.get("preference_complete_aspects", ()))
     if not answered <= set(public_aspects) or not blocked <= set(public_aspects):
         raise RecoverySFTError("public state mentions an aspect absent from public history")
+    if not complete <= set(public_aspects):
+        raise RecoverySFTError("preference completion mentions an absent public aspect")
+    hint = str(phase_hint or "").strip().casefold()
+    allowed_hints = {
+        "preference_complete_to_search",
+        "valid_search_to_answer",
+        "first_fallback",
+        "second_fallback",
+        "repeated_no_progress_action",
+        "explicit_no_preference",
+        "visible_options_pending_answer",
+    }
+    if hint and hint not in allowed_hints:
+        raise RecoverySFTError(f"unsupported public phase hint: {phase_hint!r}")
+    if hint == "preference_complete_to_search" and current is not None:
+        complete.add(str(current))
     visible = payload.get("visible_option_ids", ())
     if not isinstance(visible, (list, tuple, set)):
         raise RecoverySFTError("visible_option_ids must be a sequence")
@@ -235,6 +262,16 @@ def public_state_from_payload(
         raise RecoverySFTError("public state counters must be integers") from exc
     if min(fallback_count, search_attempts, consecutive) < 0:
         raise RecoverySFTError("public state counters must be non-negative")
+    transition_aspect = payload.get("last_transition_aspect")
+    if transition_aspect is not None and transition_aspect not in public_aspects:
+        raise RecoverySFTError("last transition mentions an absent public aspect")
+    transition_raw = payload.get("last_transition_status")
+    transition_status = None
+    if transition_raw not in (None, ""):
+        try:
+            transition_status = PublicAspectStatus(str(transition_raw).strip().casefold())
+        except ValueError as exc:
+            raise RecoverySFTError("invalid public transition status") from exc
     aspects = tuple(
         PublicAspectState(
             aspect,
@@ -249,17 +286,23 @@ def public_state_from_payload(
             normal_search_seen=bool(payload.get("normal_search_seen", False)) if aspect == current else False,
             search_attempts=search_attempts if aspect == current else 0,
             search_fallbacks=fallback_count if aspect == current else 0,
+            preferences_complete=aspect in complete,
         )
         for aspect in public_aspects
     )
     terminal = bool(aspects) and all(item.status is not PublicAspectStatus.OPEN for item in aspects)
-    return PublicControlState(
+    state = PublicControlState(
         aspects=aspects,
         current_aspect=current,
         recovery_mode=_coerce_recovery_mode(payload.get("recovery_mode")),
         consecutive_no_progress=consecutive,
         episode_done=terminal,
+        last_transition_aspect=transition_aspect,
+        last_transition_status=transition_status,
     )
+    if hint == "preference_complete_to_search" and current is not None:
+        state = mark_public_preference_complete(state, str(current))
+    return state
 
 
 def _append_public_control_note(
@@ -320,7 +363,11 @@ def render_recovery_record(target_record: Mapping[str, Any]) -> dict[str, Any]:
     raw_messages = normalize_actor_messages(target_record.get("messages", []))
     if not raw_messages or raw_messages[0].get("role") != "system":
         raise RecoverySFTError("recovery history must begin with a system message")
-    state = public_state_from_payload(target_record.get("public_state_before", {}), raw_messages)
+    state = public_state_from_payload(
+        target_record.get("public_state_before", {}),
+        raw_messages,
+        phase_hint=str(target_record.get("boundary_type", "")),
+    )
     note = render_actor_control_info(state)
     messages = ensure_actor_runtime_policy(raw_messages)
     placement = _append_public_control_note(messages, note)
@@ -403,7 +450,11 @@ def _answer_visibility(record: Mapping[str, Any]) -> tuple[bool, str | None]:
     if action.choice is not ActionChoice.ANSWER:
         return True, None
     ids = [value.strip() for value in action.content.split(",") if value.strip()]
-    state = public_state_from_payload(record["public_state_before"], record["messages"][:-1])
+    state = public_state_from_payload(
+        record["public_state_before"],
+        record["messages"][:-1],
+        phase_hint=str(record.get("boundary_type", "")),
+    )
     visible = state.current.visible_option_ids if state.current is not None else frozenset()
     if len(ids) != 1 or OPTION_ID.fullmatch(ids[0] if ids else "") is None:
         return False, "answer_not_exactly_one_visible_option_id"
@@ -447,7 +498,11 @@ def audit_rendered_record(
     else:
         try:
             expected = render_actor_control_info(
-                public_state_from_payload(record["public_state_before"], messages[:-1])
+                public_state_from_payload(
+                    record["public_state_before"],
+                    messages[:-1],
+                    phase_hint=str(record.get("boundary_type", "")),
+                )
             )
             if note != expected:
                 reasons.append("control_note_parity_failure")

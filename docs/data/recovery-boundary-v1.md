@@ -71,3 +71,17 @@ task files, the canonical deduplication key, split checks, policy versions, and
 the fact that all targets remain deferred.
 The generated `contexts.jsonl` and manifest are disposable derived artifacts;
 the source trajectories remain unchanged.
+
+## Public phase rendering
+
+`public_state_before` may include the public-only `preference_complete_aspects`
+list. For a `preference_complete_to_search` boundary, the renderer reconstructs
+that aspect as `SEARCH_REQUIRED`; it does not use reward snapshots, preference IDs,
+or correctness labels. Older records without this field are rendered with the
+explicit boundary type as a compatibility phase hint.
+
+When `ANSWERED` or `BLOCKED` is advanced to the next open aspect, the public
+ledger retains one transition window. Actor feedback includes a stable
+`SWITCH_ASPECT_REQUIRED` transition line naming only the previous public aspect,
+its public terminal status, and the next public aspect. The note is cleared on
+the next public event, so it cannot accumulate or leak hidden state.

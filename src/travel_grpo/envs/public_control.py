@@ -294,6 +294,9 @@ class PublicAspectState:
     search_signatures: tuple[str, ...] = ()
     last_search_signature: str | None = None
     submitted_answer: str | None = None
+    # Public-only phase hint used by offline boundary records and explicit
+    # public completion events. It never contains hidden preference IDs/values.
+    preferences_complete: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.aspect, str) or not self.aspect.strip():
@@ -323,6 +326,8 @@ class PublicAspectState:
             raise PublicControlError("search_fallbacks must be a non-negative integer")
         if any(not isinstance(signature, str) for signature in self.search_signatures):
             raise PublicControlError("search_signatures must contain strings")
+        if not isinstance(self.preferences_complete, bool):
+            raise PublicControlError("preferences_complete must be a bool")
 
 
 @dataclass(frozen=True)
@@ -345,6 +350,10 @@ class PublicControlState:
     seen_observation_signatures: frozenset[str] = frozenset()
     submitted_answer_ids: tuple[str, ...] = ()
     episode_done: bool = False
+    # Retain one public transition window so the next prompt explicitly
+    # explains the switch after an ANSWERED/BLOCKED aspect.
+    last_transition_aspect: str | None = None
+    last_transition_status: PublicAspectStatus | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.aspects, tuple):
@@ -375,6 +384,12 @@ class PublicControlState:
             for option_id in self.submitted_answer_ids
         ):
             raise PublicControlError("submitted_answer_ids must contain official option IDs")
+        if self.last_transition_aspect is not None and self.last_transition_aspect not in names:
+            raise PublicControlError("last_transition_aspect must be public")
+        if self.last_transition_status is not None and not isinstance(
+            self.last_transition_status, PublicAspectStatus
+        ):
+            raise TypeError("last_transition_status must be PublicAspectStatus or None")
 
     @property
     def public_aspects(self) -> tuple[str, ...]:
@@ -411,6 +426,12 @@ class PublicControlState:
 
         if self.episode_done:
             return RecoveryMode.SWITCH_ASPECT_REQUIRED
+        if (
+            self.recovery_mode is RecoveryMode.NONE
+            and self.current is not None
+            and self.current.preferences_complete
+        ):
+            return RecoveryMode.SEARCH_REQUIRED
         if self.recovery_mode is RecoveryMode.NONE and self.current is not None:
             return RecoveryMode.ELICITING
         if (
@@ -501,6 +522,35 @@ def _replace_aspect(
         aspects=tuple(
             updated if item.aspect == updated.aspect else item for item in state.aspects
         ),
+    )
+
+
+def mark_public_preference_complete(
+    state: PublicControlState,
+    aspect: str | None = None,
+) -> PublicControlState:
+    """Mark a publicly evidenced aspect as ready for search.
+
+    This entry point is intentionally explicit: callers must supply an
+    actor-visible completion signal (for example an offline boundary hint or
+    a structured public no-preference event). It never consults reward state.
+    """
+
+    if not isinstance(state, PublicControlState):
+        raise TypeError("state must be PublicControlState")
+    target = aspect or state.current_aspect
+    if target is None or target not in state.public_aspects:
+        raise PublicControlError("preference completion requires a public aspect")
+    current = next(item for item in state.aspects if item.aspect == target)
+    if current.status is not PublicAspectStatus.OPEN:
+        return state
+    updated = replace(current, preferences_complete=True)
+    return replace(
+        _replace_aspect(state, updated),
+        current_aspect=target,
+        recovery_mode=RecoveryMode.SEARCH_REQUIRED,
+        last_transition_aspect=None,
+        last_transition_status=None,
     )
 
 
@@ -877,6 +927,15 @@ def reduce_public_control_state(
         return state
 
     next_state = state
+    # A transition note is intended for the prompt immediately before the
+    # next actor call. Once a new public event arrives, clear it so the note
+    # cannot accumulate across later turns.
+    if event.action is not None or event.observation is not None:
+        next_state = replace(
+            next_state,
+            last_transition_aspect=None,
+            last_transition_status=None,
+        )
     action = event.action
     observation = event.observation
     repeated_action = False
@@ -966,7 +1025,12 @@ def advance_public_aspect(state: PublicControlState) -> PublicControlState:
             PublicAspectStatus.ANSWERED,
             PublicAspectStatus.BLOCKED,
         }:
-            return replace(state, current_aspect=None)
+            return replace(
+                state,
+                current_aspect=None,
+                last_transition_aspect=state.current.aspect,
+                last_transition_status=state.current.status,
+            )
         return state
     current = state.current
     if current is None or current.status not in {
@@ -995,12 +1059,16 @@ def advance_public_aspect(state: PublicControlState) -> PublicControlState:
             current_aspect=None,
             recovery_mode=RecoveryMode.NONE,
             episode_done=True,
+            last_transition_aspect=current.aspect,
+            last_transition_status=current.status,
         )
     return replace(
         state,
         current_aspect=next_aspect,
         recovery_mode=RecoveryMode.NONE,
         consecutive_no_progress=0,
+        last_transition_aspect=current.aspect,
+        last_transition_status=current.status,
     )
 
 
@@ -1094,8 +1162,19 @@ def render_actor_control_info(state: PublicControlState) -> str:
         f"Current visible option IDs: {visible_ids} | "
         f"Allowed next tool calls: {_render_allowed_tool_calls(state)}"
     )
+    lines = [summary]
+    if state.last_transition_aspect is not None and state.last_transition_status is not None:
+        status = state.last_transition_status.value.upper()
+        lines.append(
+            "Transition: SWITCH_ASPECT_REQUIRED | "
+            f"Previous public aspect: {state.last_transition_aspect} is {status}; "
+            "do not call that aspect again. "
+            f"Continue only with current public aspect: {aspect}."
+        )
     constraint = _render_constraint(state)
-    return summary if constraint is None else f"{summary}\nConstraint: {constraint}"
+    if constraint is not None:
+        lines.append(f"Constraint: {constraint}")
+    return "\n".join(lines)
 
 
 __all__ = [
@@ -1112,6 +1191,7 @@ __all__ = [
     "classify_public_observation",
     "extract_public_aspects",
     "new_public_control_state",
+    "mark_public_preference_complete",
     "normalize_public_query",
     "public_action_signature",
     "public_query_signature",

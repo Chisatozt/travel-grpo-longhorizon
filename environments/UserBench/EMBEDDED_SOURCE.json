@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "license_file": "LICENSE.txt",
   "local_modifications": [
-    "Added EMBEDDED_SOURCE.json provenance manifest; all upstream files are unchanged."
+    "Added EMBEDDED_SOURCE.json provenance manifest.",
+    "Search judging accepts one aspect's base task arguments together with relevant elicited preference qualifiers and reuses the visible candidate list for refinement searches."
   ]
 }

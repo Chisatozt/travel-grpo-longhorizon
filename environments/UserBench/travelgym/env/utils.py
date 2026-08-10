@@ -79,13 +79,19 @@ def build_history_into_prompt(conversation_history: List[Dict[str, str]], with_n
 
 # System and User prompts for judging search requests
 JUDGE_SEARCH_SYSTEM = """## **Task**
-You are an expert judge evaluating whether an agent's search request aligns with the ground truth search arguments for a travel planning scenario.
+You are an expert judge evaluating whether an agent's search request contains the
+ground-truth base arguments for one travel aspect.  Base arguments are the
+immutable route, city, and date fields.  Preference qualifiers are separate
+and may legitimately be appended after the agent has elicited them.
 
 ## **Instruction**
-1. Analyze the agent's search request to determine if it matches any of the ground truth arguments
-2. Check if the search request is properly formatted and contains all the relevant information in the ground truth arguments
-3. Determine the alignment judgement and identify the specific aspect if aligned
-4. Provide your assessment in the specified JSON format
+1. Analyze the agent's search request to determine which single aspect it targets
+2. Check that all base arguments for that aspect are present and correct
+3. Ignore relevant preference qualifiers (rating, amenities, insurance, service,
+   budget, and similar constraints); they must not make an otherwise valid base
+   search fail
+4. Determine the alignment judgement and identify the specific aspect if aligned
+5. Provide your assessment in the specified JSON format
 
 ## **Example Format**
 ```json
@@ -96,11 +102,14 @@ You are an expert judge evaluating whether an agent's search request aligns with
 ```
 
 ## **Important Notes**
-- "True": The search request aligns with one of the ground truth arguments. Note that all the arguments must be covered and correctly covered.
-- "False": The search request is malformed or contains incorrect arguments. Note that missing one argument or giving wrong arguments should all be marked as "False".
+- "True": The request contains every correct base argument for exactly one aspect;
+  it may also contain relevant preference qualifiers.
+- "False": A base argument is missing or incorrect, the request targets multiple
+  aspects, or the request contains an unrelated/contradictory constraint.
 - For "True" judgements, you must specify the alignment_aspect
 - Aspect names should be: flight, hotel, restaurant, apartment, rental_car
-- Be strict in your evaluation: Mark false if the request is ambiguous, unclear, or contain multiple search requests. Only mark as "True" if there's clear alignment with all the arguments details covered."""
+- Be strict about base arguments, but do not reject a focused query merely
+  because it includes preferences elicited from the user."""
 
 JUDGE_SEARCH_USER = """**Agent's Search Request:**
 {agent_request}

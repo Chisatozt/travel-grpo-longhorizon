@@ -85,6 +85,19 @@ def test_normal_result_probes_are_answer_required_with_visible_ids() -> None:
         assert payload["visible_option_ids"]
 
 
+@pytest.mark.skipif(
+    not (ROOT / "data/evaluation/tasks.parquet").exists(),
+    reason="frozen evaluation fixture is not present",
+)
+def test_manifest_supports_32_task_closed_loop_validation(tmp_path: Path) -> None:
+    args = _args(tmp_path)
+    args.closed_loop_task_count = 32
+    manifest, _, tasks = gate.build_manifest(args)
+    assert len(tasks) == 32
+    assert manifest["closed_loop_task_count"] == 32
+    assert set(manifest["closed_loop_compositions"]) <= {"22", "33", "44"}
+
+
 def test_probe_metric_definitions() -> None:
     state = {"current_aspect": "restaurant", "visible_option_ids": ["R1"]}
     action = gate.UserBenchAction("answer", gate.ActionChoice.ANSWER, "R1")

@@ -8,6 +8,7 @@ import random
 
 from .utils import parse_output_as_json, build_history_into_prompt
 from .utils import RESPONSE_PREFERENCE_SYSTEM, RESPONSE_PREFERENCE_USER, RESPONSE_ELICIT_SYSTEM, RESPONSE_ELICIT_USER, RESPONSE_NATURAL_SYSTEM, RESPONSE_NATURAL_USER, JUDGE_PROMPT_SYSTEM, JUDGE_PROMPT_USER, JUDGE_SEARCH_SYSTEM, JUDGE_SEARCH_USER, OPTION_SCHEMAS
+from .search_contract import deterministic_search_judgement, render_candidate_feedback
 
 def model_call(
     system_prompt: str,
@@ -56,6 +57,10 @@ def generate_judge_search(
     """
     Sync version of generate_judge_search.
     """
+    deterministic = deterministic_search_judgement(agent_request, task)
+    if deterministic is not None:
+        return deterministic
+
     arguments = task["arguments"]
     arg_string = ""
     for dimension, argument in arguments.items():
@@ -134,19 +139,30 @@ def evaluate_action(
                 alignment_aspect = "rental_car" if (alignment_aspect == "rental car" or alignment_aspect == "car rental") else alignment_aspect
                 assert alignment_aspect in task["dimensions"]
 
-                if alignment_aspect in state_list["search_arguments"]:
-                    state_list["search_arguments"].remove(alignment_aspect)
-                    response_options = task["all_options"][alignment_aspect]
-                    schema = OPTION_SCHEMAS[alignment_aspect].strip()
-                    feedback = f"You have provided the correct search request arguments.\n\n{schema}\n\nHere are all the options for <{alignment_aspect}>:\n"
-                    for option in response_options:
-                        feedback += f"{json.dumps(option)}\n"
-                    feedback = feedback.strip()
+                searched_aspects = state_list.setdefault("search_results", {})
+                is_initial_search = alignment_aspect in state_list["search_arguments"]
+                is_preference_refinement = (
+                    not is_initial_search and alignment_aspect in searched_aspects
+                )
+                if is_initial_search or is_preference_refinement:
+                    if is_initial_search:
+                        state_list["search_arguments"].remove(alignment_aspect)
+                    response_options = searched_aspects.setdefault(
+                        alignment_aspect, task["all_options"][alignment_aspect]
+                    )
+                    state_list.setdefault("search_queries", {})[alignment_aspect] = action
+                    feedback = render_candidate_feedback(
+                        {**task, "all_options": {alignment_aspect: response_options}},
+                        alignment_aspect,
+                        OPTION_SCHEMAS,
+                        refinement=is_preference_refinement,
+                    )
                     conversation_history.append({"role": "agent", "content": action})
                     conversation_history.append({"role": "database", "content": feedback.split("\n")[0] + " ... (skip detailed results here) ..."})
-                    return feedback, [], state_config["search_correct_reward"]
+                    reward = state_config["search_correct_reward"] if is_initial_search else 0.0
+                    return feedback, [], reward
                 else:
-                    feedback = f"You have provided the correct search request arguments. However, you have already got the search results for <{alignment_aspect}> in previous search attempts. Please directly refer to the previous search results."
+                    feedback = f"You have already got the search results for <{alignment_aspect}>. Please directly refer to the previous visible candidate list."
                     conversation_history.append({"role": "agent", "content": action})
                     conversation_history.append({"role": "database", "content": feedback})
                     return feedback, [], 0.0

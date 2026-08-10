@@ -734,18 +734,98 @@ async def run_closed_loop(
     return summaries
 
 
+def _transcript_choice_counts(transcript: Any) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    if not isinstance(transcript, list):
+        return counts
+    for message in transcript:
+        if not isinstance(message, Mapping) or message.get("role") != "assistant":
+            continue
+        calls = message.get("tool_calls")
+        if not isinstance(calls, list):
+            continue
+        for call in calls:
+            if not isinstance(call, Mapping):
+                continue
+            function = call.get("function")
+            if not isinstance(function, Mapping):
+                continue
+            raw = function.get("arguments")
+            try:
+                value = json.loads(raw) if isinstance(raw, str) else raw
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if isinstance(value, Mapping) and isinstance(value.get("choice"), str):
+                counts[value["choice"]] += 1
+    return counts
+
+
+def _guard_reason_count(
+    rows: Sequence[Mapping[str, Any]],
+    predicate: Any,
+) -> tuple[int, int]:
+    total = 0
+    tasks = 0
+    for row in rows:
+        reasons = row.get("guard_rejection_reasons")
+        if not isinstance(reasons, Mapping):
+            continue
+        matched = sum(
+            int(value)
+            for key, value in reasons.items()
+            if isinstance(value, int) and not isinstance(value, bool) and predicate(str(key))
+        )
+        total += matched
+        tasks += bool(matched)
+    return total, tasks
+
+
 def summarize_closed_loop(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     rewards = [row.get("reward", {}) for row in rows]
     completion = [float(value.get("completion_rate", 0.0)) for value in rewards if isinstance(value, Mapping)]
     exact_repeats = [int(value.get("exact_repeats", 0)) for value in rewards if isinstance(value, Mapping)]
     semantic_repeats = [int(value.get("semantic_repeats", 0)) for value in rewards if isinstance(value, Mapping)]
+    choice_counts = [_transcript_choice_counts(row.get("visible_transcript")) for row in rows]
+    answer_calls = [counts.get("answer", 0) for counts in choice_counts]
+    wrong_aspect_rejections, wrong_aspect_tasks = _guard_reason_count(
+        rows,
+        lambda reason: (
+            "must target the current public aspect" in reason
+            or "different public aspect" in reason
+        ),
+    )
+    terminal_aspect_rejections, terminal_aspect_tasks = _guard_reason_count(
+        rows,
+        lambda reason: "public aspect" in reason and "terminal" in reason,
+    )
+    repeated_query_rejections, repeated_query_tasks = _guard_reason_count(
+        rows,
+        lambda reason: (
+            "search query was already attempted" in reason
+            or "retry query must materially change" in reason
+        ),
+    )
+    termination_reasons = Counter(str(row.get("termination_reason")) for row in rows)
+    reward_valid = [
+        bool(value.get("reward_valid", False))
+        for value in rewards
+        if isinstance(value, Mapping)
+    ]
     return {
         "tasks": len(rows),
         "completion": sum(value > 0 for value in completion) / len(rows) if rows else None,
+        "tasks_with_nonzero_completion": sum(value > 0 for value in completion),
         "mean_completion_rate": sum(completion) / len(completion) if completion else 0.0,
+        "reward_valid_rate": sum(reward_valid) / len(reward_valid) if reward_valid else None,
+        "reward_valid_tasks": sum(reward_valid),
         "reward_degraded": sum(bool(value.get("reward_degraded", False)) for value in rewards if isinstance(value, Mapping)) / len(rows) if rows else None,
-        "max_steps": sum(int(row.get("environment_steps", 0)) >= 20 for row in rows) / len(rows) if rows else None,
+        "max_steps": termination_reasons.get("max_steps", 0) / len(rows) if rows else None,
+        "actor_turn_limit": termination_reasons.get("actor_turn_limit", 0) / len(rows) if rows else None,
+        "public_control_complete": termination_reasons.get("public_control_complete", 0) / len(rows) if rows else None,
         "mean_environment_steps": sum(int(row.get("environment_steps", 0)) for row in rows) / len(rows) if rows else 0.0,
+        "answer_calls_total": sum(answer_calls),
+        "tasks_with_answer_call": sum(value > 0 for value in answer_calls),
+        "answer_call_rate": sum(value > 0 for value in answer_calls) / len(rows) if rows else None,
         "repeated_action_or_search": sum(
             exact + semantic > 0 for exact, semantic in zip(exact_repeats, semantic_repeats)
         ) / len(rows) if rows else None,
@@ -753,8 +833,15 @@ def summarize_closed_loop(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "semantic_repeats_total": sum(semantic_repeats),
         "exact_repeats_mean": sum(exact_repeats) / len(exact_repeats) if exact_repeats else 0.0,
         "semantic_repeats_mean": sum(semantic_repeats) / len(semantic_repeats) if semantic_repeats else 0.0,
-        "termination_reasons": dict(sorted(Counter(str(row.get("termination_reason")) for row in rows).items())),
+        "repeated_query_rejections_total": repeated_query_rejections,
+        "tasks_with_repeated_query_rejection": repeated_query_tasks,
+        "wrong_aspect_rejections_total": wrong_aspect_rejections,
+        "tasks_with_wrong_aspect_rejection": wrong_aspect_tasks,
+        "terminal_aspect_rejections_total": terminal_aspect_rejections,
+        "tasks_with_terminal_aspect_rejection": terminal_aspect_tasks,
+        "termination_reasons": dict(sorted(termination_reasons.items())),
         "guard_rejections": sum(int(row.get("guard_rejections", 0)) for row in rows),
+        "guard_rejections_per_task": sum(int(row.get("guard_rejections", 0)) for row in rows) / len(rows) if rows else 0.0,
         "failure_samples": [
             {
                 "task_id": row.get("task_id"),
@@ -809,7 +896,10 @@ def build_manifest(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, 
         samples[category] = choose_probe_records(
             records, boundary_type=boundary, count=FIXED_COUNTS[category], confused=category == "confused_history"
         )
-    tasks = choose_closed_loop_tasks(load_frozen_tasks(args.dataset), count=8)
+    task_count = int(getattr(args, "closed_loop_task_count", 8))
+    if task_count < 1:
+        raise ValueError("closed_loop_task_count must be >= 1")
+    tasks = choose_closed_loop_tasks(load_frozen_tasks(args.dataset), count=task_count)
     index: list[dict[str, Any]] = []
     for category, values in samples.items():
         for value in values:
@@ -847,6 +937,8 @@ def build_manifest(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, 
         ),
         "closed_loop_task_count": len(tasks),
         "closed_loop_task_ids": [value["task_id"] for value in tasks],
+        "probes_executed": not bool(getattr(args, "closed_loop_only", False)),
+        "closed_loop_executed": not bool(getattr(args, "probes_only", False)),
         "closed_loop_compositions": [str(value["composition"]) for value in tasks],
         "excluded_compositions": list(EXCLUDED_COMPOSITIONS),
         "probe_task_ids": {key: [value["task_id"] for value in values] for key, values in samples.items()},
@@ -951,6 +1043,10 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--probes-only", action="store_true")
     parser.add_argument("--closed-loop-only", action="store_true")
+    parser.add_argument(
+        "--closed-loop-task-count", type=int, default=8,
+        help="number of deterministic closed-loop tasks (8 for the gate; 32 for validation)",
+    )
     parser.add_argument(
         "--conditions", nargs="+", choices=("A", "B"), default=("A", "B"),
         help="conditions to execute; use --conditions B with --baseline-output for a B-only rerun",

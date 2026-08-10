@@ -201,6 +201,12 @@ class TravelEnv(gym.Env):
             "search_times": 0,
             "nonpreference_times": 0,
             "search_arguments": [],
+            # A valid base search materializes candidates once.  Later
+            # searches may carry newly elicited preferences and reuse this
+            # visible list instead of asking the strict judge to re-search
+            # the backend from scratch.
+            "search_results": {},
+            "search_queries": {},
             "remaining_best_options": [],
             "remaining_correct_options": [],
             "choice_initials": [],

@@ -34,7 +34,10 @@ from travel_grpo.evaluation.contracts import (
     build_contract,
     build_subset_contract,
 )
-from travel_grpo.evaluation.rollout import rollout_task
+from travel_grpo.evaluation.rollout import (
+    PUBLIC_CONTROL_PHASE_GUARD_VERSION,
+    rollout_task,
+)
 from travel_grpo.evaluation.summary import summarize_results
 from travel_grpo.models.vllm_policy import ActorRuntime, OpenAICompatibleActorClient
 from travel_grpo.prompts.actor_policy import ACTOR_RUNTIME_POLICY_VERSION
@@ -111,6 +114,7 @@ async def _run_pending_tasks(
     output: Path,
     concurrency: int,
     retry_infrastructure_invalid: bool,
+    public_control_enabled: bool,
 ) -> None:
     """Run independent tasks with a bounded number of active rollouts.
 
@@ -138,6 +142,7 @@ async def _run_pending_tasks(
                 actor=actor,
                 simulator=simulator,
                 source_root=ROOT / "environments/UserBench",
+                public_control_enabled=public_control_enabled,
             )
             result = attach_attempt_history(result, old)
             atomic_json(task_path(output, task_id), result)
@@ -183,7 +188,15 @@ async def run(args: argparse.Namespace) -> int:
         output = ROOT / "outputs/evaluation" / args.stage
     contract_document = contract.to_dict(stage=args.stage, model=args.model)
     contract_document["evaluation_mode"] = evaluation_mode
+    public_control_enabled = not args.raw_open_loop
+    phase_guard_version = (
+        PUBLIC_CONTROL_PHASE_GUARD_VERSION
+        if public_control_enabled
+        else "none"
+    )
     contract_document["actor_policy_version"] = ACTOR_RUNTIME_POLICY_VERSION
+    contract_document["public_control_enabled"] = public_control_enabled
+    contract_document["phase_guard_version"] = phase_guard_version
     if subset_manifest is not None:
         contract_document["subset_manifest_sha256"] = _sha256(args.subset_manifest)
         contract_document["subset_manifest_schema"] = subset_manifest["schema_version"]
@@ -205,6 +218,8 @@ async def run(args: argparse.Namespace) -> int:
                     "concurrency": args.concurrency,
                     "output": str(output),
                     "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
+                    "public_control_enabled": public_control_enabled,
+                    "phase_guard_version": phase_guard_version,
                     "subset_manifest": str(args.subset_manifest)
                     if args.subset_manifest is not None
                     else None,
@@ -254,6 +269,7 @@ async def run(args: argparse.Namespace) -> int:
             output=output,
             concurrency=args.concurrency,
             retry_infrastructure_invalid=args.retry_infrastructure_invalid,
+            public_control_enabled=public_control_enabled,
         )
     finally:
         await actor.close()
@@ -274,6 +290,8 @@ async def run(args: argparse.Namespace) -> int:
             "evaluation_mode": evaluation_mode,
             "contract_hash": contract.contract_hash,
             "actor_policy_version": ACTOR_RUNTIME_POLICY_VERSION,
+            "public_control_enabled": public_control_enabled,
+            "phase_guard_version": phase_guard_version,
             "completed_tasks": len(ordered),
             "expected_tasks": len(contract.task_ids),
             "formal_complete": (
@@ -311,6 +329,11 @@ def main() -> int:
         help="maximum number of tasks evaluated concurrently (default: 1)",
     )
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--raw-open-loop",
+        action="store_true",
+        help="disable public guard/feedback for an explicit raw-model ablation",
+    )
     parser.add_argument("--retry-infrastructure-invalid", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

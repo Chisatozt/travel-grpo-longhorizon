@@ -13,8 +13,20 @@ def _aggregate(records: Sequence[Mapping[str, Any]], denominator: int) -> dict[s
     sums: Counter[str] = Counter()
     valid = 0
     terminations: Counter[str] = Counter()
+    guard_rejection_reasons: Counter[str] = Counter()
+    guard_rejections_total = 0
+    tasks_with_guard_rejection = 0
     aspects: dict[str, list[float]] = defaultdict(list)
     for result in records:
+        guard_count = result.get("guard_rejections", 0)
+        if isinstance(guard_count, int) and not isinstance(guard_count, bool):
+            guard_rejections_total += max(0, guard_count)
+            tasks_with_guard_rejection += bool(guard_count > 0)
+        raw_guard_reasons = result.get("guard_rejection_reasons", {})
+        if isinstance(raw_guard_reasons, Mapping):
+            for reason, count in raw_guard_reasons.items():
+                if isinstance(count, int) and not isinstance(count, bool) and count > 0:
+                    guard_rejection_reasons[str(reason)] += count
         metrics = result_metrics(result)
         if metrics:
             valid += 1
@@ -38,6 +50,12 @@ def _aggregate(records: Sequence[Mapping[str, Any]], denominator: int) -> dict[s
         "valid_only": averages(valid) if valid else averages(1),
         "aspect_option_quality": {key: sum(values) / len(values) for key, values in sorted(aspects.items())},
         "termination_reasons": dict(sorted(terminations.items())),
+        "guard_rejections_total": guard_rejections_total,
+        "guard_rejections_per_task": (
+            guard_rejections_total / denominator if denominator else 0.0
+        ),
+        "tasks_with_guard_rejection": tasks_with_guard_rejection,
+        "guard_rejection_reasons": dict(sorted(guard_rejection_reasons.items())),
     }
 
 

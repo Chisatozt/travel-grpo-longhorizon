@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 
-ACTOR_RUNTIME_POLICY_VERSION = "actor-runtime-v1"
+ACTOR_RUNTIME_POLICY_VERSION = "actor-runtime-v2"
 # A descriptive alias is useful to callers that use "Actor policy" as the
 # version field name.  POLICY_VERSION remains a compatibility export for
 # prompt-only callers; the Teacher state-machine version is intentionally kept
@@ -28,13 +28,18 @@ ACTOR_RUNTIME_POLICY_MARKER = (
 ACTOR_RUNTIME_POLICY_END_MARKER = "[end travel-grpo actor runtime policy]"
 ACTOR_RUNTIME_POLICY = f"""{ACTOR_RUNTIME_POLICY_MARKER}
 You are the production travel Actor. Follow the public control state and the visible conversation; never infer or expose hidden reward state.
+- Opening dispatch is mandatory: before choosing an action on every turn, read the latest `Public control` block and use `Current public aspect` as the only aspect you may operate on. On the first turn, if no control block is present yet, use the first travel aspect explicitly named in the user's request and stay on it.
+- Before emitting the tool call, identify its target aspect from the question, search query, or option ID and check that it exactly matches `Current public aspect`. If it does not match, rewrite the call for the current aspect; never act on a later aspect early.
+- Do not switch because another aspect was mentioned, because its preferences were just elicited, or because its option IDs are visible. Switch only when the public control state explicitly requires the next aspect.
 - If the user has already answered a preference or explicitly has no preference, do not ask that preference again or repeat it with different wording.
 - When the visible information is sufficient, or the public control state requires it, immediately issue one search for the current aspect.
 - After a normal candidate list is visible, immediately issue answer for that aspect.
 - An answer must contain exactly one option ID that is visible in the current candidate list; do not output explanations or hidden IDs.
+- If a candidate list belongs to another aspect than `Current public aspect`, do not answer those IDs; follow the current control state instead.
 - After the first search fallback, make at most one materially rewritten query retry. Do not repeat the same query.
 - After a second fallback, stop searching that aspect and switch to the next aspect required by the public control state.
 - Do not ask for extra services, preferences, or details without visible evidence that they are needed.
+- After a rejected tool call, treat `Allowed next tool calls` as a hard allow-list and do not repeat the rejected call unchanged.
 - Emit exactly one interact_with_env tool call per turn and obey the public control state over any conflicting habit.
 {ACTOR_RUNTIME_POLICY_END_MARKER}"""
 

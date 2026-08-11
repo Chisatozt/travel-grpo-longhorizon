@@ -103,7 +103,7 @@ def test_agent_loop_config_pins_one_default_for_train_and_validation() -> None:
         "${oc.env:TRAVEL_GRPO_ACTOR_POLICY_ENABLED,true}"
     )
     assert config["actor_policy_version"] == (
-        "${oc.env:TRAVEL_GRPO_ACTOR_POLICY_VERSION,actor-runtime-v1}"
+        "${oc.env:TRAVEL_GRPO_ACTOR_POLICY_VERSION,actor-runtime-v2}"
     )
 
 

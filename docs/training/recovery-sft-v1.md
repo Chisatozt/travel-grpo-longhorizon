@@ -4,7 +4,7 @@
 
 每条记录包含：
 
-- 第一个 `system` 消息中的 production `ACTOR_RUNTIME_POLICY`（当前版本 `actor-runtime-v1`）；
+- 第一个 `system` 消息中的 production `ACTOR_RUNTIME_POLICY`（当前版本 `actor-runtime-v2`）；
 - 截断到 boundary 前的 actor-visible history；
 - 用 `render_actor_control_info` 生成的同格式 public control note；
 - 最后一个 assistant 的单个 `interact_with_env` tool call。

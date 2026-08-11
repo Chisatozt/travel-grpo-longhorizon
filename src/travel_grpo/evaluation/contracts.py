@@ -10,6 +10,7 @@ from typing import Any
 
 EVALUATION_SCHEMA = "travel-userbench-evaluation-v1"
 STAGES = ("baseline", "sft", "grpo")
+FORMAL_EVALUATION_TASK_COUNT = 471
 
 
 def canonical_hash(value: Any) -> str:
@@ -42,11 +43,11 @@ class EvaluationContract:
         return {"stage": stage, "model": model, "contract_hash": self.contract_hash, **asdict(self)}
 
 
-def build_contract(
+def _build_contract(
     records: Sequence[Mapping[str, Any]], *, simulator_endpoint: str | None = None
 ) -> EvaluationContract:
-    if len(records) != 471:
-        raise ValueError(f"frozen evaluation requires 471 tasks, found {len(records)}")
+    if not records:
+        raise ValueError("evaluation requires at least one task")
     task_ids = tuple(str(row["task_id"]) for row in records)
     if len(set(task_ids)) != len(task_ids):
         raise ValueError("frozen evaluation task IDs must be unique")
@@ -62,3 +63,28 @@ def build_contract(
         tuple(str(row["composition"]) for row in records),
         simulator_endpoint_fingerprint=fingerprint,
     )
+
+
+def build_contract(
+    records: Sequence[Mapping[str, Any]], *, simulator_endpoint: str | None = None
+) -> EvaluationContract:
+    """Build the unchanged formal 471-task evaluation contract."""
+
+    if len(records) != FORMAL_EVALUATION_TASK_COUNT:
+        raise ValueError(
+            "frozen evaluation requires 471 tasks, "
+            f"found {len(records)}"
+        )
+    return _build_contract(records, simulator_endpoint=simulator_endpoint)
+
+
+def build_subset_contract(
+    records: Sequence[Mapping[str, Any]], *, simulator_endpoint: str | None = None
+) -> EvaluationContract:
+    """Build an explicit diagnostic contract for a non-empty test subset.
+
+    The formal contract remains strict at 471 tasks. This separate entry point
+    is used only when the caller has validated a reproducible subset manifest.
+    """
+
+    return _build_contract(records, simulator_endpoint=simulator_endpoint)

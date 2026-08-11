@@ -23,6 +23,11 @@ def read_jsonl(path: Path) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=ROOT / "outputs/evaluation")
+    parser.add_argument(
+        "--allow-subset",
+        action="store_true",
+        help="compare three matching explicit subset contracts instead of formal 471-task runs",
+    )
     args = parser.parse_args()
     stages = {}
     for stage in ("baseline", "sft", "grpo"):
@@ -31,7 +36,7 @@ def main() -> int:
             "contract": json.loads((stage_root / "contract.json").read_text(encoding="utf-8")),
             "results": read_jsonl(stage_root / "results.jsonl"),
         }
-    comparison = compare_stage_results(stages)
+    comparison = compare_stage_results(stages, allow_subset=args.allow_subset)
     atomic_json(args.root / "comparison.json", comparison)
     lines = ["# Baseline -> SFT -> GRPO paired comparison", "", f"Contract: `{comparison['contract_hash']}`", ""]
     for pair, metrics in comparison["paired_deltas"].items():

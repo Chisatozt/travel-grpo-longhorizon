@@ -194,7 +194,7 @@ def test_bounded_sampler_restores_cross_batch_group_order(monkeypatch):
             return list(self.values)
 
     class Output:
-        def __init__(self, uids, rewards):
+        def __init__(self, uids, rewards, timing=None):
             self.rows = list(uids)
             self.batch = {"rm_scores": Scores(rewards)}
             self.non_tensor_batch = {
@@ -204,30 +204,36 @@ def test_bounded_sampler_restores_cross_batch_group_order(monkeypatch):
                     for reward in rewards
                 ],
             }
-            self.meta_info = {"timing": {}}
+            self.meta_info = {"timing": {} if timing is None else timing}
 
         def slice(self, start, stop):
             return Output(
-                self.rows[start:stop], self.batch["rm_scores"].values[start:stop]
+                self.rows[start:stop],
+                self.batch["rm_scores"].values[start:stop],
+                timing=self.meta_info["timing"],
             )
 
     class DataProto:
         @staticmethod
         def concat(outputs):
+            metadata = [output.meta_info for output in outputs]
+            assert all(value == metadata[0] for value in metadata)
             uids = [uid for output in outputs for uid in output.rows]
             rewards = [
                 reward
                 for output in outputs
                 for reward in output.batch["rm_scores"].values
             ]
-            return Output(uids, rewards)
+            result = Output(uids, rewards)
+            result.meta_info = metadata[0]
+            return result
 
     monkeypatch.setitem(sys.modules, "verl", types.SimpleNamespace(DataProto=DataProto))
     uids = ["a"] * 4 + ["b"] * 4
     outputs = iter(
         [
-            Output(uids, [0.1] * 4 + [0.1, 0.2, 0.3, 0.4]),
-            Output(uids, [0.1, 0.2, 0.3, 0.4] + [0.2] * 4),
+            Output(uids, [0.1] * 4 + [0.1, 0.2, 0.3, 0.4], timing={"batch": 1}),
+            Output(uids, [0.1, 0.2, 0.3, 0.4] + [0.2] * 4, timing={"batch": 2}),
         ]
     )
     manager = types.SimpleNamespace(generate_sequences=lambda _: next(outputs))
@@ -247,6 +253,7 @@ def test_bounded_sampler_restores_cross_batch_group_order(monkeypatch):
     )
     result = manager.generate_sequences(batch)
     assert result.rows == uids
+    assert result.meta_info["timing"] == {"batch": 2}
     assert result.meta_info["travel_dynamic_sampling"]["sampled_batches"] == 2
 
 

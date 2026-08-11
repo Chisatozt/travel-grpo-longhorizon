@@ -36,6 +36,11 @@ def test_runtime_policy_contains_the_production_behavior_contract() -> None:
         "second fallback",
         "extra services, preferences",
         "public control state",
+        "Opening dispatch is mandatory",
+        "Current public aspect",
+        "target aspect",
+        "later aspect early",
+        "hard allow-list",
     ):
         assert phrase in ACTOR_RUNTIME_POLICY
     assert ACTOR_RUNTIME_POLICY_VERSION in ACTOR_RUNTIME_POLICY

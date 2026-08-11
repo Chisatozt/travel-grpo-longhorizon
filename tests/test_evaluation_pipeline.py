@@ -9,6 +9,7 @@ import pytest
 
 from travel_grpo.evaluation.checkpoint_selection import select_checkpoint
 from travel_grpo.evaluation.artifacts import attach_attempt_history
+from travel_grpo.evaluation.contracts import build_contract, build_subset_contract
 from travel_grpo.evaluation.comparison import compare_stage_results
 from travel_grpo.evaluation.summary import summarize_results
 from travel_grpo.evaluation.validation import summarize_validation_rows
@@ -165,6 +166,31 @@ def test_validation_directory_is_summarized_and_selected_atomically(tmp_path):
     assert selected["passed"] is True
     assert selected["selected_step"] == 50
     assert (tmp_path / "run/validation_summaries/step_0.summary.json").is_file()
+
+
+def test_subset_contract_and_comparison_use_subset_denominator():
+    records = [
+        {"task_id": "a", "composition": "22", "source_split": "test"},
+        {"task_id": "b", "composition": "33", "source_split": "test"},
+    ]
+    with pytest.raises(ValueError, match="471"):
+        build_contract(records)
+    subset = build_subset_contract(records)
+    task_ids = list(subset.task_ids)
+    stages = {
+        stage: {
+            "contract": {
+                "contract_hash": subset.contract_hash,
+                "task_ids": task_ids,
+                "evaluation_mode": "subset",
+            },
+            "results": [result(task_id) for task_id in task_ids],
+        }
+        for stage in ("baseline", "sft", "grpo")
+    }
+    comparison = compare_stage_results(stages, allow_subset=True)
+    assert comparison["evaluation_mode"] == "subset"
+    assert comparison["expected_tasks"] == 2
 
 
 def test_formal_comparison_requires_complete_matching_contract():

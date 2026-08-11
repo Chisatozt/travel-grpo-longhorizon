@@ -17,7 +17,7 @@ simulator:
 
 collection:
   policy_version: teacher-state-machine-v5
-  actor_policy_version: actor-runtime-v1
+  actor_policy_version: actor-runtime-v2
   train_tasks: data/sft/tasks_train.jsonl
   validation_tasks: data/sft/tasks_validation.jsonl
   frozen_evaluation_tasks: data/evaluation/tasks.jsonl

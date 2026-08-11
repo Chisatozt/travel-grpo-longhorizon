@@ -6,4 +6,4 @@
   stall_recovery_enabled: ${oc.env:TRAVEL_GRPO_STALL_RECOVERY,false}
   stall_no_progress_threshold: ${oc.env:TRAVEL_GRPO_STALL_THRESHOLD,4}
   actor_policy_enabled: ${oc.env:TRAVEL_GRPO_ACTOR_POLICY_ENABLED,true}
-  actor_policy_version: ${oc.env:TRAVEL_GRPO_ACTOR_POLICY_VERSION,actor-runtime-v1}
+  actor_policy_version: ${oc.env:TRAVEL_GRPO_ACTOR_POLICY_VERSION,actor-runtime-v2}

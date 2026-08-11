@@ -501,6 +501,16 @@ def install_verl_bounded_sampler(manager: Any, config: Mapping[str, Any]) -> Non
                     )
                 if len(ordered_rows) != required_groups * expected_group_size:
                     raise ValueError("accepted groups do not have the required row count")
+
+                # Candidate rows can come from different asynchronous rollout
+                # calls.  veRL 0.8 stores batch-level values such as ``timing``
+                # in ``meta_info`` and requires every input to ``concat`` to
+                # have identical non-metric metadata.  Those values are not
+                # row data, and the latest rollout metadata is restored below,
+                # after the tensors and non-tensor batches have been merged.
+                for row in ordered_rows:
+                    if hasattr(row, "meta_info"):
+                        row.meta_info = {}
                 merged = DataProto.concat(ordered_rows)
                 if len(getattr(merged, "non_tensor_batch", {}).get("uid", ())) != len(
                     ordered_rows

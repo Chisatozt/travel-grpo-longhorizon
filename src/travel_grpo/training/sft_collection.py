@@ -26,7 +26,7 @@ from travel_grpo.envs.userbench_wrapper import (
     UserBenchWrapper,
 )
 from travel_grpo.envs.userbench_context import UserBenchSessionState
-from travel_grpo.envs.reward import REWARD_VERSION
+from travel_grpo.envs.reward import REWARD_VERSION, SUPPORTED_REWARD_VERSIONS
 from travel_grpo.models.openai_compatible import (
     TeacherClientProtocol,
     TeacherRequestConstraint,
@@ -136,7 +136,7 @@ def validate_teacher_collection_config(path: str | Path) -> Mapping[str, Any]:
         )
     if collection.get("reward_version") != REWARD_VERSION:
         raise TeacherCollectionError(
-            "teacher collection reward_version must be userbench-travel-reward-v2"
+            "teacher collection reward_version must be " + REWARD_VERSION
         )
     if collection.get("minimum_terminal_reward") != 0.7:
         raise TeacherCollectionError(
@@ -812,7 +812,7 @@ def trajectory_rejection_reasons(trajectory: TeacherTrajectory) -> tuple[str, ..
     if not isinstance(reward, Mapping):
         reasons.append("missing_reward_evidence")
     else:
-        if reward.get("reward_version") != REWARD_VERSION:
+        if reward.get("reward_version") not in SUPPORTED_REWARD_VERSIONS:
             reasons.append("wrong_reward_version")
         if reward.get("reward_valid") is not True:
             reasons.append("reward_invalid")

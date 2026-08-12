@@ -268,7 +268,7 @@ class UserBenchWrapper:
         state = getattr(self._environment, "state_list", None)
         if not isinstance(remaining, list) or not isinstance(state, Mapping):
             raise UserBenchEnvironmentError(
-                "TravelGym does not expose the state required by Travel Reward v2"
+                "TravelGym does not expose the state required by the versioned Travel reward"
             )
         try:
             remaining_ids = frozenset(str(pref["id"]) for pref in remaining)

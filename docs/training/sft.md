@@ -4,10 +4,10 @@
 
 The SFT pipeline deliberately keeps two different artifacts:
 
-1. A `userbench-teacher-trajectory-v4` JSONL record is an auditable raw trajectory. It contains the original `system → user → assistant(tool_calls) → tool` messages, raw UserBench step rewards, and a top-level Travel Reward v2 admission report.
+1. A `userbench-teacher-trajectory-v4` JSONL record is an auditable raw trajectory. It contains the original `system → user → assistant(tool_calls) → tool` messages, raw UserBench step rewards, and a top-level Travel Reward v3 admission report.
 2. The in-memory training dataset contains tokenized per-assistant-turn examples: `input_ids`, `attention_mask`, and action-only `labels`, plus task/trajectory/turn identifiers. It is generated from the raw trajectories and is not committed.
 
-Version 3 trajectories are archival inputs. The default loader reports `legacy_or_unknown_schema` and `missing_reward_evidence`; it never silently trains on them.
+Older trajectory schemas are archival inputs. The default loader reports `legacy_or_unknown_schema` and `missing_reward_evidence`; it never silently trains on them.
 
 ## Teacher trajectory collection
 
@@ -41,7 +41,7 @@ python scripts/train/sft/collect_sft_data.py \
   --output outputs/teacher_trajectories/sft_validation.accepted.jsonl
 ```
 
-Collection policy `teacher-state-machine-v5` controls each aspect through `ELICIT → SEARCH → ANSWER`. The hidden Reward-v2 ledger only tells the controller when active preference coverage for an aspect is complete; preference IDs, values, best IDs, coverage, and reward evidence are never inserted into Teacher messages. An elicitation field is committed only after the ledger reports a positive active-preference delta. If UserBench does not record an otherwise valid question, the collector retains and loss-masks that turn, retries the same field once with a distinct deterministic template, and aborts if the repair is also unrecorded. The v5 preference templates cover the complete global UserBench field taxonomy, vague/judgment recovery uses a distinct retry without colliding with duplicate detection, and search generation is constrained to public trip facts and simulator disclosures with inflection, rating/star, and common paraphrase normalization. The action guard allows three generation retries per turn. DeepSeek generates the official three-field tool call under a request-only phase constraint.
+Collection policy `teacher-state-machine-v5` controls each aspect through `ELICIT → SEARCH → ANSWER`. The hidden Reward-v3 ledger only tells the controller when active preference coverage for an aspect is complete; preference IDs, values, best IDs, coverage, and reward evidence are never inserted into Teacher messages. An elicitation field is committed only after the ledger reports a positive active-preference delta. If UserBench does not record an otherwise valid question, the collector retains and loss-masks that turn, retries the same field once with a distinct deterministic template, and aborts if the repair is also unrecorded. The v5 preference templates cover the complete global UserBench field taxonomy, vague/judgment recovery uses a distinct retry without colliding with duplicate detection, and search generation is constrained to public trip facts and simulator disclosures with inflection, rating/star, and common paraphrase normalization. The action guard allows three generation retries per turn. DeepSeek generates the official three-field tool call under a request-only phase constraint.
 
 Collection has two accepted quality tiers. `gold` satisfies the strict gate and is written to `*.accepted.jsonl`. `silver` is accepted separately when the trajectory still terminates with a correct, fully answered itinerary and zero policy/answer errors, but contains an explicitly bounded recovery: at most one search repair per aspect, one vague-action repair per field/phase, one elicitation-not-recorded repair per field, and at most one simulator judgment fallback in the trajectory. Repaired turns are retained for context and marked `loss_mask=true`; a recoverable simulator fallback with complete evidence may keep `reward_valid=true` while being marked degraded, but it is never counted as gold. Loss of the reward snapshot or evidence ledger keeps `reward_valid=false`. Formal SFT reloads both tier files, ignores the serialized tier as authority, and reruns the Gold/Silver gates. A Silver judgment fallback without a masked assistant repair is rejected.
 
@@ -79,9 +79,9 @@ python scripts/train/sft/collect_sft_data.py \
 
 The ordered task IDs and policy version must match the run manifest. Gold (`accepted`), silver, rejected, and diagnostic JSONL files are materialized in input order from the checkpoints. Progress events go to stderr and contain no prompts, credentials, hidden labels, or reward evidence.
 
-Use staged real-API validation before a large collection: first one task must reach a terminal Reward-v2 report, then three tasks should confirm retry behavior, and only then run ten tasks. Do not scale if completion is below 80%, strict acceptance below 60%, action-exhaustion above 10%, or composition-22 step p95 exceeds 14. These are collection-readiness gates, not benchmark claims.
+Use staged real-API validation before a large collection: first one task must reach a terminal Reward-v3 report, then three tasks should confirm retry behavior, and only then run ten tasks. Do not scale if completion is below 80%, strict acceptance below 60%, action-exhaustion above 10%, or composition-22 step p95 exceeds 14. These are collection-readiness gates, not benchmark claims.
 
-## Travel Reward v2 admission
+## Travel Reward v3 admission
 
 Every environment transition updates the same hidden evidence ledger used by GRPO. Reward labels and hidden preferences stay outside `messages`; the Actor never sees them. A trajectory is admitted only when all of the following hold:
 

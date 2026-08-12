@@ -16,7 +16,7 @@ python scripts/train/grpo/prepare_data.py --verify-only
 
 ## AgentLoop 与 Reward
 
-veRL 0.8 直接实例化 `UserBenchAgentLoop`。每条 rollout 独占 `TravelEnv` 和 ContextVar session；工具只返回 Actor 可见的 `feedback`，tool reward 始终为 0。终局由现有 Travel Reward v2 写入 `reward_score`。`reward_valid=false` 是采样无效而不是有效零分；证据完整的 simulator fallback 可以保持 valid，并由可选的 degraded 诊断标记。
+veRL 0.8 直接实例化 `UserBenchAgentLoop`。每条 rollout 独占 `TravelEnv` 和 ContextVar session；工具只返回 Actor 可见的 `feedback`，tool reward 始终为 0。终局由现有 Travel Reward v3 写入 `reward_score`。`reward_valid=false` 是采样无效而不是有效零分；证据完整的 simulator fallback 可以保持 valid，并由可选的 degraded 诊断标记。
 
 同一 completion 多工具调用不会执行；环境终止后不会额外生成 Actor 回合；所有异常路径都会在 `finally` 关闭 wrapper 并清除 ContextVar。
 
@@ -27,7 +27,7 @@ UserBench evidence ledger 判断连续无进展；达到阈值时，如果 Actor
 feedback 中实际看见尚未回答 aspect 的 option ID，则只允许一次由 Actor 自己生成的
 ANSWER-only call。非法、未见过或已回答 aspect 的 option 不会执行环境；没有可回答的
 Actor-visible option，或 recovery 失败/再次 stall，则以 `stalled_no_progress` 结束。
-该 early cut 保持 `terminated=true, truncated=false`，所以不会触发 Reward v2 的
+该 early cut 保持 `terminated=true, truncated=false`，所以不会触发 Reward v3 的
 max-steps penalty；证据完整时仍是 `reward_valid=true`，不增加固定 stall 分数。
 
 ```bash

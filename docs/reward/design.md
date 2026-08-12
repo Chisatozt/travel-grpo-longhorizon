@@ -1,4 +1,6 @@
-# Travel Reward v2
+# Travel Reward v2（历史基线）
+
+> 当前运行时已切换到 [Completion-priority Travel Reward v3](design-v3-priority.md)。本页保留 v2 公式，供历史轨迹审计和兼容性对照。
 
 GRPO 使用版本化的确定性终局奖励 `userbench-travel-reward-v2`。UserBench 原始逐步奖励只用于诊断；工具奖励恒为 `0.0`，每条 rollout 结束时只写入一次终局分，避免重复计奖。
 

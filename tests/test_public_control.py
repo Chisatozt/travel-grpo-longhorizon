@@ -208,6 +208,26 @@ def test_session_feedback_entry_is_unified_and_idempotent():
     assert session.append_recovery_instruction("Candidates: H1") == rendered
 
 
+def test_session_public_phase_ledger_counts_opportunities_and_guard_rejections():
+    session = UserBenchSessionState(
+        "phase-request",
+        "phase-task",
+        _FeedbackWrapper(),
+        public_initial_message="I need a hotel.",
+        stall_no_progress_threshold=1,
+    )
+    session.record_public_non_progress("no_progress")
+    search = _action("search", "hotel in Madrid")
+    assert session.validate_public_action(search) is None
+    rejected = _action("action", "hotel name")
+    reason = session.validate_public_action(rejected)
+    assert reason == "SEARCH_REQUIRED accepts choice=search only"
+    session.record_public_guard_rejection(reason)
+    assert session.search_required_opportunities == 2
+    assert session.valid_search_required_transitions == 1
+    assert session.guard_rejections == 1
+
+
 def test_actor_control_renderer_has_stable_normal_snapshot():
     state = new_public_control_state("I need a hotel.")
     assert render_actor_control_info(state) == (

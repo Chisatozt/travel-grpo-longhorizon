@@ -123,7 +123,7 @@ class UserBenchRolloutRuntime:
         if not isinstance(reward, Mapping) or reward.get("version") != REWARD_VERSION:
             raise ValueError(f"environment reward must use {REWARD_VERSION}")
         if reward.get("terminal_only") is not True or reward.get("range") != [-1.0, 1.0]:
-            raise ValueError("Travel Reward v2 must be terminal-only in [-1, 1]")
+            raise ValueError("Travel Reward v3 must be terminal-only in [-1, 1]")
         role = SimulatorRole(_non_empty(simulator.get("role"), "simulator.role"))
         if role is not SimulatorRole.GRPO:
             raise ValueError("GRPO AgentLoop requires the grpo simulator role")

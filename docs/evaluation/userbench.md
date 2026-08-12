@@ -80,6 +80,6 @@ SUBSET_ROOT=outputs/evaluation/subset-200-proportional-v1
 
 运行前仍需分别启动与当前 `--model` 完全一致的 Actor 服务。生成器固定 seed 为 `47120042`，当前配额为 `22:43`、`33:37`、`44:28`、`233:26`、`333:23`、`334:20`、`444:16`、`2222:7`。不要把正式评测中的 `--limit 200` 当作子集运行；`--limit` 现在只允许用于 dry-run，实际子集必须同时提供 Parquet 和 manifest。
 
-主汇总固定分母 471：缺失和 infrastructure-invalid 任务按 0 计入，同时报告 valid-only diagnostics。指标包括 UserBench `micro_avg`、`micro_max`、`avg_number_of_1`、`avg_number_of_08`，各 aspect option quality，Travel Reward v2、成功率、覆盖、效率、policy penalty、调用/重复/终止诊断及 composition 分项。
+主汇总固定分母 471：缺失和 infrastructure-invalid 任务按 0 计入，同时报告 valid-only diagnostics。指标包括 UserBench `micro_avg`、`micro_max`、`avg_number_of_1`、`avg_number_of_08`，各 aspect option quality，Travel Reward v3、成功率、覆盖、效率、policy penalty、调用/重复/终止诊断及 composition 分项。
 
 只有三阶段都完整覆盖 471 条且 contract hash 一致，`compare_stages.py` 才生成 `comparison.json` 和 `comparison.md`。否则失败，不允许称为正式结果。

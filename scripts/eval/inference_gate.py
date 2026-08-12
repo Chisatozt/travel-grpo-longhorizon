@@ -578,7 +578,11 @@ def _public_reward_summary(report: Mapping[str, Any]) -> dict[str, Any]:
         key: report.get(key)
         for key in (
             "reward_valid", "completion_rate", "environment_steps",
-            "actor_attempts", "reward_degraded", "invalid_actions", "exact_repeats",
+            "actor_attempts", "effective_steps", "accepted_actor_attempts",
+            "answer_quality", "preference_coverage", "phase_transition_score",
+            "phase_transition_breakdown", "guard_rejections",
+            "guard_rejection_rate", "blocked_aspects", "reward_degraded",
+            "invalid_actions", "exact_repeats",
             "semantic_repeats", "infrastructure_invalid", "infrastructure_errors",
             "simulator_fallback_counts", "termination_reason",
         )
@@ -637,6 +641,7 @@ async def guarded_rollout_task(
                 guard_rejections += 1
                 guard_rejection_reasons[reason] += 1
                 session.invalid_actions += 1
+                session.record_public_guard_rejection(reason)
                 session.record_public_non_progress(reason)
                 messages.append({"role": "user", "content": session.render_actor_feedback(f"Error: public control rejected this call: {reason}")})
                 continue

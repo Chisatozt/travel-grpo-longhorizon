@@ -25,6 +25,11 @@ RESULT_METRIC_KEYS = (
     "invalid_actions",
     "exact_repeats",
     "semantic_repeats",
+    "answer_quality",
+    "preference_coverage",
+    "phase_transition_score",
+    "guard_rejection_rate",
+    "blocked_aspects",
 )
 
 
@@ -34,6 +39,9 @@ def sanitize_reward(report: Mapping[str, Any]) -> dict[str, Any]:
         "termination_reason", "grounded_quality", "quality_by_aspect", "completion_rate",
         "active_preference_coverage", "passive_preference_coverage", "search_coverage",
         "efficiency", "environment_steps", "actor_attempts", "effective_steps",
+        "answer_quality", "preference_coverage", "phase_transition_score",
+        "phase_transition_breakdown", "accepted_actor_attempts",
+        "guard_rejections", "guard_rejection_rate", "blocked_aspects",
         "policy_penalty", "gold_itinerary", "correct_itinerary", "fully_grounded",
         "user_aligned_success", "infrastructure_invalid", "infrastructure_errors",
         "reward_degraded", "simulator_fallback_counts",
@@ -53,6 +61,26 @@ def result_metrics(result: Mapping[str, Any]) -> dict[str, float]:
     if not isinstance(qualities, Mapping):
         qualities = {}
     values = [float(value) for value in qualities.values()]
+    default_answer_quality = sum(values) / len(values) if values else 0.0
+    answer_quality_value = reward.get("answer_quality")
+    answer_quality = (
+        float(answer_quality_value)
+        if isinstance(answer_quality_value, (int, float))
+        and not isinstance(answer_quality_value, bool)
+        else default_answer_quality
+    )
+    default_preference_coverage = min(
+        1.0,
+        float(reward.get("active_preference_coverage", 0.0))
+        + float(reward.get("passive_preference_coverage", 0.0)),
+    )
+    preference_value = reward.get("preference_coverage")
+    preference_coverage = (
+        float(preference_value)
+        if isinstance(preference_value, (int, float))
+        and not isinstance(preference_value, bool)
+        else default_preference_coverage
+    )
     return {
         "micro_avg": sum(values) / len(values) if values else 0.0,
         "micro_max": max(values) if values else 0.0,
@@ -72,4 +100,14 @@ def result_metrics(result: Mapping[str, Any]) -> dict[str, float]:
         "invalid_actions": float(reward.get("invalid_actions", 0)),
         "exact_repeats": float(reward.get("exact_repeats", 0)),
         "semantic_repeats": float(reward.get("semantic_repeats", 0)),
+        "answer_quality": answer_quality,
+        "preference_coverage": preference_coverage,
+        "phase_transition_score": (
+            float(reward["phase_transition_score"])
+            if isinstance(reward.get("phase_transition_score"), (int, float))
+            and not isinstance(reward.get("phase_transition_score"), bool)
+            else 1.0
+        ),
+        "guard_rejection_rate": float(reward.get("guard_rejection_rate", 0.0)),
+        "blocked_aspects": float(reward.get("blocked_aspects", 0.0)),
     }

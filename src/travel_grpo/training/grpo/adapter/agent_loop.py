@@ -178,7 +178,7 @@ def actor_policy_metadata(
 
 
 class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
-    """Own the environment lifecycle and assign Reward v2 exactly once."""
+    """Own the environment lifecycle and assign the v3 reward exactly once."""
 
     def __init__(
         self,
@@ -361,6 +361,16 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 "gold_itinerary": bool(reward.get("gold_itinerary")),
                 "user_aligned_success": bool(reward.get("user_aligned_success")),
                 "completion_rate": float(reward.get("completion_rate", 0.0)),
+                "answer_quality": float(reward.get("answer_quality", 0.0)),
+                "preference_coverage": float(reward.get("preference_coverage", 0.0)),
+                "phase_transition_score": float(
+                    reward.get("phase_transition_score", 0.0)
+                ),
+                "guard_rejections": session.guard_rejections,
+                "guard_rejection_rate": float(
+                    reward.get("guard_rejection_rate", 0.0)
+                ),
+                "blocked_aspects": int(reward.get("blocked_aspects", 0)),
                 "search_coverage": float(reward.get("search_coverage", 0.0)),
                 "active_preference_coverage": float(
                     reward.get("active_preference_coverage", 0.0)

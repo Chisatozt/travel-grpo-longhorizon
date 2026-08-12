@@ -253,6 +253,7 @@ async def _guarded_rollout_task(
                 guard_rejections += 1
                 guard_rejection_reasons[reason] += 1
                 session.invalid_actions += 1
+                session.record_public_guard_rejection(reason)
                 session.record_public_non_progress(reason)
                 messages.append(
                     {

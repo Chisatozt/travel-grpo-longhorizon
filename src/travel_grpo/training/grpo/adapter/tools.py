@@ -44,6 +44,8 @@ def _rejected_tool_execution(
     """Return an actor-visible error without touching the environment."""
 
     session.invalid_actions += 1
+    if reason == "public_phase_guard":
+        session.record_public_guard_rejection(message)
     session.record_non_progress(reason)
     return UserBenchToolExecution(
         text=session.render_actor_feedback(f"Error: {message}"),

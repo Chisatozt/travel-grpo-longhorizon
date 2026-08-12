@@ -12,7 +12,10 @@ from collections.abc import Mapping, Sequence, Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import Any
 
-REWARD_VERSION = "userbench-travel-reward-v2"
+REWARD_VERSION = "userbench-travel-reward-v3-priority"
+LEGACY_REWARD_VERSIONS = frozenset({"userbench-travel-reward-v2"})
+SUPPORTED_REWARD_VERSIONS = frozenset({REWARD_VERSION, *LEGACY_REWARD_VERSIONS})
+PRIORITY_REWARD_SCALE = 3.4
 NEGATIVE_REWARD_TEMPERATURE = 1.5
 
 
@@ -177,6 +180,31 @@ def squash_terminal_reward(
     return -math.tanh((-normalized_raw) / normalized_temperature)
 
 
+def scale_priority_reward(
+    raw_reward: float,
+    *,
+    scale: float = PRIORITY_REWARD_SCALE,
+) -> float:
+    """Map the v3 score to ``[-1, 1]`` without negative-tail saturation."""
+
+    try:
+        normalized_raw = float(raw_reward)
+        normalized_scale = float(scale)
+    except (TypeError, ValueError) as exc:
+        raise UserBenchRewardError("priority reward and scale must be finite") from exc
+    if not math.isfinite(normalized_raw):
+        raise UserBenchRewardError("priority reward must be finite")
+    if not math.isfinite(normalized_scale) or normalized_scale <= 0.0:
+        raise UserBenchRewardError("priority reward scale must be positive and finite")
+    return max(-1.0, min(1.0, normalized_raw / normalized_scale))
+
+
+def _count(value: int, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise UserBenchRewardError(f"{name} must be a non-negative integer")
+    return value
+
+
 def compute_travel_reward(
     *,
     task: TravelRewardTask,
@@ -196,10 +224,41 @@ def compute_travel_reward(
     parallel_tool_calls: bool = False,
     no_tool_output: bool = False,
     max_steps_reached: bool = False,
+    guard_rejections: int = 0,
+    blocked_aspects: int = 0,
+    valid_search_required_transitions: int = 0,
+    search_required_opportunities: int = 0,
+    valid_candidate_answer_transitions: int = 0,
+    candidate_answer_opportunities: int = 0,
+    valid_retry_search_transitions: int = 0,
+    retry_search_opportunities: int = 0,
+    valid_aspect_switch_transitions: int = 0,
+    aspect_switch_opportunities: int = 0,
     reward_valid: bool = True,
     termination_reason: str | None = None,
 ) -> dict[str, Any]:
-    """Compute Travel Reward v2 and a complete metric decomposition."""
+    """Compute the completion-priority Travel Reward v3."""
+
+    guard_rejections = _count(guard_rejections, "guard_rejections")
+    blocked_aspects = _count(blocked_aspects, "blocked_aspects")
+    transition_counts = {
+        "search_required": (
+            _count(valid_search_required_transitions, "valid_search_required_transitions"),
+            _count(search_required_opportunities, "search_required_opportunities"),
+        ),
+        "candidate_answer": (
+            _count(valid_candidate_answer_transitions, "valid_candidate_answer_transitions"),
+            _count(candidate_answer_opportunities, "candidate_answer_opportunities"),
+        ),
+        "retry_search": (
+            _count(valid_retry_search_transitions, "valid_retry_search_transitions"),
+            _count(retry_search_opportunities, "retry_search_opportunities"),
+        ),
+        "aspect_switch": (
+            _count(valid_aspect_switch_transitions, "valid_aspect_switch_transitions"),
+            _count(aspect_switch_opportunities, "aspect_switch_opportunities"),
+        ),
+    }
 
     aspects = task.aspects
     all_preferences = set().union(
@@ -242,7 +301,13 @@ def compute_travel_reward(
         if actor_attempts is None
         else max(0, actor_attempts)
     )
-    effective_steps = max(environment_steps, normalized_actor_attempts)
+    counted_guard_rejections = min(guard_rejections, normalized_actor_attempts)
+    accepted_actor_attempts = max(
+        0, normalized_actor_attempts - counted_guard_rejections
+    )
+    effective_steps = max(environment_steps, accepted_actor_attempts) + 0.25 * (
+        counted_guard_rejections
+    )
     useful_turn_budget = len(all_preferences) + 2 * len(aspects)
     if effective_steps <= useful_turn_budget:
         efficiency = 1.0
@@ -256,33 +321,54 @@ def compute_travel_reward(
             / (max_steps - useful_turn_budget),
         )
 
+    aspect_count = len(aspects)
     penalty_components = {
-        # Parallel calls are one separate protocol event, not N malformed calls.
-        "invalid_action": 0.0
-        if parallel_tool_calls
-        else max(0, invalid_actions) * 0.10,
-        "parallel_tool_calls": 0.25 if parallel_tool_calls else 0.0,
-        "exact_repeat": max(0, exact_repeats) * 0.05,
-        "semantic_repeat": max(0, semantic_repeats) * 0.05,
-        "ambiguous_action": max(0, ambiguous_actions) * 0.05,
-        "unsearched_answer": max(0, unsearched_answers) * 0.10,
-        "wrong_answer": max(0, wrong_answers) * 0.15,
-        "no_tool_output": 0.15 if no_tool_output else 0.0,
-        "max_steps": 0.15 if max_steps_reached else 0.0,
+        "guard_rejection": 0.08 * _ratio(min(guard_rejections, 4), 4),
+        "blocked_aspect": 0.08 * _ratio(min(blocked_aspects, aspect_count), aspect_count),
+        "invalid_action": 0.03 * _ratio(min(max(0, invalid_actions), 4), 4),
+        "parallel_tool_calls": 0.05 if parallel_tool_calls else 0.0,
+        "exact_repeat": 0.02 * _ratio(min(max(0, exact_repeats), 4), 4),
+        "semantic_repeat": 0.02 * _ratio(min(max(0, semantic_repeats), 4), 4),
+        "ambiguous_action": 0.02 * _ratio(min(max(0, ambiguous_actions), aspect_count), aspect_count),
+        "unsearched_answer": 0.03 * _ratio(min(max(0, unsearched_answers), aspect_count), aspect_count),
+        "wrong_answer": 0.04 * _ratio(min(max(0, wrong_answers), aspect_count), aspect_count),
+        "no_tool_output": 0.02 if no_tool_output else 0.0,
+        "max_steps": 0.02 if max_steps_reached else 0.0,
     }
     policy_penalty = sum(penalty_components.values())
+    transition_successes = sum(value[0] for value in transition_counts.values())
+    transition_opportunities = sum(value[1] for value in transition_counts.values())
+    phase_transition_score = (
+        1.0
+        if transition_opportunities == 0
+        else _ratio(min(transition_successes, transition_opportunities), transition_opportunities)
+    )
+    phase_transition_breakdown = {
+        name: {
+            "successes": successes,
+            "opportunities": opportunities,
+            "rate": (
+                1.0
+                if opportunities == 0
+                else _ratio(min(successes, opportunities), opportunities)
+            ),
+        }
+        for name, (successes, opportunities) in transition_counts.items()
+    }
+    preference_coverage = _ratio(len(active | passive), len(all_preferences))
+    answer_quality = _ratio(sum(quality_by_aspect.values()), len(aspects))
     raw_reward = (
-        0.65 * (2.0 * grounded_quality - 1.0)
-        + 0.15 * active_coverage
-        + 0.10 * search_coverage
-        + 0.10 * efficiency
-        - 0.10 * passive_coverage
-        - 0.30 * (1.0 - completion_rate)
+        3.00 * completion_rate
+        + 0.20 * preference_coverage
+        + 0.08 * phase_transition_score
+        + 0.06 * search_coverage
+        + 0.04 * answer_quality
+        + 0.02 * efficiency
         - policy_penalty
     )
     if not math.isfinite(raw_reward):
         raise UserBenchRewardError("raw reward must be finite")
-    terminal_reward = squash_terminal_reward(raw_reward) if reward_valid else 0.0
+    terminal_reward = scale_priority_reward(raw_reward) if reward_valid else 0.0
     if not math.isfinite(terminal_reward):
         raise UserBenchRewardError("terminal reward must be finite")
 
@@ -299,6 +385,7 @@ def compute_travel_reward(
         "raw_terminal_reward": raw_reward,
         "termination_reason": termination_reason,
         "grounded_quality": grounded_quality,
+        "answer_quality": answer_quality,
         "quality_by_aspect": quality_by_aspect,
         "grounding_by_aspect": grounding_by_aspect,
         "grounded_quality_by_aspect": grounded_quality_by_aspect,
@@ -308,13 +395,20 @@ def compute_travel_reward(
         "completion_rate": completion_rate,
         "active_preference_coverage": active_coverage,
         "passive_preference_coverage": passive_coverage,
+        "preference_coverage": preference_coverage,
         "search_coverage": search_coverage,
+        "phase_transition_score": phase_transition_score,
+        "phase_transition_breakdown": phase_transition_breakdown,
         "efficiency": efficiency,
         "environment_steps": environment_steps,
         "actor_attempts": (
             None if actor_attempts is None else normalized_actor_attempts
         ),
         "effective_steps": effective_steps,
+        "accepted_actor_attempts": accepted_actor_attempts,
+        "guard_rejections": guard_rejections,
+        "guard_rejection_rate": _ratio(guard_rejections, normalized_actor_attempts),
+        "blocked_aspects": min(blocked_aspects, aspect_count),
         "policy_penalty": policy_penalty,
         "penalty_components": penalty_components,
         "searched_aspects": sorted(searched),

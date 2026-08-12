@@ -1,7 +1,8 @@
 # Travel GRPO 项目完整会话交接
 
-> 更新时间：2026-08-04（Asia/Shanghai）  
+> 更新时间：2026-08-12（UTC）
 > 仓库：`D:\Code\Python\vscodeProjects\travel-grpo-longhorizon`  
+> 当前运行时 Reward：`userbench-travel-reward-v3-priority`；v2 仅作为历史 SFT 输入兼容。
 > 分支与提交：`main`，`b5eaa45 add GRPO`  
 > 远程：`origin = https://github.com/Chisatozt/travel-grpo-longhorizon.git`  
 > 当前工作树：干净  
@@ -56,7 +57,7 @@ Actor 需要主动询问用户偏好、搜索候选并提交推荐。Actor 只�
 | 正式训练系统 | Linux、Python 3.12、单张至少 80 GiB，目标 96 GiB NVIDIA GPU |
 | 本地 Windows | 仅离线测试、数据验证和 dry-run，不运行 vLLM/Ray/正式训练 |
 | SFT | Gold + Silver、action-only LoRA、`enable_thinking=false` |
-| GRPO Reward | 项目现有 Travel Reward v2，不迁移购物 Reward v3 |
+| GRPO Reward | completion-priority Travel Reward v3；SFT loader 兼容历史 v2 |
 | 最终评测 | 官方 test 471 条，训练配置和 checkpoint 冻结后才可使用 |
 
 必须保持 Actor、Teacher、三类模拟器和正式评测为不同运行边界。即使它们调用同一个供应商，也不能复用角色变量或在同一进程切换 UserBench 模拟器绑定。

@@ -16,24 +16,29 @@ environment:
   verbose: false
   capture_upstream_diagnostics: false
 reward:
-  version: userbench-travel-reward-v2
+  version: userbench-travel-reward-v3-priority
   terminal_only: true
   range: [-1.0, 1.0]
   weights:
-    grounded_quality: 0.75
-    active_preference_coverage: 0.15
-    efficiency: 0.10
-    passive_preference_coverage: -0.10
-    incomplete_aspects: -0.40
+    completion: 3.0
+    preference_coverage: 0.20
+    phase_transition: 0.08
+    search_coverage: 0.06
+    answer_quality: 0.04
+    efficiency: 0.02
   policy_penalties:
-    invalid_action: {per_event: 0.10, cap: 0.30}
-    parallel_tool_calls: {fixed: 0.25}
-    exact_repeat: {per_event: 0.05, cap: 0.15}
-    semantic_repeat: {per_event: 0.05, cap: 0.15}
-    ambiguous_action: {per_event: 0.05, cap: 0.15}
-    unsearched_answer: {per_aspect: 0.10, cap: 0.30}
-    wrong_answer: {per_aspect: 0.15, cap: 0.45}
-    no_tool_output: {fixed: 0.15}
-    max_steps: {fixed: 0.15}
-    total_cap: 0.75
+    guard_rejection: {cap: 0.08, events: 4}
+    blocked_aspect: {cap: 0.08}
+    invalid_action: {cap: 0.03, events: 4}
+    parallel_tool_calls: {fixed: 0.05}
+    exact_repeat: {cap: 0.02, events: 4}
+    semantic_repeat: {cap: 0.02, events: 4}
+    ambiguous_action: {cap: 0.02}
+    unsearched_answer: {cap: 0.03}
+    wrong_answer: {cap: 0.04}
+    no_tool_output: {fixed: 0.02}
+    max_steps: {fixed: 0.02}
+  normalization:
+    mode: fixed_linear
+    scale: 3.4
   infrastructure_invalid_score: 0.0

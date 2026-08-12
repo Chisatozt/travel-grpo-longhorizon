@@ -699,7 +699,7 @@ def test_collects_tool_only_messages_and_raw_rewards():
     assert record["step_rewards"] == [0.2, 0.2, 1.0]
     assert record["total_reward"] == pytest.approx(1.4)
     assert record["schema_version"] == "userbench-teacher-trajectory-v4"
-    assert record["reward_version"] == "userbench-travel-reward-v2"
+    assert record["reward_version"] == "userbench-travel-reward-v3-priority"
     assert record["reward_valid"] is True
     assert record["terminal_reward"] == pytest.approx(1.0)
     assert record["policy_penalty"] == 0.0
@@ -754,7 +754,7 @@ def test_collection_config_pins_both_deepseek_roles():
     )
     assert config["teacher"]["model"] == "deepseek-v4-flash"
     assert config["simulator"]["model"] == "deepseek-v4-flash"
-    assert config["collection"]["reward_version"] == "userbench-travel-reward-v2"
+    assert config["collection"]["reward_version"] == "userbench-travel-reward-v3-priority"
     assert config["collection"]["minimum_terminal_reward"] == 0.7
     assert config["collection"]["require_zero_policy_penalty"] is True
     assert config["collection"]["policy_version"] == "teacher-state-machine-v5"

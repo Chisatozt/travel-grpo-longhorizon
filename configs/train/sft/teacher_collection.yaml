@@ -27,7 +27,7 @@ collection:
   trajectory_attempts: 3
   strict_filter: true
   capture_upstream_diagnostics: true
-  reward_version: userbench-travel-reward-v2
+  reward_version: userbench-travel-reward-v3-priority
   minimum_terminal_reward: 0.7
   require_zero_policy_penalty: true
   fail_fast_on_strict_violation: true

@@ -288,7 +288,7 @@ def test_verl_yaml_paths_and_simulator_roles_are_consistent():
     environment = yaml.safe_load(
         (config_root / "interaction_config/userbench.yaml").read_text(encoding="utf-8")
     )
-    assert environment["reward"]["version"] == "userbench-travel-reward-v2"
+    assert environment["reward"]["version"] == "userbench-travel-reward-v3-priority"
     assert environment["reward"]["terminal_only"] is True
 
     loop = yaml.safe_load(

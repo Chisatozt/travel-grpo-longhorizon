@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from travel_grpo.envs.reward import REWARD_VERSION
+from travel_grpo.envs.reward import REWARD_VERSION, SUPPORTED_REWARD_VERSIONS
 from travel_grpo.envs.userbench_tools import (
     TOOL_NAME,
     UserBenchAction,
@@ -240,7 +240,10 @@ def trajectory_rejection_reasons(record: Any) -> tuple[str, ...]:
     if not isinstance(reward, Mapping):
         reasons.add("missing_reward_evidence")
     else:
-        if record.get("reward_version") != REWARD_VERSION or reward.get("reward_version") != REWARD_VERSION:
+        if (
+            record.get("reward_version") not in SUPPORTED_REWARD_VERSIONS
+            or reward.get("reward_version") not in SUPPORTED_REWARD_VERSIONS
+        ):
             reasons.add("wrong_reward_version")
         if record.get("reward_valid") is not True or reward.get("reward_valid") is not True:
             reasons.add("reward_invalid")

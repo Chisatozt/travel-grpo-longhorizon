@@ -1,4 +1,4 @@
-"""Deterministic Travel Reward v2 contracts."""
+"""Deterministic completion-priority Travel Reward v3 contracts."""
 
 import math
 
@@ -43,16 +43,16 @@ def _score(**overrides):
     return compute_travel_reward(**values)
 
 
-def test_fully_grounded_gold_is_one_and_correct_alternative_is_point_seventy_four():
+def test_completion_dominates_and_gold_remains_one():
     gold = _score()
     alternative = _score(answers={"flight": "F2", "hotel": "H2"})
     assert gold["reward_version"] == REWARD_VERSION
     assert gold["terminal_reward"] == pytest.approx(1.0)
     assert gold["user_aligned_success"] is True
-    assert alternative["terminal_reward"] == pytest.approx(0.74)
+    assert alternative["terminal_reward"] == pytest.approx(3.392 / 3.4)
 
 
-def test_ungrounded_guess_and_incomplete_trajectory_are_negative():
+def test_completion_is_positive_but_incomplete_trajectories_remain_lower():
     guess = _score(
         active_preference_ids=set(),
         searched_aspects=set(),
@@ -60,13 +60,12 @@ def test_ungrounded_guess_and_incomplete_trajectory_are_negative():
         unsearched_answers=2,
     )
     incomplete = _score(answers={}, active_preference_ids=set(), searched_aspects=set(), steps=0)
-    assert guess["raw_terminal_reward"] < 0.0
-    assert guess["terminal_reward"] < 0.0
-    assert -1.0 < incomplete["terminal_reward"] < 0.0
+    assert guess["completion_rate"] == pytest.approx(1.0)
     assert guess["terminal_reward"] > incomplete["terminal_reward"]
+    assert guess["terminal_reward"] > 0.0
 
 
-def test_policy_penalties_are_decomposed_without_a_total_or_component_cap():
+def test_policy_penalties_are_decomposed_and_bounded():
     report = _score(
         invalid_actions=4,
         exact_repeats=4,
@@ -74,16 +73,53 @@ def test_policy_penalties_are_decomposed_without_a_total_or_component_cap():
         ambiguous_actions=4,
         unsearched_answers=4,
         wrong_answers=4,
+        guard_rejections=4,
+        blocked_aspects=2,
     )
-    assert report["policy_penalty"] == pytest.approx(2.0)
-    assert report["penalty_components"]["invalid_action"] == pytest.approx(0.40)
+    assert report["policy_penalty"] == pytest.approx(0.32)
+    assert report["penalty_components"]["invalid_action"] == pytest.approx(0.03)
+    assert report["penalty_components"]["guard_rejection"] == pytest.approx(0.08)
+    assert report["penalty_components"]["blocked_aspect"] == pytest.approx(0.08)
 
 
-def test_error_counts_remain_monotonic_after_many_repeated_errors():
+def test_error_counts_decrease_reward_until_each_cap():
     r1 = _score(invalid_actions=1)["terminal_reward"]
     r4 = _score(invalid_actions=4)["terminal_reward"]
     r8 = _score(invalid_actions=8)["terminal_reward"]
-    assert r1 > r4 > r8
+    assert r1 > r4
+    assert r4 == pytest.approx(r8)
+
+
+def test_passive_preference_coverage_is_positive_and_not_a_penalty():
+    no_passive = _score(active_preference_ids=set(), passive_preference_ids=set())
+    passive = _score(active_preference_ids=set(), passive_preference_ids={"P1"})
+    assert passive["preference_coverage"] > no_passive["preference_coverage"]
+    assert passive["terminal_reward"] > no_passive["terminal_reward"]
+
+
+def test_blocked_aspect_is_not_completion():
+    report = _score(answers={}, active_preference_ids=set(), searched_aspects=set(), blocked_aspects=1)
+    assert report["completion_rate"] == pytest.approx(0.0)
+    assert report["blocked_aspects"] == 1
+
+
+def test_public_phase_transition_score_is_vacuously_one_without_opportunities():
+    report = _score()
+    assert report["phase_transition_score"] == pytest.approx(1.0)
+    assert report["phase_transition_breakdown"]["search_required"]["rate"] == pytest.approx(1.0)
+
+
+def test_public_phase_failures_are_small_relative_to_completion():
+    report = _score(
+        valid_search_required_transitions=0,
+        search_required_opportunities=2,
+        valid_candidate_answer_transitions=0,
+        candidate_answer_opportunities=2,
+        guard_rejections=4,
+    )
+    assert report["phase_transition_score"] == pytest.approx(0.0)
+    assert report["completion_rate"] == pytest.approx(1.0)
+    assert report["terminal_reward"] > 0.8
 
 
 def test_negative_terminal_rewards_are_smooth_and_distinct():

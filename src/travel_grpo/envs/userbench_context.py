@@ -25,6 +25,7 @@ from travel_grpo.envs.public_control import (
     validate_public_action,
 )
 from travel_grpo.envs.reward import (
+    REWARD_VERSION,
     RawRewardTrace,
     TravelRewardTask,
     UserBenchRewardSnapshot,
@@ -257,6 +258,19 @@ class UserBenchSessionState:
     infrastructure_errors: list[str] = field(default_factory=list)
     reward_degraded: bool = False
     simulator_fallback_counts: dict[str, int] = field(default_factory=dict)
+    # Public phase/guard accounting. These counters use only the actor-visible
+    # control ledger and are safe to expose as diagnostics; hidden reward
+    # snapshots never participate in their updates.
+    guard_rejections: int = 0
+    guard_rejection_reasons: dict[str, int] = field(default_factory=dict)
+    valid_search_required_transitions: int = 0
+    search_required_opportunities: int = 0
+    valid_candidate_answer_transitions: int = 0
+    candidate_answer_opportunities: int = 0
+    valid_retry_search_transitions: int = 0
+    retry_search_opportunities: int = 0
+    valid_aspect_switch_transitions: int = 0
+    aspect_switch_opportunities: int = 0
     # Runtime-only GRPO training control.  These fields are intentionally not
     # part of any teacher/SFT/Parquet contract.
     stall_recovery_enabled: bool = False
@@ -284,6 +298,25 @@ class UserBenchSessionState:
             or self.stall_no_progress_threshold < 1
         ):
             raise ValueError("stall_no_progress_threshold must be an integer >= 1")
+        for name in (
+            "guard_rejections",
+            "valid_search_required_transitions",
+            "search_required_opportunities",
+            "valid_candidate_answer_transitions",
+            "candidate_answer_opportunities",
+            "valid_retry_search_transitions",
+            "retry_search_opportunities",
+            "valid_aspect_switch_transitions",
+            "aspect_switch_opportunities",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in self.guard_rejection_reasons.values()
+        ):
+            raise ValueError("guard_rejection_reasons counts must be non-negative integers")
         if self.public_control_state is not None and not isinstance(
             self.public_control_state, PublicControlState
         ):
@@ -299,6 +332,39 @@ class UserBenchSessionState:
     @property
     def done(self) -> bool:
         return self.terminated or self.truncated
+
+    def record_public_guard_rejection(self, reason: str) -> None:
+        """Record one pre-environment public guard rejection."""
+
+        if not isinstance(reason, str) or not reason.strip():
+            raise TypeError("guard rejection reason must be a non-empty string")
+        self.guard_rejections += 1
+        key = reason.strip()
+        self.guard_rejection_reasons[key] = (
+            self.guard_rejection_reasons.get(key, 0) + 1
+        )
+
+    def _record_public_phase_attempt(
+        self, action: UserBenchAction, reason: str | None
+    ) -> None:
+        """Count public phase opportunities and accepted transitions."""
+
+        state = self.public_control_state
+        if state is None:
+            return
+        phase = state.phase
+        if phase is RecoveryMode.SEARCH_REQUIRED:
+            self.search_required_opportunities += 1
+            if reason is None and action.choice is ActionChoice.SEARCH:
+                self.valid_search_required_transitions += 1
+        elif phase is RecoveryMode.SEARCH_RETRY_REQUIRED:
+            self.retry_search_opportunities += 1
+            if reason is None and action.choice is ActionChoice.SEARCH:
+                self.valid_retry_search_transitions += 1
+        elif phase is RecoveryMode.ANSWER_REQUIRED:
+            self.candidate_answer_opportunities += 1
+            if reason is None and action.choice is ActionChoice.ANSWER:
+                self.valid_candidate_answer_transitions += 1
 
     def _sync_public_control_metrics(self) -> None:
         state = self.public_control_state
@@ -322,7 +388,14 @@ class UserBenchSessionState:
                 PublicAspectStatus.ANSWERED,
                 PublicAspectStatus.BLOCKED,
             }:
+                self.aspect_switch_opportunities += 1
                 self.public_control_state = advance_public_aspect(state)
+                advanced = self.public_control_state
+                if (
+                    advanced.current_aspect != state.current_aspect
+                    or advanced.episode_done
+                ):
+                    self.valid_aspect_switch_transitions += 1
         self._sync_public_control_metrics()
 
     def prepare_public_action(self) -> None:
@@ -336,7 +409,9 @@ class UserBenchSessionState:
         self.prepare_public_action()
         if self.public_control_state is None:
             return None
-        return validate_public_action(self.public_control_state, action)
+        reason = validate_public_action(self.public_control_state, action)
+        self._record_public_phase_attempt(action, reason)
+        return reason
 
     def record_public_non_progress(self, reason: str | None = None) -> None:
         del reason
@@ -713,7 +788,7 @@ class UserBenchSessionState:
     def reward_report(self) -> dict[str, Any]:
         if not _is_complete_reward_task(self.reward_task):
             return {
-                "reward_version": "userbench-travel-reward-v2",
+                "reward_version": REWARD_VERSION,
                 "reward_valid": False,
                 "terminal_reward": 0.0,
                 "termination_reason": self.termination_reason,
@@ -729,7 +804,7 @@ class UserBenchSessionState:
             self.reward_task, self.reward_snapshot
         ):
             return {
-                "reward_version": "userbench-travel-reward-v2",
+                "reward_version": REWARD_VERSION,
                 "reward_valid": False,
                 "terminal_reward": 0.0,
                 "termination_reason": self.termination_reason,
@@ -760,6 +835,20 @@ class UserBenchSessionState:
             parallel_tool_calls=self.parallel_tool_calls,
             no_tool_output=no_tool_output,
             max_steps_reached=self.truncated,
+            guard_rejections=self.guard_rejections,
+            blocked_aspects=(
+                self.public_control_state.blocked_count
+                if self.public_control_state is not None
+                else 0
+            ),
+            valid_search_required_transitions=self.valid_search_required_transitions,
+            search_required_opportunities=self.search_required_opportunities,
+            valid_candidate_answer_transitions=self.valid_candidate_answer_transitions,
+            candidate_answer_opportunities=self.candidate_answer_opportunities,
+            valid_retry_search_transitions=self.valid_retry_search_transitions,
+            retry_search_opportunities=self.retry_search_opportunities,
+            valid_aspect_switch_transitions=self.valid_aspect_switch_transitions,
+            aspect_switch_opportunities=self.aspect_switch_opportunities,
             reward_valid=not self.infrastructure_errors,
             termination_reason=self.termination_reason,
         )
@@ -774,6 +863,7 @@ class UserBenchSessionState:
                 "ambiguous_actions": self.ambiguous_actions,
                 "unsearched_answers": self.unsearched_answers,
                 "wrong_answers": self.wrong_answers,
+                "guard_rejection_reasons": dict(self.guard_rejection_reasons),
             }
         )
         return report
@@ -828,6 +918,11 @@ class UserBenchSessionState:
             "public_open_aspect_count": (
                 len(public_state.open_aspects) if public_state is not None else 0
             ),
+            "guard_rejections": self.guard_rejections,
+            "guard_rejection_rate": report.get("guard_rejection_rate", 0.0),
+            "blocked_aspects": report.get("blocked_aspects", 0),
+            "preference_coverage": report.get("preference_coverage", 0.0),
+            "phase_transition_score": report.get("phase_transition_score", 0.0),
         }
 
 

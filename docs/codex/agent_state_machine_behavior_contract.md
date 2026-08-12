@@ -270,13 +270,16 @@ answer 的 action，以及 malformed/unknown/被 guard 拒绝的协议事件（�
 - 无：设置 episode done，终止 controller/rollout；不额外生成 tool call；
 - 环境仍未同步结束：由 adapter 记录 controlled termination；不得伪造环境 answer。
 
-推荐的 completion 定义保持与 Reward v2 一致：
+公开状态机的 `ANSWERED` 仍表示 Actor 提交了一个当前可见 ID；它不是 Reward 的 correctness 判断。
+
+当前 Reward 的 completion 定义为正确答案比例：
 
 ```text
-completion_rate = count(aspect.terminal == ANSWERED) / count(all aspects)
+answer_submission_rate = count(aspect has submitted answer) / count(all aspects)
+completion_rate = correct_answer_rate = count(submitted ID ∈ correct_ids) / count(all aspects)
 ```
 
-`BLOCKED` 只表示该 aspect 的可行动路径被安全封闭，不计入 completion numerator。
+`BLOCKED` 只表示该 aspect 的可行动路径被安全封闭，不计入 completion numerator；正确性仍只用于隐藏 Reward/offline analysis，不反馈给 Actor。
 若所有 aspect 都 `BLOCKED`，episode 可以正常结束，但 completion 必须为 0（或相应
 的部分值），不能把“已切换/已结束”写成“已回答”。禁止构造不存在的 option ID、
 伪造 `answers`、`correct_itinerary` 或 success completion。

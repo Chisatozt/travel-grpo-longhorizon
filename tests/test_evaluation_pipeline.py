@@ -34,6 +34,8 @@ def result(task_id: str, reward: float = 0.5, *, valid: bool = True, composition
             "correct_itinerary": True,
             "user_aligned_success": True,
             "completion_rate": 1.0,
+            "correct_answer_rate": 1.0,
+            "answer_submission_rate": 1.0,
             "active_preference_coverage": 1.0,
             "passive_preference_coverage": 0.0,
             "efficiency": 1.0,

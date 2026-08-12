@@ -361,6 +361,12 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 "gold_itinerary": bool(reward.get("gold_itinerary")),
                 "user_aligned_success": bool(reward.get("user_aligned_success")),
                 "completion_rate": float(reward.get("completion_rate", 0.0)),
+                "correct_answer_rate": float(
+                    reward.get("correct_answer_rate", reward.get("completion_rate", 0.0))
+                ),
+                "answer_submission_rate": float(
+                    reward.get("answer_submission_rate", 0.0)
+                ),
                 "answer_quality": float(reward.get("answer_quality", 0.0)),
                 "preference_coverage": float(reward.get("preference_coverage", 0.0)),
                 "phase_transition_score": float(

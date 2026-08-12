@@ -48,21 +48,35 @@ def test_completion_dominates_and_gold_remains_one():
     alternative = _score(answers={"flight": "F2", "hotel": "H2"})
     assert gold["reward_version"] == REWARD_VERSION
     assert gold["terminal_reward"] == pytest.approx(1.0)
+    assert gold["completion_rate"] == pytest.approx(1.0)
     assert gold["user_aligned_success"] is True
+    assert alternative["completion_rate"] == pytest.approx(1.0)
     assert alternative["terminal_reward"] == pytest.approx(3.392 / 3.4)
 
 
-def test_completion_is_positive_but_incomplete_trajectories_remain_lower():
-    guess = _score(
+def test_completion_is_correct_answer_rate_not_submission_rate():
+    wrong = _score(
+        answers={"flight": "F99", "hotel": "H99"},
         active_preference_ids=set(),
         searched_aspects=set(),
         steps=2,
         unsearched_answers=2,
+        wrong_answers=2,
     )
-    incomplete = _score(answers={}, active_preference_ids=set(), searched_aspects=set(), steps=0)
-    assert guess["completion_rate"] == pytest.approx(1.0)
-    assert guess["terminal_reward"] > incomplete["terminal_reward"]
-    assert guess["terminal_reward"] > 0.0
+    partial = _score(
+        answers={"flight": "F1", "hotel": "H99"},
+        active_preference_ids=set(),
+        searched_aspects=set(),
+        steps=2,
+        unsearched_answers=2,
+        wrong_answers=1,
+    )
+    assert wrong["answer_submission_rate"] == pytest.approx(1.0)
+    assert wrong["completion_rate"] == pytest.approx(0.0)
+    assert wrong["correct_answer_rate"] == pytest.approx(0.0)
+    assert partial["answer_submission_rate"] == pytest.approx(1.0)
+    assert partial["completion_rate"] == pytest.approx(0.5)
+    assert partial["terminal_reward"] > wrong["terminal_reward"]
 
 
 def test_policy_penalties_are_decomposed_and_bounded():

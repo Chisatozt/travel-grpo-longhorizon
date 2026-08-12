@@ -251,6 +251,8 @@ class TeacherTrajectory:
             "terminal_reward": reward.get("terminal_reward"),
             "reward_breakdown": reward or None,
             "completion_rate": reward.get("completion_rate"),
+            "correct_answer_rate": reward.get("correct_answer_rate", reward.get("completion_rate")),
+            "answer_submission_rate": reward.get("answer_submission_rate"),
             "correct_itinerary": reward.get("correct_itinerary"),
             "gold_itinerary": reward.get("gold_itinerary"),
             "fully_grounded": reward.get("fully_grounded"),

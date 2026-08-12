@@ -4,7 +4,7 @@
 
 ## 目标顺序
 
-1. 完成公开 aspect（`completion_rate`）
+1. 正确答案覆盖（`completion_rate` / `correct_answer_rate`）
 2. 覆盖已 elicited 的偏好（active 与 passive 的并集）
 3. 遵守公开控制状态机的阶段转移
 4. 搜索覆盖、答案质量和效率
@@ -12,7 +12,7 @@
 
 ## 计算
 
-令 `C` 为已提交答案的公开 aspect 比例，`P` 为 active/passive preference ID 并集覆盖率，`T` 为公开阶段转移成功率，`S` 为已搜索 aspect 比例，`Q` 为答案质量（best=1、其他正确 option=0.8），`E` 为有效步效率，则：
+令 `C` 为正确 option ID 的 aspect 比例（`correct_ids` 命中；不是单纯提交答案的比例），`U` 为已提交答案的 aspect 比例，`P` 为 active/passive preference ID 并集覆盖率，`T` 为公开阶段转移成功率，`S` 为已搜索 aspect 比例，`Q` 为答案质量（best=1、其他正确 option=0.8），`E` 为有效步效率，则：
 
 ```text
 raw = 3.00*C + 0.20*P + 0.08*T + 0.06*S + 0.04*Q + 0.02*E - bounded_penalty
@@ -21,7 +21,7 @@ terminal_reward = clip(raw / 3.4, -1, 1)
 
 没有公开阶段机会的 legacy session 将 `T` 视为 1；一旦阶段有机会，`T` 是成功数/机会数。这样不会因为旧数据没有 guard ledger 被隐式扣分。
 
-扣分组件均有固定上限：guard rejection 0.08、blocked aspect 0.08、invalid action 0.03、parallel tool call 0.05、exact/semantic repeat 各 0.02、ambiguous 0.02、unsearched answer 0.03、wrong answer 0.04、no-tool/max-step 各 0.02。`BLOCKED` 只计入 blocked，不计入 completion。
+扣分组件均有固定上限：guard rejection 0.08、blocked aspect 0.08、invalid action 0.03、parallel tool call 0.05、exact/semantic repeat 各 0.02、ambiguous 0.02、unsearched answer 0.03、wrong answer 0.04、no-tool/max-step 各 0.02。`BLOCKED` 只计入 blocked，不计入 completion。`answer_submission_rate` 单独记录 Actor 是否提交过答案；它不产生 completion credit。
 
 ## 运行时和兼容性
 

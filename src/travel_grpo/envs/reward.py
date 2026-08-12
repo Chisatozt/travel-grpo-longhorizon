@@ -293,7 +293,14 @@ def compute_travel_reward(
     active_coverage = _ratio(len(active), len(all_preferences))
     passive_coverage = _ratio(len(passive), len(all_preferences))
     search_coverage = _ratio(len(searched), len(aspects))
-    completion_rate = _ratio(sum(aspect in answers for aspect in aspects), len(aspects))
+    answer_submission_rate = _ratio(
+        sum(aspect in answers for aspect in aspects), len(aspects)
+    )
+    correct_answer_rate = _ratio(
+        sum(correct_by_aspect.values()), len(aspects)
+    )
+    # Completion means a correct answer, not merely an answer-shaped tool call.
+    completion_rate = correct_answer_rate
 
     environment_steps = max(0, steps)
     normalized_actor_attempts = (
@@ -372,7 +379,7 @@ def compute_travel_reward(
     if not math.isfinite(terminal_reward):
         raise UserBenchRewardError("terminal reward must be finite")
 
-    all_answered = completion_rate == 1.0
+    all_answered = answer_submission_rate == 1.0
     gold_itinerary = all_answered and all(best_by_aspect.values())
     correct_itinerary = all_answered and all(correct_by_aspect.values())
     fully_grounded = all(
@@ -393,6 +400,8 @@ def compute_travel_reward(
         "best_by_aspect": best_by_aspect,
         "correct_by_aspect": correct_by_aspect,
         "completion_rate": completion_rate,
+        "correct_answer_rate": correct_answer_rate,
+        "answer_submission_rate": answer_submission_rate,
         "active_preference_coverage": active_coverage,
         "passive_preference_coverage": passive_coverage,
         "preference_coverage": preference_coverage,

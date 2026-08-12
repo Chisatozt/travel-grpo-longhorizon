@@ -579,7 +579,8 @@ def _public_reward_summary(report: Mapping[str, Any]) -> dict[str, Any]:
         for key in (
             "reward_valid", "completion_rate", "environment_steps",
             "actor_attempts", "effective_steps", "accepted_actor_attempts",
-            "answer_quality", "preference_coverage", "phase_transition_score",
+            "correct_answer_rate", "answer_submission_rate", "answer_quality",
+            "preference_coverage", "phase_transition_score",
             "phase_transition_breakdown", "guard_rejections",
             "guard_rejection_rate", "blocked_aspects", "reward_degraded",
             "invalid_actions", "exact_repeats",

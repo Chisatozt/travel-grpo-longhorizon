@@ -85,7 +85,7 @@ Use staged real-API validation before a large collection: first one task must re
 
 Every environment transition updates the same hidden evidence ledger used by GRPO. Reward labels and hidden preferences stay outside `messages`; the Actor never sees them. A trajectory is admitted only when all of the following hold:
 
-- `reward_valid=true`, `completion_rate=1`, and `correct_itinerary=true`;
+- `reward_valid=true`, `completion_rate=1` (every aspect's submitted ID is correct), and `correct_itinerary=true`;
 - `terminal_reward >= 0.7` and `policy_penalty=0`;
 - invalid, exact-repeat, semantic-repeat, ambiguous, unsearched-answer, and wrong-answer counters are zero;
 - the environment terminated without truncation or simulator/search/judgment/response fallback;

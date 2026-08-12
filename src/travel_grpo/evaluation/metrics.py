@@ -16,6 +16,7 @@ RESULT_METRIC_KEYS = (
     "correct_itinerary",
     "user_aligned_success",
     "completion",
+    "answer_submission_rate",
     "active_coverage",
     "passive_coverage",
     "efficiency",
@@ -37,6 +38,7 @@ def sanitize_reward(report: Mapping[str, Any]) -> dict[str, Any]:
     allowed = (
         "reward_version", "reward_valid", "terminal_reward", "raw_terminal_reward",
         "termination_reason", "grounded_quality", "quality_by_aspect", "completion_rate",
+        "correct_answer_rate", "answer_submission_rate",
         "active_preference_coverage", "passive_preference_coverage", "search_coverage",
         "efficiency", "environment_steps", "actor_attempts", "effective_steps",
         "answer_quality", "preference_coverage", "phase_transition_score",
@@ -91,6 +93,10 @@ def result_metrics(result: Mapping[str, Any]) -> dict[str, float]:
         "correct_itinerary": float(reward.get("correct_itinerary") is True),
         "user_aligned_success": float(reward.get("user_aligned_success") is True),
         "completion": float(reward.get("completion_rate", 0.0)),
+        "answer_submission_rate": float(
+            reward.get("answer_submission_rate", reward.get("completion_rate", 0.0))
+            or 0.0
+        ),
         "active_coverage": float(reward.get("active_preference_coverage", 0.0)),
         "passive_coverage": float(reward.get("passive_preference_coverage", 0.0)),
         "efficiency": float(reward.get("efficiency", 0.0)),

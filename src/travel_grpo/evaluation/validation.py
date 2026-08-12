@@ -44,6 +44,8 @@ def summarize_validation_rows(
                     "gold_itinerary": row.get("gold_itinerary") is True,
                     "user_aligned_success": row.get("user_aligned_success") is True,
                     "completion_rate": row.get("completion_rate", 0.0),
+                    "correct_answer_rate": row.get("correct_answer_rate"),
+                    "answer_submission_rate": row.get("answer_submission_rate"),
                     "active_preference_coverage": row.get("active_preference_coverage", 0.0),
                     "passive_preference_coverage": row.get("passive_preference_coverage", 0.0),
                     "preference_coverage": row.get("preference_coverage"),

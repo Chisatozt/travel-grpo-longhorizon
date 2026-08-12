@@ -550,10 +550,15 @@ def test_grpo_dry_run_exposes_stall_configuration(tmp_path, flags, enabled):
     document = json.loads(completed.stdout)
     assert document["preflight"]["static_contract"] == "ok"
     assert document["stall_recovery"] == {"enabled": enabled, "threshold": 4}
-    assert document["agent_loop_env"] == {
-        "TRAVEL_GRPO_STALL_RECOVERY": "true" if enabled else "false",
-        "TRAVEL_GRPO_STALL_THRESHOLD": "4",
-    }
+    agent_env = document["agent_loop_env"]
+    assert agent_env["TRAVEL_GRPO_STALL_RECOVERY"] == (
+        "true" if enabled else "false"
+    )
+    assert agent_env["TRAVEL_GRPO_STALL_THRESHOLD"] == "4"
+    assert agent_env["TRAVEL_GRPO_TURN_CREDIT_MODE"] == "off"
+    turn_config = json.loads(agent_env["TRAVEL_GRPO_TURN_CREDIT_CONFIG_JSON"])
+    assert turn_config["mode"] == "off"
+    assert turn_config["version"] == "causal-turn-credit-v1"
     assert (
         "+ray_kwargs.ray_init.runtime_env.worker_process_setup_hook="
         + TORCH_PADDING_WORKER_SETUP_HOOK
@@ -586,6 +591,12 @@ def test_grpo_from_sft_dry_run_chains_merge_data_and_training(tmp_path):
             "--stall-recovery",
             "--stall-threshold",
             "5",
+            "--turn-credit-mode",
+            "shadow",
+            "--turn-credit-lambda",
+            "0.4",
+            "--turn-credit-band",
+            "0.1",
         ],
         capture_output=True,
         text=True,
@@ -598,6 +609,10 @@ def test_grpo_from_sft_dry_run_chains_merge_data_and_training(tmp_path):
     assert '"status": "dry-run"' in completed.stdout
     assert '"enabled": true' in completed.stdout
     assert '"threshold": 5' in completed.stdout
+    assert "TRAVEL_GRPO_TURN_CREDIT_MODE" in completed.stdout
+    assert "shadow" in completed.stdout
+    assert "+algorithm.travel_turn_credit.mix_lambda=0.4" in completed.stdout
+    assert "+algorithm.travel_turn_credit.multiplier_band=0.1" in completed.stdout
     assert not (tmp_path / "merged").exists()
     assert not (tmp_path / "grpo-data").exists()
 
@@ -725,3 +740,61 @@ def test_actor_export_requires_passed_selected_checkpoint(tmp_path):
     rejected = subprocess.run(command, capture_output=True, text=True, check=False)
     assert rejected.returncode != 0
     assert "not the passed selected step" in rejected.stderr
+
+
+
+def test_preflight_rejects_turn_credit_mode_enabled_drift(tmp_path):
+    yaml = pytest.importorskip("yaml")
+    profile = yaml.safe_load(
+        (ROOT / "configs/train/grpo/grpo.yaml").read_text(encoding="utf-8")
+    )
+    profile["turn_credit"]["mode"] = "shadow"
+    with pytest.raises(RuntimeError, match="enabled must agree"):
+        run_preflight(
+            profile,
+            project_root=ROOT,
+            output_dir=tmp_path / "turn-credit-drift",
+            resume=False,
+            strict_runtime=False,
+            environ={},
+        )
+
+
+@pytest.mark.parametrize("mode", ["shadow", "train"])
+def test_grpo_dry_run_connects_turn_credit_mode_to_loop_and_trainer(tmp_path, mode):
+    command = [
+        sys.executable,
+        str(ROOT / "scripts/train/grpo/train_grpo.py"),
+        "--config",
+        "configs/train/grpo/grpo.yaml",
+        "--dry-run",
+        "--turn-credit-mode",
+        mode,
+        "--output",
+        str(tmp_path / mode),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert completed.returncode == 0, completed.stderr
+    document = json.loads(completed.stdout)
+    assert document["agent_loop_env"]["TRAVEL_GRPO_TURN_CREDIT_MODE"] == mode
+    loop_config = json.loads(
+        document["agent_loop_env"]["TRAVEL_GRPO_TURN_CREDIT_CONFIG_JSON"]
+    )
+    assert loop_config["mode"] == mode
+    assert loop_config["mix_lambda"] == 0.5
+    assert loop_config["completion_allocation"]["correct_answer"] == 0.45
+    assert f'+algorithm.travel_turn_credit.mode="{mode}"' in document["command"]
+    assert "+algorithm.travel_turn_credit.version=causal-turn-credit-v1" in document[
+        "command"
+    ]
+
+
+def test_hash_checked_verl_connection_contains_turn_credit_hook():
+    patch_source = (
+        ROOT / "scripts/train/grpo/apply_verl_patch.py"
+    ).read_text(encoding="utf-8")
+    setup_source = (ROOT / "scripts/setup.sh").read_text(encoding="utf-8")
+    assert "reshape_batch_advantages" in patch_source
+    assert (chr(34) + "mode" + chr(34) + ", " + chr(34) + "off" + chr(34)) in patch_source
+    assert "== " + chr(34) + "train" + chr(34) in patch_source
+    assert "apply_verl_patch.py" in setup_source

@@ -47,6 +47,10 @@ frozen evaluation rollout 不使用该控制器。
 
 生产 sampler 每题生成 4 条轨迹。含无效轨迹或组内 reward 极差不超过 `1e-6` 的组被丢弃；每次 update 最多生成 3 批，累计 2 个有效 prompt group 后训练，不足则跳过。连续跳过超过 10 次立即失败。vanilla profile 禁用该 sampler，仅运行 2 step。
 
+### 可选 turn-level credit assignment
+
+`causal-turn-credit-v1` 默认关闭。`shadow` 只记录和审计 turn evidence，不改变优化；`train` 在标准 GRPO advantage 计算后对各 assistant turn 做有界重分配，终局 Reward v3 和 dynamic sampling 分数保持不变。完整因果分配、公式、安全边界与命令见 [`docs/reward/turn-credit-v1.md`](../reward/turn-credit-v1.md)。正式启用前应先运行 shadow。
+
 ## 启动与恢复
 
 ```bash

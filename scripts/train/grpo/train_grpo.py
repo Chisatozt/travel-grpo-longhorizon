@@ -90,6 +90,16 @@ def hydra_overrides(profile: dict[str, Any], output: Path, resume: bool, logger:
     overrides.append(f"+travel_dynamic_sampling.enable={str(bool(profile.get('dynamic_sampling'))).lower()}")
     for key, value in dynamic.items():
         overrides.append(f"+travel_dynamic_sampling.{key}={value}")
+    turn_credit = profile.get("turn_credit", {})
+    overrides.append(
+        f'+algorithm.travel_turn_credit.mode="{turn_credit.get("mode", "off")}"'
+    )
+    overrides.append(
+        "+algorithm.travel_turn_credit.version="
+        f"{turn_credit.get('version', 'causal-turn-credit-v1')}"
+    )
+    for key in ("evidence_clip", "mix_lambda", "multiplier_band", "epsilon"):
+        overrides.append(f"+algorithm.travel_turn_credit.{key}={turn_credit[key]}")
     # veRL 0.8 calls attention_utils from Ray workers.  Install the project's
     # pure-Torch padding implementation in those workers so flash-attn remains
     # optional.  This is injected only by the GRPO launcher; SFT and evaluation
@@ -124,6 +134,11 @@ def main() -> int:
         default=False,
     )
     parser.add_argument("--stall-threshold", type=int, default=4)
+    parser.add_argument(
+        "--turn-credit-mode", choices=("off", "shadow", "train")
+    )
+    parser.add_argument("--turn-credit-lambda", type=float)
+    parser.add_argument("--turn-credit-band", type=float)
     parser.add_argument("overrides", nargs="*")
     args = parser.parse_args()
     if args.stall_threshold < 1:
@@ -137,6 +152,15 @@ def main() -> int:
         profile["data"] = dict(profile["data"])
         profile["data"]["train_files"] = str(data_output / "train.parquet")
         profile["data"]["val_files"] = str(data_output / "validation.parquet")
+    turn_credit = dict(profile.get("turn_credit", {}))
+    if args.turn_credit_mode is not None:
+        turn_credit["mode"] = args.turn_credit_mode
+    if args.turn_credit_lambda is not None:
+        turn_credit["mix_lambda"] = args.turn_credit_lambda
+    if args.turn_credit_band is not None:
+        turn_credit["multiplier_band"] = args.turn_credit_band
+    turn_credit["enabled"] = turn_credit.get("mode", "off") != "off"
+    profile["turn_credit"] = turn_credit
     output = (ROOT / (args.output or Path(profile["output_dir"]))).resolve()
     report = run_preflight(
         profile,
@@ -162,6 +186,10 @@ def main() -> int:
             "true" if args.stall_recovery else "false"
         ),
         "TRAVEL_GRPO_STALL_THRESHOLD": str(args.stall_threshold),
+        "TRAVEL_GRPO_TURN_CREDIT_MODE": str(turn_credit["mode"]),
+        "TRAVEL_GRPO_TURN_CREDIT_CONFIG_JSON": json.dumps(
+            turn_credit, sort_keys=True, separators=(",", ":")
+        ),
     }
     if args.dry_run:
         print(
@@ -180,6 +208,12 @@ def main() -> int:
                         ],
                         "TRAVEL_GRPO_STALL_THRESHOLD": launch_env[
                             "TRAVEL_GRPO_STALL_THRESHOLD"
+                        ],
+                        "TRAVEL_GRPO_TURN_CREDIT_MODE": launch_env[
+                            "TRAVEL_GRPO_TURN_CREDIT_MODE"
+                        ],
+                        "TRAVEL_GRPO_TURN_CREDIT_CONFIG_JSON": launch_env[
+                            "TRAVEL_GRPO_TURN_CREDIT_CONFIG_JSON"
                         ],
                     },
                 },

@@ -161,6 +161,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="enable recovery only for GRPO training rollouts",
     )
     parser.add_argument("--stall-threshold", type=int, default=4)
+    parser.add_argument(
+        "--turn-credit-mode", choices=("off", "shadow", "train")
+    )
+    parser.add_argument("--turn-credit-lambda", type=float)
+    parser.add_argument("--turn-credit-band", type=float)
     parser.add_argument("overrides", nargs="*", help="extra veRL Hydra overrides")
     return parser
 
@@ -222,6 +227,12 @@ def _train_command(
         command.append("--dry-run")
     command.append("--stall-recovery" if args.stall_recovery else "--no-stall-recovery")
     command.extend(("--stall-threshold", str(args.stall_threshold)))
+    if args.turn_credit_mode is not None:
+        command.extend(("--turn-credit-mode", args.turn_credit_mode))
+    if args.turn_credit_lambda is not None:
+        command.extend(("--turn-credit-lambda", str(args.turn_credit_lambda)))
+    if args.turn_credit_band is not None:
+        command.extend(("--turn-credit-band", str(args.turn_credit_band)))
     command.extend(str(value) for value in args.overrides)
     return command
 

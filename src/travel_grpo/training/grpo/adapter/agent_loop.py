@@ -16,6 +16,10 @@ from travel_grpo.training.grpo.adapter.session import (
     UserBenchRolloutRuntime,
     task_id_from_run_kwargs,
 )
+from travel_grpo.training.grpo.turn_credit import (
+    TurnCreditConfig,
+    validate_turn_credit_mode,
+)
 from travel_grpo.training.grpo.compat import require_verl_080
 from travel_grpo.training.grpo.preflight import is_validation_sampling
 from travel_grpo.prompts.actor_policy import (
@@ -87,6 +91,9 @@ def reject_parallel_tool_calls(state: Any) -> bool:
         session.hard_stop_stalled()
     else:
         session.termination_reason = "parallel_tool_calls"
+    finalize_turn = getattr(session, "finalize_pending_actor_turn", None)
+    if callable(finalize_turn):
+        finalize_turn(reason="parallel_tool_calls")
     return True
 
 
@@ -102,6 +109,9 @@ def finalize_actor_stop(session: Any) -> None:
         )
     ):
         session.hard_stop_stalled()
+        finalize_turn = getattr(session, "finalize_pending_actor_turn", None)
+        if callable(finalize_turn):
+            finalize_turn(reason=session.termination_reason or "stalled_no_progress")
         return
     if session.num_tool_calls == 0 and session.protocol_error is None:
         session.invalid_actions += 1
@@ -109,6 +119,9 @@ def finalize_actor_stop(session: Any) -> None:
         session.termination_reason = "no_tool_output"
     elif not session.done and session.termination_reason is None:
         session.termination_reason = "actor_stopped"
+    finalize_turn = getattr(session, "finalize_pending_actor_turn", None)
+    if callable(finalize_turn):
+        finalize_turn(reason=session.termination_reason or "no_tool_output")
 
 
 _DISABLED_ACTOR_POLICY_VERSION = "disabled"
@@ -190,6 +203,9 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         stall_no_progress_threshold: int | str = 4,
         actor_policy_enabled: bool | str = True,
         actor_policy_version: str | None = ACTOR_RUNTIME_POLICY_VERSION,
+        turn_credit_mode: str = "off",
+        turn_credit_config: Mapping[str, Any] | None = None,
+        turn_credit_config_json: str | None = None,
         **kwargs: Any,
     ) -> None:
         require_verl_080()
@@ -207,6 +223,17 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         self.actor_policy_version = _parse_actor_policy_version(
             actor_policy_version, enabled=self.actor_policy_enabled
         )
+        self.turn_credit_mode = validate_turn_credit_mode(turn_credit_mode)
+        if turn_credit_config_json:
+            if turn_credit_config is not None:
+                raise ValueError(
+                    "turn_credit_config and turn_credit_config_json are mutually exclusive"
+                )
+            decoded_turn_credit = json.loads(turn_credit_config_json)
+            if not isinstance(decoded_turn_credit, Mapping):
+                raise ValueError("turn_credit_config_json must decode to one mapping")
+            turn_credit_config = decoded_turn_credit
+        self.turn_credit_config = TurnCreditConfig.from_mapping(turn_credit_config)
         super().__init__(*args, **kwargs)
         self.userbench_runtime = UserBenchRolloutRuntime.from_config_files(
             environment_config_path, simulator_config_path
@@ -235,6 +262,9 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 ),
                 threshold=self.stall_no_progress_threshold,
             )
+        begin_turn = getattr(session, "begin_actor_turn", None)
+        if callable(begin_turn):
+            begin_turn()
         session.actor_attempts += 1
         if session.answer_only_pending:
             session.begin_answer_only_generation()
@@ -256,6 +286,9 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         if name != TOOL_NAME:
             session.invalid_actions += 1
             session.record_non_progress("unknown_tool")
+            reject_turn = getattr(session, "reject_actor_turn", None)
+            if callable(reject_turn):
+                reject_turn(reason=f"unsupported tool {name!r}", category="unknown_tool")
             return (
                 ToolResponse(
                     text=session.render_actor_feedback(
@@ -274,6 +307,9 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         except (json.JSONDecodeError, UserBenchActionError) as exc:
             session.invalid_actions += 1
             session.record_non_progress("malformed_tool_call")
+            reject_turn = getattr(session, "reject_actor_turn", None)
+            if callable(reject_turn):
+                reject_turn(reason=str(exc), category="malformed_tool_call")
             return (
                 ToolResponse(
                     text=session.render_actor_feedback(
@@ -299,6 +335,13 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
         task_id = task_id_from_run_kwargs(kwargs)
         session = await self.userbench_runtime.astart_session(task_id)
         try:
+            turn_credit_mode = getattr(self, "turn_credit_mode", "off")
+            configure_turn_credit = getattr(session, "configure_turn_credit", None)
+            if callable(configure_turn_credit):
+                configure_turn_credit(
+                    mode=turn_credit_mode,
+                    config=getattr(self, "turn_credit_config", TurnCreditConfig()),
+                )
             configure_stall_recovery = getattr(
                 session, "configure_stall_recovery", None
             )
@@ -322,6 +365,12 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
             finalize_actor_stop(session)
             reward = session.reward_report()
             output.reward_score = float(reward["terminal_reward"])
+            finalize_turn_credit = getattr(session, "finalize_turn_credit", None)
+            turn_trace = (
+                finalize_turn_credit(reward)
+                if turn_credit_mode != "off" and callable(finalize_turn_credit)
+                else None
+            )
             extra_fields = getattr(output, "extra_fields", None)
             if extra_fields is None:
                 output.extra_fields = {}
@@ -330,6 +379,10 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 actor_policy_enabled=self.actor_policy_enabled,
                 actor_policy_version=self.actor_policy_version,
             )
+            if turn_trace is not None:
+                extra_fields["turn_credit"] = turn_trace.to_extra_field(
+                    mode=turn_credit_mode
+                )
             extra_fields["userbench"] = {
                 **session.metrics(),
                 **policy_metadata,
@@ -344,6 +397,10 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
             public_phase = getattr(getattr(public_state, "phase", None), "value", None)
             extra_fields["reward_extra_info"] = {
                 **policy_metadata,
+                **(
+                    turn_trace.metrics(mode=turn_credit_mode)
+                    if turn_trace is not None else {}
+                ),
                 "public_control_phase": public_phase,
                 "public_control_episode_done": bool(
                     getattr(public_state, "episode_done", False)
@@ -372,7 +429,7 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
                 "phase_transition_score": float(
                     reward.get("phase_transition_score", 0.0)
                 ),
-                "guard_rejections": session.guard_rejections,
+                "guard_rejections": int(getattr(session, "guard_rejections", 0)),
                 "guard_rejection_rate": float(
                     reward.get("guard_rejection_rate", 0.0)
                 ),

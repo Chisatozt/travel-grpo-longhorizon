@@ -105,6 +105,12 @@ def test_agent_loop_config_pins_one_default_for_train_and_validation() -> None:
     assert config["actor_policy_version"] == (
         "${oc.env:TRAVEL_GRPO_ACTOR_POLICY_VERSION,actor-runtime-v2}"
     )
+    assert config["turn_credit_mode"] == (
+        "${oc.env:TRAVEL_GRPO_TURN_CREDIT_MODE,off}"
+    )
+    assert config["turn_credit_config_json"] == (
+        '${oc.env:TRAVEL_GRPO_TURN_CREDIT_CONFIG_JSON,""}'
+    )
 
 
 
@@ -202,3 +208,4 @@ def test_agent_loop_run_passes_private_policy_prompt_to_parent(monkeypatch: pyte
     assert "parent mutation" in seen[0]["raw_prompt"][0]["content"]
     assert raw[0]["content"] == original_content
     assert output.extra_fields["actor_policy_version"] == ACTOR_RUNTIME_POLICY_VERSION
+    assert "turn_credit" not in output.extra_fields

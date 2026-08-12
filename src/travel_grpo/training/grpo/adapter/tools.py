@@ -40,6 +40,7 @@ def _rejected_tool_execution(
     message: str,
     *,
     reason: str,
+    action: UserBenchAction | None = None,
 ) -> UserBenchToolExecution:
     """Return an actor-visible error without touching the environment."""
 
@@ -47,6 +48,9 @@ def _rejected_tool_execution(
     if reason == "public_phase_guard":
         session.record_public_guard_rejection(message)
     session.record_non_progress(reason)
+    reject_turn = getattr(session, "reject_actor_turn", None)
+    if callable(reject_turn):
+        reject_turn(reason=message, action=action, category=reason)
     return UserBenchToolExecution(
         text=session.render_actor_feedback(f"Error: {message}"),
         reward=0.0,
@@ -95,6 +99,7 @@ async def execute_userbench_action(
             session,
             public_error,
             reason="public_phase_guard",
+            action=action,
         )
 
     recovery_error = session.validate_answer_only_action(action)
@@ -103,6 +108,7 @@ async def execute_userbench_action(
             session,
             recovery_error,
             reason="answer_only_violation",
+            action=action,
         )
 
     try:
@@ -119,6 +125,9 @@ async def execute_userbench_action(
         session.protocol_error = "simulator_infrastructure_failure"
         session.termination_reason = "simulator_infrastructure_failure"
         session.terminated = True
+        record_failure = getattr(session, "record_turn_infrastructure_failure", None)
+        if callable(record_failure):
+            record_failure(action)
         return UserBenchToolExecution(
             text=session.render_actor_feedback(
                 "Error: UserBench simulator infrastructure failure; trajectory invalid."
@@ -143,6 +152,9 @@ async def execute_userbench_action(
         session.infrastructure_errors.append("reward_snapshot_unavailable")
         snapshot = None
     session.record_step(result, action, snapshot)
+    complete_turn = getattr(session, "complete_actor_turn_from_step", None)
+    if callable(complete_turn):
+        complete_turn(action, result)
     report = session.reward_report()
     feedback = session.render_actor_feedback(result.observation.to_tool_text())
     return UserBenchToolExecution(

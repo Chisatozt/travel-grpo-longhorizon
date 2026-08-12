@@ -11,7 +11,7 @@ VERL_REQUIRED_VERSION = "0.8.0"
 VERL_INSTALL_HINT = (
     "run `bash scripts/setup.sh` on the supported Linux Python 3.12 runtime"
 )
-VERL_TRAINER_PATCHED_SHA256 = "84C334738B82ABA8B57A2D735DD0C17CC48C6D5852247E12546CBC7987C7DC36"
+VERL_TRAINER_PATCHED_SHA256 = "51E774CC9E112EEE00EBBEDDAB99FBF9D89C34C900F4473E1254E9CA8637CF64"
 # Ray resolves this dotted path in every worker process created for the GRPO
 # job.  Keep it in the project-owned compatibility boundary so the launch
 # script cannot accidentally point at an external veRL implementation.
@@ -54,7 +54,7 @@ def require_verl_dynamic_sampling_patch() -> str:
     digest = hashlib.sha256(path.read_bytes()).hexdigest().upper()
     if digest != VERL_TRAINER_PATCHED_SHA256:
         raise VerlCompatibilityError(
-            "veRL dynamic-sampling patch is missing or drifted; rerun `bash scripts/setup.sh`"
+            "veRL project connection patches are missing or drifted; rerun `bash scripts/setup.sh`"
         )
     return digest
 

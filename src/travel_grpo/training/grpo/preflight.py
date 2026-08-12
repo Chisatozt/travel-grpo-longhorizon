@@ -14,6 +14,11 @@ from typing import Any
 from travel_grpo.envs.userbench_context import validate_embedded_userbench
 from travel_grpo.envs.userbench_interaction import DEEPSEEK_V4_FLASH_MODEL
 from travel_grpo.envs.userbench_tools import TOOL_NAME, get_interact_with_env_schema
+from travel_grpo.training.grpo.turn_credit import (
+    TURN_CREDIT_VERSION,
+    TurnCreditConfig,
+    validate_turn_credit_mode,
+)
 from travel_grpo.training.grpo.data import verify_verl_datasets
 
 PINNED = {
@@ -147,6 +152,27 @@ def run_preflight(
     _check(int(rollout["n"]) == 4 and int(rollout["max_parallel_calls"]) == 1, "rollout must use n=4 and one tool call")
     _check(rollout["format"] == "qwen3_coder" and rollout["enable_thinking"] is False, "Qwen tool format/thinking contract drift")
     _check(int(data["max_prompt_length"]) + int(data["max_response_length"]) == 32768, "context budget must be 32768")
+    turn_credit = profile.get("turn_credit", {})
+    _check(isinstance(turn_credit, Mapping), "turn_credit must be a mapping")
+    turn_credit_mode = validate_turn_credit_mode(turn_credit.get("mode", "off"))
+    _check(
+        turn_credit.get("version") == TURN_CREDIT_VERSION,
+        "turn-credit version drifted",
+    )
+    _check(
+        bool(turn_credit.get("enabled", False)) == (turn_credit_mode != "off"),
+        "turn_credit.enabled must agree with turn_credit.mode",
+    )
+    parsed_turn_credit = TurnCreditConfig.from_mapping(turn_credit)
+    _check(
+        math.isclose(
+            parsed_turn_credit.preference_chain
+            + parsed_turn_credit.successful_search
+            + parsed_turn_credit.correct_answer,
+            1.0,
+        ),
+        "completed-aspect turn-credit allocation must sum to 1.0",
+    )
     tool_document = __import__("yaml").safe_load((project_root / "configs/tool_config/userbench_tools.yaml").read_text(encoding="utf-8"))
     tools = tool_document if isinstance(tool_document, list) else tool_document.get("tools")
     _check(isinstance(tools, list) and len(tools) == 1, "interact_with_env must be the only tool")

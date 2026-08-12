@@ -41,6 +41,14 @@ from travel_grpo.envs.userbench_tools import (
     normalized_action_signature,
     semantic_action_signature,
 )
+from travel_grpo.training.grpo.turn_credit import (
+    TurnCreditConfig,
+    TurnCreditError,
+    TurnCreditTrace,
+    TurnEvent,
+    build_turn_credit_trace,
+    validate_turn_credit_mode,
+)
 
 if TYPE_CHECKING:
     from travel_grpo.envs.userbench_wrapper import UserBenchWrapper
@@ -65,6 +73,41 @@ _SIMULATOR_FALLBACK_NAMES = (
     "userbench_response_fallbacks",
     "userbench_search_fallbacks",
 )
+
+
+_EXPLICIT_NO_PREFERENCE_MARKERS = (
+    "no preference",
+    "no specific preference",
+    "do not have a preference",
+    "don't have a preference",
+    "does not matter",
+    "doesn't matter",
+    "anything is fine",
+    "any is fine",
+    "no requirement",
+    "no requirements",
+)
+
+
+@dataclass(frozen=True)
+class _TurnLedgerSnapshot:
+    """Private aggregate snapshot used only to derive one turn event."""
+
+    public_aspect: str | None
+    public_phase: str
+    public_fallback_count: int
+    visible_option_ids: frozenset[str]
+    preference_count: int
+    answer_count: int
+    exact_repeats: int
+    semantic_repeats: int
+    wrong_answers: int
+    infrastructure_error_count: int
+
+
+def _contains_explicit_no_preference(text: str) -> bool:
+    normalized = " ".join(text.casefold().split())
+    return any(marker in normalized for marker in _EXPLICIT_NO_PREFERENCE_MARKERS)
 
 
 def _is_complete_reward_task(task: TravelRewardTask | None) -> bool:
@@ -290,6 +333,13 @@ class UserBenchSessionState:
     # runtime AgentLoop sessions always initialize it from the reset feedback.
     public_control_state: PublicControlState | None = None
     public_initial_message: str | None = None
+    # Optional trainer-only causal turn ledger. Hidden reward information is
+    # reduced to counts/booleans and is never used by public control methods.
+    turn_credit_mode: str = "off"
+    turn_credit_config: TurnCreditConfig = field(default_factory=TurnCreditConfig)
+    turn_events: list[TurnEvent] = field(default_factory=list, repr=False)
+    _active_turn: TurnEvent | None = field(default=None, repr=False)
+    _turn_ledger_snapshot: _TurnLedgerSnapshot | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if (
@@ -328,10 +378,292 @@ class UserBenchSessionState:
                 self.public_initial_message,
                 no_progress_threshold=self.stall_no_progress_threshold,
             )
+        self.turn_credit_mode = validate_turn_credit_mode(self.turn_credit_mode)
 
     @property
     def done(self) -> bool:
         return self.terminated or self.truncated
+
+    def configure_turn_credit(
+        self,
+        *,
+        mode: str,
+        config: TurnCreditConfig | None = None,
+    ) -> None:
+        """Configure the trainer-only ledger without changing public control."""
+
+        normalized = validate_turn_credit_mode(mode)
+        if self.turn_events or self._active_turn is not None:
+            if normalized != self.turn_credit_mode:
+                raise TurnCreditError("turn-credit mode cannot change during a rollout")
+        self.turn_credit_mode = normalized
+        if config is not None:
+            self.turn_credit_config = config
+
+    def _capture_turn_ledger_snapshot(self) -> _TurnLedgerSnapshot:
+        state = self.public_control_state
+        aspect = state.current_aspect if state is not None else None
+        aspect_state = state.current if state is not None else None
+        public_ids = (
+            aspect_state.visible_option_ids
+            if aspect_state is not None
+            else frozenset(self.visible_option_ids_by_aspect.get(aspect or "", set()))
+        )
+        return _TurnLedgerSnapshot(
+            public_aspect=aspect,
+            public_phase=state.phase.value if state is not None else RecoveryMode.ELICITING.value,
+            public_fallback_count=(
+                aspect_state.search_fallbacks if aspect_state is not None else 0
+            ),
+            visible_option_ids=frozenset(public_ids),
+            preference_count=len(self.active_preference_ids | self.passive_preference_ids),
+            answer_count=len(self.answers),
+            exact_repeats=self.exact_repeats,
+            semantic_repeats=self.semantic_repeats,
+            wrong_answers=self.wrong_answers,
+            infrastructure_error_count=len(self.infrastructure_errors),
+        )
+
+    def begin_actor_turn(self) -> None:
+        """Open one ledger event immediately before assistant generation."""
+
+        if self.turn_credit_mode == "off":
+            return
+        if self._active_turn is not None:
+            raise TurnCreditError("previous actor turn was not finalized")
+        snapshot = self._capture_turn_ledger_snapshot()
+        self._turn_ledger_snapshot = snapshot
+        self._active_turn = TurnEvent(
+            turn_index=len(self.turn_events),
+            public_aspect=snapshot.public_aspect,
+            phase_before=snapshot.public_phase,
+            phase_after=snapshot.public_phase,
+        )
+
+    def _ensure_actor_turn(self) -> tuple[TurnEvent, _TurnLedgerSnapshot] | None:
+        if self.turn_credit_mode == "off":
+            return None
+        if self._active_turn is None:
+            # Provider-neutral tool tests and offline callers do not pass
+            # through AgentLoop._handle_generating_state.
+            self.begin_actor_turn()
+        if self._active_turn is None or self._turn_ledger_snapshot is None:
+            raise TurnCreditError("actor turn ledger is unavailable")
+        return self._active_turn, self._turn_ledger_snapshot
+
+    def _finish_actor_turn(self) -> None:
+        if self.turn_credit_mode == "off":
+            return
+        if self._active_turn is None:
+            raise TurnCreditError("cannot finish an unopened actor turn")
+        self.turn_events.append(self._active_turn)
+        self._active_turn = None
+        self._turn_ledger_snapshot = None
+
+    def _turn_aspect_for_action(
+        self, action: UserBenchAction, fallback: str | None
+    ) -> str | None:
+        if action.choice is ActionChoice.ANSWER:
+            submitted = [value.strip() for value in action.content.split(",") if value.strip()]
+            if len(submitted) == 1:
+                aspect = aspect_from_option_id(submitted[0])
+                if aspect is not None:
+                    return aspect
+        state = self.public_control_state
+        if state is not None:
+            semantic = semantic_action_signature(action, state.public_aspects)
+            if semantic is not None:
+                return semantic[0]
+        return fallback
+
+    def complete_actor_turn_from_step(
+        self, action: UserBenchAction, result: UserBenchStepResult
+    ) -> None:
+        """Close a successful environment dispatch after ``record_step``."""
+
+        active = self._ensure_actor_turn()
+        if active is None:
+            return
+        event, before = active
+        public = self.public_control_state
+        observation = classify_public_observation(
+            result.observation.feedback, choice=action.choice
+        )
+        aspect = self._turn_aspect_for_action(action, before.public_aspect)
+        after_aspect = None
+        if public is not None and aspect is not None:
+            after_aspect = next(
+                (item for item in public.aspects if item.aspect == aspect), None
+            )
+        feedback = result.observation.feedback
+        preference_delta = max(
+            0,
+            len(self.active_preference_ids | self.passive_preference_ids)
+            - before.preference_count,
+        )
+        explicit_none = (
+            action.choice is ActionChoice.ACTION
+            and _contains_explicit_no_preference(feedback)
+        )
+        submitted = [value.strip() for value in action.content.split(",") if value.strip()]
+        answer_visible = (
+            action.choice is ActionChoice.ANSWER
+            and len(submitted) == 1
+            and submitted[0] in before.visible_option_ids
+        )
+        answer_added = len(self.answers) > before.answer_count
+        correct_answer = False
+        if (
+            answer_added
+            and len(submitted) == 1
+            and self.reward_task is not None
+            and aspect is not None
+        ):
+            correct_answer = submitted[0] in self.reward_task.correct_ids.get(
+                aspect, frozenset()
+            )
+
+        event.choice = action.choice.value
+        event.tool_name = "interact_with_env"
+        event.public_aspect = aspect
+        event.phase_after = public.phase.value if public is not None else event.phase_before
+        event.field_resolved = preference_delta > 0 or explicit_none
+        event.explicit_no_preference = explicit_none
+        event.normal_candidates_observed = observation.is_normal_search and bool(
+            observation.visible_option_ids
+        )
+        event.answer_id_visible = answer_visible
+        fallback_after = (
+            after_aspect.search_fallbacks
+            if after_aspect is not None
+            else before.public_fallback_count
+        )
+        fallback_delta = max(0, fallback_after - before.public_fallback_count)
+        event.first_fallback = fallback_delta > 0 and fallback_after == 1
+        event.second_fallback = fallback_delta > 0 and fallback_after >= 2
+        event.successful_rewritten_retry = (
+            before.public_phase == RecoveryMode.SEARCH_RETRY_REQUIRED.value
+            and event.normal_candidates_observed
+        )
+        event.switched_aspect = (
+            public is not None
+            and before.public_aspect is not None
+            and public.current_aspect != before.public_aspect
+        )
+        event.no_progress_action = (
+            action.choice is ActionChoice.ACTION and not event.field_resolved
+        )
+        event.exact_query_repeat = self.exact_repeats > before.exact_repeats
+        event.semantic_repeat = self.semantic_repeats > before.semantic_repeats
+        event.infrastructure_failure = (
+            len(self.infrastructure_errors) > before.infrastructure_error_count
+        )
+        event.reward_new_preference_count = preference_delta
+        event.reward_correct_answer = correct_answer
+        event.reward_wrong_answer = self.wrong_answers > before.wrong_answers
+        self._finish_actor_turn()
+
+    def reject_actor_turn(
+        self,
+        *,
+        reason: str,
+        action: UserBenchAction | None = None,
+        category: str = "guard_rejection",
+    ) -> None:
+        """Close a rejected call using only its public reason and actor action."""
+
+        active = self._ensure_actor_turn()
+        if active is None:
+            return
+        event, before = active
+        normalized = " ".join(reason.casefold().split())
+        if action is not None:
+            event.choice = action.choice.value
+            event.public_aspect = self._turn_aspect_for_action(
+                action, before.public_aspect
+            )
+        event.tool_name = "interact_with_env"
+        state = self.public_control_state
+        event.phase_after = state.phase.value if state is not None else event.phase_before
+        event.guard_rejected = category in {
+            "guard_rejection",
+            "public_phase_guard",
+            "answer_only_violation",
+        }
+        event.malformed_tool_call = category in {
+            "invalid_tool_call",
+            "malformed_tool_call",
+            "unknown_tool",
+        }
+        event.no_tool_output = category in {"no_tool_output", "parallel_tool_calls"}
+        event.exact_query_repeat = (
+            action is not None
+            and action.choice is ActionChoice.SEARCH
+            and (
+                "already attempted" in normalized
+                or "materially change" in normalized
+                or "repeat" in normalized and "query" in normalized
+            )
+        )
+        event.wrong_aspect = (
+            action is not None
+            and action.choice in {ActionChoice.SEARCH, ActionChoice.ANSWER}
+            and any(
+                marker in normalized
+                for marker in (
+                    "different public aspect",
+                    "current public aspect only",
+                    "must target the current public aspect",
+                )
+            )
+        )
+        event.invisible_answer_id = (
+            action is not None
+            and action.choice is ActionChoice.ANSWER
+            and (
+                "answer id is not visible" in normalized
+                or "unseen or already answered option" in normalized
+            )
+        )
+        self._finish_actor_turn()
+
+    def record_turn_infrastructure_failure(
+        self, action: UserBenchAction | None = None
+    ) -> None:
+        active = self._ensure_actor_turn()
+        if active is None:
+            return
+        event, before = active
+        if action is not None:
+            event.choice = action.choice.value
+            event.public_aspect = self._turn_aspect_for_action(action, before.public_aspect)
+        event.tool_name = "interact_with_env"
+        event.infrastructure_failure = True
+        self._finish_actor_turn()
+
+    def finalize_pending_actor_turn(self, *, reason: str = "no_tool_output") -> None:
+        if self.turn_credit_mode == "off" or self._active_turn is None:
+            return
+        self.reject_actor_turn(reason=reason, category=reason)
+
+    def finalize_turn_credit(
+        self, reward_report: ABCMapping[str, Any]
+    ) -> TurnCreditTrace:
+        """Build the hidden-ID-free trainer trace after terminal reward."""
+
+        if self._active_turn is not None:
+            self.finalize_pending_actor_turn()
+        public = self.public_control_state
+        aspects = public.public_aspects if public is not None else ()
+        blocked = public.blocked_aspects if public is not None else ()
+        events = self.turn_events if self.turn_credit_mode != "off" else ()
+        return build_turn_credit_trace(
+            events,
+            aspects,
+            blocked_aspects=blocked,
+            reward_valid=bool(reward_report.get("reward_valid", False)),
+            config=self.turn_credit_config,
+        )
 
     def record_public_guard_rejection(self, reason: str) -> None:
         """Record one pre-environment public guard rejection."""

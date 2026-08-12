@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the hash-checked veRL 0.8 dynamic-sampling connection patch."""
+"""Apply hash-checked project connections to the pinned veRL 0.8 trainer."""
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ from pathlib import Path
 
 VERL_VERSION = "0.8.0"
 SOURCE_SHA256 = "DE58D295CF86656A28196B0718168D4A11666F3E30957B7E166914496C2A6D66"
-PATCHED_SHA256 = "84C334738B82ABA8B57A2D735DD0C17CC48C6D5852247E12546CBC7987C7DC36"
+LEGACY_DYNAMIC_PATCHED_SHA256 = "84C334738B82ABA8B57A2D735DD0C17CC48C6D5852247E12546CBC7987C7DC36"
+PATCHED_SHA256 = "51E774CC9E112EEE00EBBEDDAB99FBF9D89C34C900F4473E1254E9CA8637CF64"
 PATCH_PAYLOAD_SHA256 = "0E847FEF13300985C60E34DCF16B2FFF87B7E9CA0DDC8274223E9BFDE854B375"
+TURN_PATCH_PAYLOAD_SHA256 = "3321AC2DC15E95FD2AB9E5AE60E72B9C9AF2458BBAD76A9CE6B14EEAC4473FBE"
 
 BEFORE_INSTALL = '''        if self.config.actor_rollout_ref.rollout.skip.get("enable", False):
             rollout_skip = RolloutSkip(self.config, self.async_rollout_manager)
@@ -36,6 +38,22 @@ AFTER_SKIP = BEFORE_SKIP + '''                        travel_sampling_metrics = 
                         if combined_gen_output.meta_info.pop("travel_skip_update", False):
                             self.checkpoint_manager.update_weights(self.global_steps)
                             continue
+'''
+BEFORE_TURN_CREDIT = '''                        batch = compute_advantage(
+                            batch,
+                            adv_estimator=self.config.algorithm.adv_estimator,
+                            gamma=self.config.algorithm.gamma,
+                            lam=self.config.algorithm.lam,
+                            num_repeat=self.config.actor_rollout_ref.rollout.n,
+                            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+                            config=self.config.algorithm,
+                        )
+'''
+AFTER_TURN_CREDIT = BEFORE_TURN_CREDIT + '''                        travel_turn_credit = self.config.algorithm.get("travel_turn_credit", {})
+                        if travel_turn_credit.get("mode", "off") == "train":
+                            from travel_grpo.training.grpo.turn_credit import reshape_batch_advantages
+
+                            batch = reshape_batch_advantages(batch, self.config.algorithm)
 '''
 
 
@@ -61,21 +79,30 @@ def main() -> int:
     raw = path.read_bytes()
     current = digest(raw)
     if current == PATCHED_SHA256:
-        print(f"veRL dynamic-sampling connection patch is present: {path}")
+        print(f"veRL project connection patches are present: {path}")
         return 0
-    if current != SOURCE_SHA256:
+    if current not in {SOURCE_SHA256, LEGACY_DYNAMIC_PATCHED_SHA256}:
         raise RuntimeError(f"unknown veRL trainer SHA-256 {current}: {path}")
     payload = (BEFORE_INSTALL + AFTER_INSTALL + BEFORE_SKIP + AFTER_SKIP).encode()
     if digest(payload) != PATCH_PAYLOAD_SHA256:
         raise RuntimeError("internal patch payload SHA-256 mismatch")
+    turn_payload = (BEFORE_TURN_CREDIT + AFTER_TURN_CREDIT).encode()
+    if digest(turn_payload) != TURN_PATCH_PAYLOAD_SHA256:
+        raise RuntimeError("internal turn-credit patch payload SHA-256 mismatch")
     text = raw.decode("utf-8")
-    if text.count(BEFORE_INSTALL) != 1 or text.count(BEFORE_SKIP) != 1:
-        raise RuntimeError("veRL patch targets are ambiguous or missing")
-    patched = text.replace(BEFORE_INSTALL, AFTER_INSTALL).replace(BEFORE_SKIP, AFTER_SKIP).encode()
+    if current == SOURCE_SHA256:
+        if text.count(BEFORE_INSTALL) != 1 or text.count(BEFORE_SKIP) != 1:
+            raise RuntimeError("veRL dynamic-sampling patch targets are ambiguous or missing")
+        text = text.replace(BEFORE_INSTALL, AFTER_INSTALL).replace(
+            BEFORE_SKIP, AFTER_SKIP
+        )
+    if text.count(BEFORE_TURN_CREDIT) != 1:
+        raise RuntimeError("veRL turn-credit patch target is ambiguous or missing")
+    patched = text.replace(BEFORE_TURN_CREDIT, AFTER_TURN_CREDIT).encode()
     if digest(patched) != PATCHED_SHA256:
         raise RuntimeError("patched veRL trainer SHA-256 does not match the pinned result")
     if args.check:
-        raise RuntimeError("veRL dynamic-sampling connection patch is not installed")
+        raise RuntimeError("veRL project connection patches are not installed")
     path.write_bytes(patched)
     print(f"patched veRL 0.8 trainer: {path}")
     return 0

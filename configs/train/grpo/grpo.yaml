@@ -33,6 +33,33 @@ actor:
   micro_batch_size_per_gpu: 1
   gradient_checkpointing: true
 algorithm: {adv_estimator: grpo, norm_adv_by_std_in_grpo: false, kl_in_reward: false, kl_loss: false}
+turn_credit:
+  enabled: false
+  mode: "off"
+  version: causal-turn-credit-v1
+  completion_allocation:
+    preference_chain: 0.20
+    successful_search: 0.35
+    correct_answer: 0.45
+  partial_progress:
+    preference_field_resolved: 0.05
+    preference_chain_cap: 0.10
+    normal_candidates_observed: 0.20
+    visible_answer_call: 0.05
+  error_adjustment:
+    no_progress_action: -0.10
+    semantic_repeat: -0.10
+    guard_rejection_generic: -0.15
+    exact_query_repeat: -0.20
+    wrong_aspect: -0.20
+    invisible_answer_id: -0.20
+    wrong_answer: -0.15
+    malformed_tool_call: -0.15
+    no_tool_output: -0.15
+  evidence_clip: 0.50
+  mix_lambda: 0.50
+  multiplier_band: 0.20
+  epsilon: 1.0e-6
 dynamic:
   group_size: 4
   required_groups: 2

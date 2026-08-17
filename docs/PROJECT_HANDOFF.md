@@ -391,7 +391,7 @@ python scripts/eval/compare_stages.py
 | `data/split_manifest.json` | canonical 3,122 条划分证据 |
 | `src/travel_grpo/data/` | canonical 数据加载、划分和验证 |
 | `src/travel_grpo/envs/` | UserBench wrapper、action、session、Reward v2 |
-| `src/travel_grpo/training/sft_dataset.py` | Gold/Silver 重验和 action-only 渲染 |
+| `src/travel_grpo/training/sft/dataset.py` | Gold/Silver 重验和 action-only 渲染（旧路径保留兼容 facade） |
 | `scripts/train/sft/sft_train.py` | SFT audit/dry-run/train 入口 |
 | `scripts/train/sft/merge_lora.py` | SFT LoRA 合并 |
 | `src/travel_grpo/training/grpo/data.py` | canonical → veRL 0.8 数据 |

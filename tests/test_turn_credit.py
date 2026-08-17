@@ -1,4 +1,4 @@
-"""CPU contract tests for causal-turn-credit-v1."""
+"""CPU contract tests for conservative-turn-credit-v2."""
 
 from __future__ import annotations
 
@@ -68,8 +68,8 @@ def test_completed_aspect_splits_preference_search_answer_budget() -> None:
         ),
     )
     evidence = allocate_turn_evidence(events, traces, reward_valid=True)
-    assert evidence == pytest.approx((0.10, 0.10, -0.10, 0.35, 0.45))
-    assert evidence[-1] / evidence[-2] == pytest.approx(0.45 / 0.35)
+    assert evidence == pytest.approx((0.10, 0.10, -0.10, 0.45, 0.35))
+    assert evidence[-1] / evidence[-2] == pytest.approx(0.35 / 0.45)
 
 
 def test_one_preference_turn_receives_the_whole_preference_budget() -> None:
@@ -79,7 +79,7 @@ def test_one_preference_turn_receives_the_whole_preference_budget() -> None:
     evidence = allocate_turn_evidence(events, traces, reward_valid=True)
     assert evidence[0] == 0.0
     assert evidence[1] == pytest.approx(0.20)
-    assert evidence[3:] == pytest.approx((0.35, 0.45))
+    assert evidence[3:] == pytest.approx((0.45, 0.35))
 
 
 def test_successful_aspect_does_not_add_partial_progress_twice() -> None:
@@ -166,7 +166,7 @@ def test_multi_aspect_chains_never_cross() -> None:
         event(4, aspect="hotel", choice="answer", answer_id_visible=True, reward_correct_answer=True),
     ]
     trace = build_turn_credit_trace(events, ["flight", "hotel"], reward_valid=True)
-    assert trace.evidence == pytest.approx((0.20, 0.35, 0.45, 0.35, 0.45))
+    assert trace.evidence == pytest.approx((0.20, 0.45, 0.35, 0.45, 0.35))
     assert trace.aspects[0].accepted_answer_turn_index == 2
     assert trace.aspects[1].accepted_answer_turn_index == 4
 
@@ -186,11 +186,43 @@ def test_bounded_reshaping_preserves_sign_and_lambda_zero_parity() -> None:
     assert all(0.36 - 1e-9 <= value <= 0.44 + 1e-9 for value in positive)
     assert all(-0.44 - 1e-9 <= value <= -0.36 + 1e-9 for value in negative)
     assert positive[-1] > positive[0] > positive[1]
-    assert negative[-1] > negative[0] > negative[1]
+    assert negative[-1] == pytest.approx(negative[0])
+    assert negative[0] > negative[1]
     parity = reshape_turn_advantages(
         0.4, evidence, config=TurnCreditConfig(mix_lambda=0.0)
     )
     assert parity == pytest.approx((0.4,) * len(evidence))
+
+
+def test_token_weighted_reshaping_exactly_conserves_sequence_advantage() -> None:
+    evidence = [0.20, 0.45, 0.35, -0.20]
+    lengths = [2, 7, 3, 5]
+    positive = reshape_turn_advantages(0.4, evidence, turn_token_lengths=lengths)
+    negative = reshape_turn_advantages(-0.3, evidence, turn_token_lengths=lengths)
+
+    def weighted_mean(values):
+        return sum(n * value for n, value in zip(lengths, values, strict=True)) / sum(lengths)
+
+    assert weighted_mean(positive) == pytest.approx(0.4)
+    assert weighted_mean(negative) == pytest.approx(-0.3)
+    assert all(value > 0.0 for value in positive)
+    assert all(value < 0.0 for value in negative)
+    assert positive[1] > positive[2] > positive[0]
+    assert negative[3] < negative[0]
+
+
+def test_repeated_same_root_cause_is_blamed_once_per_aspect() -> None:
+    events = [
+        event(0, choice="action", no_progress_action=True),
+        event(1, choice="action", no_progress_action=True),
+        event(2, aspect="flight", choice="action", no_progress_action=True),
+    ]
+    trace = build_turn_credit_trace(events, ["hotel", "flight"], reward_valid=True)
+    assert trace.evidence == pytest.approx((-0.10, 0.0, -0.10))
+
+
+def test_zero_sequence_advantage_stays_zero() -> None:
+    assert reshape_turn_advantages(0.0, [0.45, -0.20], turn_token_lengths=[4, 2]) == (0.0, 0.0)
 
 
 def test_batch_reshaping_uses_turn_records_and_keeps_tool_tokens_zero() -> None:
@@ -227,6 +259,8 @@ def test_batch_reshaping_uses_turn_records_and_keeps_tool_tokens_zero() -> None:
     assert result.batch["advantages"][0, 2].item() == 0.0
     assert result.batch["advantages"][0, 4].item() == 0.0
     assert result.batch["advantages"][0, 5].item() > result.batch["advantages"][0, 3].item()
+    active = result.batch["response_mask"][0].bool()
+    assert result.batch["advantages"][0][active].mean().item() == pytest.approx(0.4)
     assert result.batch["returns"].tolist() == result.batch["advantages"].tolist()
 
 

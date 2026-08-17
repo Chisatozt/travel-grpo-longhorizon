@@ -36,11 +36,11 @@ algorithm: {adv_estimator: grpo, norm_adv_by_std_in_grpo: false, kl_in_reward: f
 turn_credit:
   enabled: false
   mode: "off"
-  version: causal-turn-credit-v1
+  version: conservative-turn-credit-v2
   completion_allocation:
     preference_chain: 0.20
-    successful_search: 0.35
-    correct_answer: 0.45
+    successful_search: 0.45
+    correct_answer: 0.35
   partial_progress:
     preference_field_resolved: 0.05
     preference_chain_cap: 0.10

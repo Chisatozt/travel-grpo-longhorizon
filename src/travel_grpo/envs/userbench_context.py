@@ -41,7 +41,7 @@ from travel_grpo.envs.userbench_tools import (
     normalized_action_signature,
     semantic_action_signature,
 )
-from travel_grpo.training.grpo.turn_credit import (
+from travel_grpo.trajectory.turn_credit import (
     TurnCreditConfig,
     TurnCreditError,
     TurnCreditTrace,

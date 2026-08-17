@@ -1,6 +1,6 @@
 """UserBench task loading and reproducible project-level dataset splits."""
 
-from travel_grpo.data.recovery_targets import (
+from travel_grpo.data.recovery.targets import (
     TARGET_GENERATOR_VERSION,
     TARGET_SCHEMA_VERSION,
     TARGET_STATUS_ACCEPTED,
@@ -14,7 +14,7 @@ from travel_grpo.data.recovery_targets import (
     write_target_dataset,
 )
 
-from travel_grpo.data.recovery_boundaries import (
+from travel_grpo.data.recovery.boundaries import (
     BOUNDARY_TYPES,
     SCHEMA_VERSION as RECOVERY_BOUNDARY_SCHEMA_VERSION,
     SourceSpec,

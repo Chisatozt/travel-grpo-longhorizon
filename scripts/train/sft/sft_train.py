@@ -13,7 +13,7 @@ SOURCE_ROOT = ROOT / "src"
 if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
-from travel_grpo.training.sft_dataset import (  # noqa: E402
+from travel_grpo.training.sft.dataset import (  # noqa: E402
     ActionOnlyDataCollator,
     SFTDatasetError,
     assert_sft_readiness,

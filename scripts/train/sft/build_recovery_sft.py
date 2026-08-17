@@ -13,11 +13,11 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from travel_grpo.training.recovery_sft import (
+from travel_grpo.training.sft.recovery import (
     build_recovery_sft_dataset,
     load_cpu_chat_template_tokenizer,
 )
-from travel_grpo.training.sft_dataset import load_tool_schema
+from travel_grpo.training.sft.dataset import load_tool_schema
 
 
 def build_parser() -> argparse.ArgumentParser:

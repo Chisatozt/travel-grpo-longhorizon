@@ -49,7 +49,7 @@ frozen evaluation rollout 不使用该控制器。
 
 ### 可选 turn-level credit assignment
 
-`causal-turn-credit-v1` 默认关闭。`shadow` 只记录和审计 turn evidence，不改变优化；`train` 在标准 GRPO advantage 计算后对各 assistant turn 做有界重分配，终局 Reward v3 和 dynamic sampling 分数保持不变。完整因果分配、公式、安全边界与命令见 [`docs/reward/turn-credit-v1.md`](../reward/turn-credit-v1.md)。正式启用前应先运行 shadow。
+`conservative-turn-credit-v2` 默认关闭。`shadow` 只记录和审计 turn evidence，不改变优化；`train` 在标准 GRPO advantage 计算后，以 token 加权守恒方式在 assistant turn 间重分配原始轨迹 advantage。终局 Reward v3、dynamic sampling 分数和每条轨迹的平均 advantage 均保持不变。完整规则见 [`docs/reward/turn-credit-v2.md`](../reward/turn-credit-v2.md)。正式启用前应先运行 shadow。
 
 ## 启动与恢复
 

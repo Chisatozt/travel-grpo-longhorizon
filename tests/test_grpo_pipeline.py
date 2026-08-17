@@ -558,7 +558,7 @@ def test_grpo_dry_run_exposes_stall_configuration(tmp_path, flags, enabled):
     assert agent_env["TRAVEL_GRPO_TURN_CREDIT_MODE"] == "off"
     turn_config = json.loads(agent_env["TRAVEL_GRPO_TURN_CREDIT_CONFIG_JSON"])
     assert turn_config["mode"] == "off"
-    assert turn_config["version"] == "causal-turn-credit-v1"
+    assert turn_config["version"] == "conservative-turn-credit-v2"
     assert (
         "+ray_kwargs.ray_init.runtime_env.worker_process_setup_hook="
         + TORCH_PADDING_WORKER_SETUP_HOOK
@@ -782,9 +782,9 @@ def test_grpo_dry_run_connects_turn_credit_mode_to_loop_and_trainer(tmp_path, mo
     )
     assert loop_config["mode"] == mode
     assert loop_config["mix_lambda"] == 0.5
-    assert loop_config["completion_allocation"]["correct_answer"] == 0.45
+    assert loop_config["completion_allocation"]["correct_answer"] == 0.35
     assert f'+algorithm.travel_turn_credit.mode="{mode}"' in document["command"]
-    assert "+algorithm.travel_turn_credit.version=causal-turn-credit-v1" in document[
+    assert "+algorithm.travel_turn_credit.version=conservative-turn-credit-v2" in document[
         "command"
     ]
 

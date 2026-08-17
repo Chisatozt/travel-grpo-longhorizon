@@ -23,7 +23,7 @@ from travel_grpo.models.openai_compatible import (  # noqa: E402
     OpenAICompatibleTeacherClient,
     TeacherRuntime,
 )
-from travel_grpo.training.sft_collection import (  # noqa: E402
+from travel_grpo.training.sft.collection import (  # noqa: E402
     TeacherCollectionError,
     assert_disjoint_from_evaluation,
     build_stratified_task_plan,

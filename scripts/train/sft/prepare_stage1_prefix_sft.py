@@ -42,7 +42,7 @@ from travel_grpo.envs.userbench_tools import (  # noqa: E402
     UserBenchAction,
     UserBenchActionError,
 )
-from travel_grpo.training.sft_dataset import PREFIX_SCHEMA_VERSION  # noqa: E402
+from travel_grpo.training.sft.dataset import PREFIX_SCHEMA_VERSION  # noqa: E402
 
 DEFAULT_DIAGNOSTICS = ROOT / "outputs/teacher_trajectories/sft_train.diagnostics.jsonl"
 DEFAULT_OUTPUT = ROOT / "outputs/teacher_trajectories/sft_stage1_prefix.jsonl"

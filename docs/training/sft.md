@@ -102,7 +102,7 @@ python scripts/train/sft/sft_train.py \
 
 ## Action-only rendering
 
-`src/travel_grpo/training/sft_dataset.py` loads the sole tool schema from `configs/tool_config/userbench_tools.yaml` and proves that it equals the Python `interact_with_env` contract. The same schema is passed to the Qwen3.5 chat template.
+`src/travel_grpo/training/sft/dataset.py` loads the sole tool schema from `configs/tool_config/userbench_tools.yaml` and proves that it equals the Python `interact_with_env` contract. The same schema is passed to the Qwen3.5 chat template. The historical `training/sft_dataset.py` path remains a compatibility facade.
 
 The raw archive keeps OpenAI-compatible JSON-string function arguments. Qwen3.5's official template iterates function arguments as a mapping, so the renderer converts a defensive copy to a mapping immediately before templating; it never rewrites the archive. SFT and GRPO both pin `enable_thinking: false`, ensuring the same generation prefix and XML tool-call format.
 

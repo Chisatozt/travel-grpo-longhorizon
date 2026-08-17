@@ -29,7 +29,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from travel_grpo.data.recovery_boundaries import normalize_actor_messages
+from travel_grpo.protocols.actor_messages import normalize_actor_messages
 from travel_grpo.envs.public_control import (
     PublicAspectStatus,
     RecoveryMode,
@@ -58,7 +58,7 @@ from travel_grpo.prompts.actor_policy import (
     ensure_actor_runtime_policy,
     strip_actor_runtime_policy,
 )
-from travel_grpo.training.recovery_sft import public_state_from_payload
+from travel_grpo.training.sft.recovery import public_state_from_payload
 
 
 SCHEMA_VERSION = "inference-gate-v1"

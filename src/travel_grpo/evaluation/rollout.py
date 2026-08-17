@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from travel_grpo.data.recovery_boundaries import normalize_actor_messages
+from travel_grpo.protocols.actor_messages import normalize_actor_messages
 from travel_grpo.envs.userbench_context import UserBenchSessionState
 from travel_grpo.envs.userbench_interaction import SimulatorRole, UserSimulatorRuntime
 from travel_grpo.envs.userbench_tools import UserBenchAction, UserBenchActionError

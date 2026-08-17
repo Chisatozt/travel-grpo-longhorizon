@@ -25,10 +25,28 @@ The layout follows the stage-oriented organization of
 ## Implementation status
 
 The deterministic task-splitting implementation lives in
-`src/travel_grpo/data/`, with its entry point under `scripts/data/`. The
-project-owned UserBench lifecycle wrapper lives in `src/travel_grpo/envs/`, and
-the optional veRL 0.8 adapter lives in
-`src/travel_grpo/training/grpo/adapter/`. The DeepSeek teacher collector lives
-in `src/travel_grpo/training/sft_collection.py`. SFT merge, GRPO launch/export,
-and resumable frozen-evaluation entry points are implemented; formal GPU/API
-runs remain external operations and no benchmark result is claimed.
+`src/travel_grpo/data/userbench.py`, with its entry point under `scripts/data/`.
+Recovery-boundary extraction and target construction form the adjacent
+`src/travel_grpo/data/recovery/` stage package. The actor-visible message
+normalizer is shared from `src/travel_grpo/protocols/` so evaluation and SFT do
+not depend on the recovery extractor to parse protocol messages.
+
+The project-owned UserBench lifecycle wrapper lives in `src/travel_grpo/envs/`.
+Trajectory accounting shared by the environment ledger and GRPO lives in
+`src/travel_grpo/trajectory/`, while the optional veRL 0.8 adapter and its
+profile launcher live in `src/travel_grpo/training/grpo/`. Teacher collection,
+SFT rendering, and recovery SFT are grouped under
+`src/travel_grpo/training/sft/`. Evaluation runtime orchestration lives in
+`src/travel_grpo/evaluation/`; `scripts/` retains the historical CLI paths as
+thin compatibility shims.
+
+Within the SFT package, `contracts.py` owns trajectory, diagnostic, and
+checkpoint schemas; `planning.py` owns task-pool validation, evaluation
+disjointness, deterministic quotas, and adaptive waves; `collection.py` owns
+runtime collection, strict admission, retries, and artifact persistence.
+`dataset.py` owns action-only rendering and `recovery.py` owns recovery-SFT
+target construction. The historical flat SFT paths remain import-compatible.
+
+SFT merge, GRPO launch/export, and resumable frozen-evaluation entry points
+remain available under `scripts/`; formal GPU/API runs remain external
+operations and no benchmark result is claimed without reproducible artifacts.

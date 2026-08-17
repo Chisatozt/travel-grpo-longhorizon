@@ -14,7 +14,7 @@ from typing import Any
 from travel_grpo.envs.userbench_context import validate_embedded_userbench
 from travel_grpo.envs.userbench_interaction import DEEPSEEK_V4_FLASH_MODEL
 from travel_grpo.envs.userbench_tools import TOOL_NAME, get_interact_with_env_schema
-from travel_grpo.training.grpo.turn_credit import (
+from travel_grpo.trajectory.turn_credit import (
     TURN_CREDIT_VERSION,
     TurnCreditConfig,
     validate_turn_credit_mode,

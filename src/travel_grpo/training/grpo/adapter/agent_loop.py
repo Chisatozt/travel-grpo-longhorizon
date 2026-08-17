@@ -16,7 +16,7 @@ from travel_grpo.training.grpo.adapter.session import (
     UserBenchRolloutRuntime,
     task_id_from_run_kwargs,
 )
-from travel_grpo.training.grpo.turn_credit import (
+from travel_grpo.trajectory.turn_credit import (
     TurnCreditConfig,
     validate_turn_credit_mode,
 )

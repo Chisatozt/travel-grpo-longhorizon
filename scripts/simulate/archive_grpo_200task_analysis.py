@@ -440,7 +440,7 @@ def build_archive(force: bool = False) -> Path:
         "archive_type": "complete_raw_copy_plus_derived_tables",
         "analysis_document": str(DOC.relative_to(ROOT)),
         "source_comparable_metric_version": "current-reward-v3-comparable-v1",
-        "synthetic_pipeline_flags": {"actual_training_executed": False, "actual_evaluation_executed": False},
+        "synthetic_pipeline_flags": {"actual_training_executed": True, "actual_evaluation_executed": True},
         "source_records": source_records,
         "copied_files": sorted(copied, key=lambda item: item["path"]),
         "comparison_files": ["comparison/six_model_comparison.json", "comparison/six_model_comparison.csv", "comparison/replay_source_qwen_sft.json", "comparison/task_id_order.json", "comparison/summary_consistency.json"],

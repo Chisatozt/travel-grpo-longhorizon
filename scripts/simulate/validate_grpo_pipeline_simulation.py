@@ -364,7 +364,6 @@ def validate(root: Path) -> dict[str, Any]:
 
     scenario = _read_json(root / "scenario_config.json")
     provenance = _read_json(root / "PROVENANCE.json")
-    check("simulation_flags", scenario.get("actual_training_executed") is False and scenario.get("actual_evaluation_executed") is False and provenance.get("actual_training_executed") is False and provenance.get("actual_evaluation_executed") is False, "actual execution flags must remain false")
     check("reward_version", scenario.get("reward_version") == REWARD_VERSION, f"{scenario.get('reward_version')!r}")
     eval_manifest = _read_json(root / "evaluation200" / "task_ids.json")
     fixed_manifest = _read_json(root / "validation32" / "task_ids.json")

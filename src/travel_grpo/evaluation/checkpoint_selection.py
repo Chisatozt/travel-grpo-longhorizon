@@ -6,6 +6,9 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 
+# [项目注释] 功能：`_fixed`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ValueError, isinstance。
+# [项目注释] 输入：`summary`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `Mapping[str, Any]`；具体值由各分支决定。
 def _fixed(summary: Mapping[str, Any]) -> Mapping[str, Any]:
     value = summary.get("fixed_denominator")
     if not isinstance(value, Mapping) or summary.get("denominator") != 132:
@@ -13,6 +16,9 @@ def _fixed(summary: Mapping[str, Any]) -> Mapping[str, Any]:
     return value
 
 
+# [项目注释] 功能：`select_checkpoint`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：_fixed, max, float, int。
+# [项目注释] 输入：`candidates`: Sequence[Mapping[str, Any]]；`sft_summary`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def select_checkpoint(candidates: Sequence[Mapping[str, Any]], sft_summary: Mapping[str, Any]) -> dict[str, Any]:
     reference = _fixed(sft_summary)
     audited = []

@@ -42,6 +42,9 @@ DEFAULT_SILVER = ROOT / "outputs/teacher_trajectories/sft_train.silver.jsonl"
 DEFAULT_CONFIG = ROOT / "configs/train/sft/sft_lora.yaml"
 
 
+# [项目注释] 功能：`_read_jsonl`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：enumerate, splitlines, strip, loads。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `tuple[list[dict[str, Any]], list[dict[str, Any]]]`；具体值由各分支决定。
 def _read_jsonl(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     records: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -66,6 +69,10 @@ def _read_jsonl(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
     return records, errors
 
 
+# [项目注释] 功能：`_load_checkpoint_records`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：sorted, is_dir,
+# [项目注释]    FileNotFoundError, glob。
+# [项目注释] 输入：`run_dir`: Path。
+# [项目注释] 输出：标注返回 `tuple[list[dict[str, Any]], list[dict[str, Any]]]`；具体值由各分支决定。
 def _load_checkpoint_records(run_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     task_dir = run_dir / "tasks"
     if not task_dir.is_dir():
@@ -92,6 +99,9 @@ def _load_checkpoint_records(run_dir: Path) -> tuple[list[dict[str, Any]], list[
     return records, errors
 
 
+# [项目注释] 功能：`_load_artifact_records`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：_read_jsonl, extend, is_file, str。
+# [项目注释] 输入：`gold_path`: Path；`silver_path`: Path。
+# [项目注释] 输出：标注返回 `tuple[list[dict[str, Any]], list[dict[str, Any]]]`；具体值由各分支决定。
 def _load_artifact_records(gold_path: Path, silver_path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     records: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -108,6 +118,9 @@ def _load_artifact_records(gold_path: Path, silver_path: Path) -> tuple[list[dic
     return records, errors
 
 
+# [项目注释] 功能：`_load_sft_config`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：safe_load, dict, read_text, isinstance。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _load_sft_config(path: Path) -> dict[str, Any]:
     try:
         import yaml
@@ -119,6 +132,10 @@ def _load_sft_config(path: Path) -> dict[str, Any]:
     return dict(document)
 
 
+# [项目注释] 功能：`_render_records`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：int, tuple, from_pretrained,
+# [项目注释]    load_tool_schema。
+# [项目注释] 输入：`records`: list[dict[str, Any]]；`config`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _render_records(
     records: list[dict[str, Any]],
     *,
@@ -174,6 +191,9 @@ def _render_records(
     }
 
 
+# [项目注释] 功能：`audit`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：set, Counter, _load_sft_config, sorted。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def audit(args: argparse.Namespace) -> dict[str, Any]:
     if args.source == "checkpoints" or (
         args.source == "auto" and (args.run_dir / "tasks").is_dir()
@@ -251,6 +271,9 @@ def audit(args: argparse.Namespace) -> dict[str, Any]:
     return report
 
 
+# [项目注释] 功能：`build_parser`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.ArgumentParser`；具体值由各分支决定。
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", choices=("auto", "checkpoints", "artifacts"), default="auto")
@@ -263,6 +286,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：audit, print, parse_args, dumps。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def main() -> None:
     report = audit(build_parser().parse_args())
     print(json.dumps(report, ensure_ascii=False, indent=2))

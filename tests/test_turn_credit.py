@@ -23,6 +23,9 @@ from travel_grpo.training.grpo.turn_credit import (
 )
 
 
+# [项目注释] 功能：`event`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：TurnEvent。
+# [项目注释] 输入：`index`: int；`aspect`: str；`choice`: str | None；**`kwargs`。
+# [项目注释] 输出：标注返回 `TurnEvent`；具体值由各分支决定。
 def event(
     index: int,
     *,
@@ -40,6 +43,9 @@ def event(
     )
 
 
+# [项目注释] 功能：`completed_hotel_events`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：event。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `list[TurnEvent]`；具体值由各分支决定。
 def completed_hotel_events() -> list[TurnEvent]:
     return [
         event(0, choice="action", field_resolved=True, reward_new_preference_count=1),
@@ -55,6 +61,10 @@ def completed_hotel_events() -> list[TurnEvent]:
     ]
 
 
+# [项目注释] 功能：`test_completed_aspect_splits_preference_search_answer_budget`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：completed_hotel_events, build_aspect_causal_traces, allocate_turn_evidence, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_completed_aspect_splits_preference_search_answer_budget() -> None:
     events = completed_hotel_events()
     traces = build_aspect_causal_traces(events, ["hotel"])
@@ -72,6 +82,10 @@ def test_completed_aspect_splits_preference_search_answer_budget() -> None:
     assert evidence[-1] / evidence[-2] == pytest.approx(0.35 / 0.45)
 
 
+# [项目注释] 功能：`test_one_preference_turn_receives_the_whole_preference_budget`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：completed_hotel_events, build_aspect_causal_traces, allocate_turn_evidence, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_one_preference_turn_receives_the_whole_preference_budget() -> None:
     events = completed_hotel_events()
     events[0].field_resolved = False
@@ -82,12 +96,20 @@ def test_one_preference_turn_receives_the_whole_preference_budget() -> None:
     assert evidence[3:] == pytest.approx((0.45, 0.35))
 
 
+# [项目注释] 功能：`test_successful_aspect_does_not_add_partial_progress_twice`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：completed_hotel_events, build_turn_credit_trace, sum, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_successful_aspect_does_not_add_partial_progress_twice() -> None:
     events = completed_hotel_events()
     trace = build_turn_credit_trace(events, ["hotel"], reward_valid=True)
     assert sum(value for value in trace.evidence if value > 0) == pytest.approx(1.0)
 
 
+# [项目注释] 功能：`test_incomplete_aspect_uses_partial_progress_and_wrong_answer_penalty`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：build_turn_credit_trace, event, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_incomplete_aspect_uses_partial_progress_and_wrong_answer_penalty() -> None:
     events = [
         event(0, choice="action", field_resolved=True),
@@ -105,6 +127,10 @@ def test_incomplete_aspect_uses_partial_progress_and_wrong_answer_penalty() -> N
     assert trace.evidence == pytest.approx((0.05, 0.05, 0.0, 0.20, -0.10))
 
 
+# [项目注释] 功能：`test_blocked_aspect_never_gets_completion_evidence`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：build_turn_credit_trace, event。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_blocked_aspect_never_gets_completion_evidence() -> None:
     events = [
         event(0, choice="search", first_fallback=True),
@@ -118,6 +144,10 @@ def test_blocked_aspect_never_gets_completion_evidence() -> None:
     assert trace.evidence == (0.0, 0.0)
 
 
+# [项目注释] 功能：`test_specific_violation_does_not_stack_semantic_and_guard_penalties`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：build_turn_credit_trace, event。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_specific_violation_does_not_stack_semantic_and_guard_penalties() -> None:
     events = [
         event(
@@ -142,12 +172,20 @@ def test_specific_violation_does_not_stack_semantic_and_guard_penalties() -> Non
         ({"no_tool_output": True}, -0.15),
     ],
 )
+# [项目注释] 功能：`test_error_root_cause_weights`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：parametrize,
+# [项目注释]    build_turn_credit_trace, event, approx。
+# [项目注释] 输入：`kwargs`；`expected`。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_error_root_cause_weights(kwargs, expected) -> None:
     events = [event(0, **kwargs)]
     trace = build_turn_credit_trace(events, ["hotel"], reward_valid=True)
     assert trace.evidence == pytest.approx((expected,))
 
 
+# [项目注释] 功能：`test_infrastructure_failure_and_invalid_reward_zero_credit`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：completed_hotel_events, event, build_turn_credit_trace, len。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_infrastructure_failure_and_invalid_reward_zero_credit() -> None:
     failed = [event(0, choice="search", normal_candidates_observed=True, infrastructure_failure=True)]
     assert build_turn_credit_trace(failed, ["hotel"], reward_valid=True).evidence == (0.0,)
@@ -157,6 +195,10 @@ def test_infrastructure_failure_and_invalid_reward_zero_credit() -> None:
     ) * len(successful)
 
 
+# [项目注释] 功能：`test_multi_aspect_chains_never_cross`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：build_turn_credit_trace, event, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_multi_aspect_chains_never_cross() -> None:
     events = [
         event(0, aspect="flight", choice="action", field_resolved=True),
@@ -171,6 +213,10 @@ def test_multi_aspect_chains_never_cross() -> None:
     assert trace.aspects[1].accepted_answer_turn_index == 4
 
 
+# [项目注释] 功能：`test_assistant_turn_spans_are_separated_by_tool_tokens`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：assistant_turn_spans。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_assistant_turn_spans_are_separated_by_tool_tokens() -> None:
     assert assistant_turn_spans([1, 1, 0, 0, 1, 0, 1, 1]) == (
         (0, 2),
@@ -179,6 +225,10 @@ def test_assistant_turn_spans_are_separated_by_tool_tokens() -> None:
     )
 
 
+# [项目注释] 功能：`test_bounded_reshaping_preserves_sign_and_lambda_zero_parity`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：reshape_turn_advantages, all, approx, TurnCreditConfig。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_bounded_reshaping_preserves_sign_and_lambda_zero_parity() -> None:
     evidence = [0.10, -0.10, 0.35, 0.45]
     positive = reshape_turn_advantages(0.4, evidence)
@@ -194,12 +244,19 @@ def test_bounded_reshaping_preserves_sign_and_lambda_zero_parity() -> None:
     assert parity == pytest.approx((0.4,) * len(evidence))
 
 
+# [项目注释] 功能：`test_token_weighted_reshaping_exactly_conserves_sequence_advantage`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：reshape_turn_advantages, all, weighted_mean, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_token_weighted_reshaping_exactly_conserves_sequence_advantage() -> None:
     evidence = [0.20, 0.45, 0.35, -0.20]
     lengths = [2, 7, 3, 5]
     positive = reshape_turn_advantages(0.4, evidence, turn_token_lengths=lengths)
     negative = reshape_turn_advantages(-0.3, evidence, turn_token_lengths=lengths)
 
+    # [项目注释] 功能：`weighted_mean`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：sum, zip。
+    # [项目注释] 输入：`values`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def weighted_mean(values):
         return sum(n * value for n, value in zip(lengths, values, strict=True)) / sum(lengths)
 
@@ -211,6 +268,10 @@ def test_token_weighted_reshaping_exactly_conserves_sequence_advantage() -> None
     assert negative[3] < negative[0]
 
 
+# [项目注释] 功能：`test_repeated_same_root_cause_is_blamed_once_per_aspect`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：build_turn_credit_trace, event, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_repeated_same_root_cause_is_blamed_once_per_aspect() -> None:
     events = [
         event(0, choice="action", no_progress_action=True),
@@ -221,10 +282,18 @@ def test_repeated_same_root_cause_is_blamed_once_per_aspect() -> None:
     assert trace.evidence == pytest.approx((-0.10, 0.0, -0.10))
 
 
+# [项目注释] 功能：`test_zero_sequence_advantage_stays_zero`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：reshape_turn_advantages。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_zero_sequence_advantage_stays_zero() -> None:
     assert reshape_turn_advantages(0.0, [0.45, -0.20], turn_token_lengths=[4, 2]) == (0.0, 0.0)
 
 
+# [项目注释] 功能：`test_batch_reshaping_uses_turn_records_and_keeps_tool_tokens_zero`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：importorskip, SimpleNamespace, reshape_batch_advantages, bool。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_batch_reshaping_uses_turn_records_and_keeps_tool_tokens_zero() -> None:
     torch = pytest.importorskip("torch")
     batch = {
@@ -264,6 +333,10 @@ def test_batch_reshaping_uses_turn_records_and_keeps_tool_tokens_zero() -> None:
     assert result.batch["returns"].tolist() == result.batch["advantages"].tolist()
 
 
+# [项目注释] 功能：`test_batch_turn_span_mismatch_fails_closed`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：importorskip,
+# [项目注释]    SimpleNamespace, raises, reshape_batch_advantages。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_batch_turn_span_mismatch_fails_closed() -> None:
     torch = pytest.importorskip("torch")
     data = SimpleNamespace(
@@ -284,6 +357,10 @@ def test_batch_turn_span_mismatch_fails_closed() -> None:
         )
 
 
+# [项目注释] 功能：`test_extra_field_contains_no_hidden_ids_or_values`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：build_turn_credit_trace, repr, completed_hotel_events, to_extra_field。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_extra_field_contains_no_hidden_ids_or_values() -> None:
     trace = build_turn_credit_trace(
         completed_hotel_events(), ["hotel"], reward_valid=True
@@ -303,6 +380,10 @@ def test_extra_field_contains_no_hidden_ids_or_values() -> None:
 
 
 
+# [项目注释] 功能：`test_session_ledger_records_public_guard_root_cause_without_environment`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：UserBenchSessionState, begin_actor_turn, from_parameters, reject_actor_turn。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_session_ledger_records_public_guard_root_cause_without_environment() -> None:
     session = UserBenchSessionState(
         "request-credit",
@@ -332,6 +413,10 @@ def test_session_ledger_records_public_guard_root_cause_without_environment() ->
     assert session.turn_events[0].reward_new_preference_count == 0
 
 
+# [项目注释] 功能：`test_session_ledger_off_mode_has_no_runtime_recording`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：UserBenchSessionState, begin_actor_turn, finalize_turn_credit, object。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_session_ledger_off_mode_has_no_runtime_recording() -> None:
     session = UserBenchSessionState(
         "request-off",
@@ -346,6 +431,10 @@ def test_session_ledger_off_mode_has_no_runtime_recording() -> None:
 
 
 
+# [项目注释] 功能：`test_rejected_action_uses_guard_penalty_not_accepted_no_progress_penalty`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：UserBenchSessionState, begin_actor_turn, from_parameters, reject_actor_turn。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_rejected_action_uses_guard_penalty_not_accepted_no_progress_penalty() -> None:
     session = UserBenchSessionState(
         "request-guard",

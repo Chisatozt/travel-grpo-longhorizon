@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 teacher collection 模型、采样、admission 和 simulator 参数。
 teacher:
   backend: openai_compatible
   model: deepseek-v4-flash

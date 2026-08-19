@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 veRL 0.8 GRPO profile、LoRA、rollout、dynamic sampling 和 turn-credit。
 profile_version: travel-grpo-verl08-v1
 dynamic_sampling: true
 model_path: outputs/models/sft-merged
@@ -32,6 +33,11 @@ actor:
   mini_batch_size: 2
   micro_batch_size_per_gpu: 1
   gradient_checkpointing: true
+  # One old-policy rollout batch is reused for two clipped PPO/GRPO actor
+  # epochs. old_log_probs and GRPO advantages stay fixed across these passes;
+  # no additional simulator/vLLM rollout is requested.
+  reuse_rollout_updates: true
+  ppo_epochs: 2
 algorithm: {adv_estimator: grpo, norm_adv_by_std_in_grpo: false, kl_in_reward: false, kl_loss: false}
 turn_credit:
   enabled: false
@@ -75,3 +81,7 @@ actor_rollout_ref:
       enable: true
       max_parallel_calls: 1
       tool_config_path: configs/tool_config/userbench_tools.yaml
+      # veRL defaults this to 256 tokens, which truncates UserBench candidate
+      # IDs. 4096 covers the public candidate list plus control feedback.
+      max_tool_response_length: 4096
+      tool_response_truncate_side: middle

@@ -10,6 +10,10 @@ from typing import Any
 from travel_grpo.evaluation.summary import summarize_results
 
 
+# [项目注释] 功能：`summarize_validation_rows`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：set, summarize_results, len,
+# [项目注释]    ValueError。
+# [项目注释] 输入：`rows`: Sequence[Mapping[str, Any]]；`tasks`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def summarize_validation_rows(
     rows: Sequence[Mapping[str, Any]], tasks: Sequence[Mapping[str, Any]]
 ) -> dict[str, Any]:
@@ -69,6 +73,10 @@ def summarize_validation_rows(
     )
 
 
+# [项目注释] 功能：`summarize_validation_file`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：any, summarize_validation_rows,
+# [项目注释]    loads, ValueError。
+# [项目注释] 输入：`path`: Path；`tasks`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def summarize_validation_file(
     path: Path, tasks: Sequence[Mapping[str, Any]]
 ) -> dict[str, Any]:

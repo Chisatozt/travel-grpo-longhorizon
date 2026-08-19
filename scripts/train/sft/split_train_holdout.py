@@ -22,6 +22,9 @@ ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_OUTPUT = ROOT / "outputs/teacher_trajectories"
 
 
+# [项目注释] 功能：`build_parser`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.ArgumentParser`；具体值由各分支决定。
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -74,6 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# [项目注释] 功能：`_load_jsonl`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：enumerate, splitlines, ValueError, strip。
+# [项目注释] 输入：`path`: Path；`tier`: str。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def _load_jsonl(path: Path, tier: str) -> list[dict[str, Any]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -97,6 +103,9 @@ def _load_jsonl(path: Path, tier: str) -> list[dict[str, Any]]:
     return records
 
 
+# [项目注释] 功能：`_largest_remainder`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sum, items, sorted, ValueError。
+# [项目注释] 输入：`weights`: dict[str, int]；`total`: int；`capacities`: dict[str, int]。
+# [项目注释] 输出：标注返回 `dict[str, int]`；具体值由各分支决定。
 def _largest_remainder(
     weights: dict[str, int], total: int, capacities: dict[str, int]
 ) -> dict[str, int]:
@@ -128,6 +137,10 @@ def _largest_remainder(
     return allocation
 
 
+# [项目注释] 功能：`_composition_quotas`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：Counter, _largest_remainder, len,
+# [项目注释]    str。
+# [项目注释] 输入：`records`: list[dict[str, Any]]；`count`: int。
+# [项目注释] 输出：标注返回 `dict[str, int]`；具体值由各分支决定。
 def _composition_quotas(records: list[dict[str, Any]], count: int) -> dict[str, int]:
     totals = Counter(str(record["composition"]) for record in records)
     if count < len(totals):
@@ -139,6 +152,9 @@ def _composition_quotas(records: list[dict[str, Any]], count: int) -> dict[str, 
     return {key: quotas[key] + extra[key] for key in quotas}
 
 
+# [项目注释] 功能：`_gold_quotas`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：defaultdict, items, max, min。
+# [项目注释] 输入：`records`: list[dict[str, Any]]；`composition_quotas`: dict[str, int]；`gold_target`: int。
+# [项目注释] 输出：标注返回 `dict[str, int]`；具体值由各分支决定。
 def _gold_quotas(
     records: list[dict[str, Any]], composition_quotas: dict[str, int], gold_target: int
 ) -> dict[str, int]:
@@ -175,11 +191,18 @@ def _gold_quotas(
     return allocation
 
 
+# [项目注释] 功能：`_rank`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：encode, hexdigest, sha256。
+# [项目注释] 输入：`seed`: str；`record`: dict[str, Any]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _rank(seed: str, record: dict[str, Any]) -> str:
     material = f"{seed}\0{record['_holdout_tier']}\0{record['task_id']}".encode()
     return hashlib.sha256(material).hexdigest()
 
 
+# [项目注释] 功能：`_select`：按固定约束拆分、采样或选择输入集合，保持确定性和边界条件。 主要协作调用：_composition_quotas, Counter, _largest_remainder,
+# [项目注释]    _gold_quotas。
+# [项目注释] 输入：`records`: list[dict[str, Any]]；`count`: int；`seed`: str。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def _select(records: list[dict[str, Any]], count: int, seed: str) -> list[dict[str, Any]]:
     if count <= 0 or count >= len(records):
         raise ValueError("--count must be positive and smaller than the trajectory count")
@@ -206,6 +229,9 @@ def _select(records: list[dict[str, Any]], count: int, seed: str) -> list[dict[s
     return selected
 
 
+# [项目注释] 功能：`_sha256`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, open, iter。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -214,6 +240,9 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_atomic_write_lines`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：mkdir, with_name, write_text, replace。
+# [项目注释] 输入：`path`: Path；`lines`: Iterable[str]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _atomic_write_lines(path: Path, lines: Iterable[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
@@ -221,6 +250,9 @@ def _atomic_write_lines(path: Path, lines: Iterable[str]) -> None:
     os.replace(temporary, path)
 
 
+# [项目注释] 功能：`_atomic_write_json`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：mkdir, with_name, write_text, replace。
+# [项目注释] 输入：`path`: Path；`value`: dict[str, Any]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _atomic_write_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
@@ -230,6 +262,9 @@ def _atomic_write_json(path: Path, value: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+# [项目注释] 功能：`_write_task_splits`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：read_table, array, str, set。
+# [项目注释] 输入：`source`: Path；`train_output`: Path；`validation_output`: Path；`selected_ids`: set[str]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _write_task_splits(
     source: Path, train_output: Path, validation_output: Path, selected_ids: set[str]
 ) -> None:
@@ -255,6 +290,9 @@ def _write_task_splits(
         os.replace(temporary, output)
 
 
+# [项目注释] 功能：`run`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：_load_jsonl, _select, mkdir, copy2。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def run(args: argparse.Namespace) -> dict[str, Any]:
     paths = [
         args.gold_source,
@@ -390,6 +428,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     return manifest
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：print, dumps, SystemExit, run。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def main() -> None:
     try:
         print(json.dumps(run(build_parser().parse_args()), ensure_ascii=False, indent=2))

@@ -48,15 +48,24 @@ EXPECTED_BY_COMPOSITION = {
 
 
 @pytest.fixture(scope="session")
+# [项目注释] 功能：`split_spec`：按固定约束拆分、采样或选择输入集合，保持确定性和边界条件。 主要协作调用：fixture, load_split_spec。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def split_spec():
     return load_split_spec(CONFIG)
 
 
 @pytest.fixture(scope="session")
+# [项目注释] 功能：`split_bundle`：按固定约束拆分、采样或选择输入集合，保持确定性和边界条件。 主要协作调用：fixture, build_dataset_splits。
+# [项目注释] 输入：`split_spec`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def split_bundle(split_spec):
     return build_dataset_splits(split_spec, SOURCE_ROOT)
 
 
+# [项目注释] 功能：`test_exact_counts_and_disjointness`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：any, values。
+# [项目注释] 输入：`split_bundle`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_exact_counts_and_disjointness(split_bundle):
     assert split_bundle.manifest_base["counts"]["project_splits"] == EXPECTED_COUNTS
     assert split_bundle.manifest_base["counts"]["total"] == 3122
@@ -68,6 +77,9 @@ def test_exact_counts_and_disjointness(split_bundle):
     assert split_bundle.manifest_base["checks"]["upstream_train_test_overlap"] == 0
 
 
+# [项目注释] 功能：`test_exact_composition_quotas`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：items, tuple。
+# [项目注释] 输入：`split_bundle`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_exact_composition_quotas(split_bundle):
     by_composition = split_bundle.manifest_base["counts"]["by_composition"]
     for composition, expected in EXPECTED_BY_COMPOSITION.items():
@@ -77,6 +89,9 @@ def test_exact_composition_quotas(split_bundle):
         )
 
 
+# [项目注释] 功能：`test_records_follow_example_contract`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：items, tuple。
+# [项目注释] 输入：`split_bundle`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_records_follow_example_contract(split_bundle):
     for project_split, records in split_bundle.records.items():
         expected_source_split = "test" if project_split == "evaluation" else "train"
@@ -90,6 +105,10 @@ def test_records_follow_example_contract(split_bundle):
             ]
 
 
+# [项目注释] 功能：`test_reference_example_records_are_reproduced`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：loads,
+# [项目注释]    splitlines, strip, tuple。
+# [项目注释] 输入：`split_bundle`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_reference_example_records_are_reproduced(split_bundle):
     examples = [
         json.loads(line)
@@ -107,6 +126,10 @@ def test_reference_example_records_are_reproduced(split_bundle):
         assert evaluation_by_id[example["task_id"]] == example
 
 
+# [项目注释] 功能：`test_hash_split_is_deterministic`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：build_dataset_splits,
+# [项目注释]    compute_jsonl_sha256。
+# [项目注释] 输入：`split_spec`；`split_bundle`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_hash_split_is_deterministic(split_spec, split_bundle):
     rebuilt = build_dataset_splits(split_spec, SOURCE_ROOT)
     for project_split in ALL_PROJECT_SPLITS:
@@ -118,6 +141,10 @@ def test_hash_split_is_deterministic(split_spec, split_bundle):
         ) == compute_jsonl_sha256(split_bundle.records[project_split])
 
 
+# [项目注释] 功能：`test_write_verify_and_refuse_overwrite`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：write_dataset_splits, verify_dataset_splits, as_posix, raises。
+# [项目注释] 输入：`tmp_path`；`split_spec`；`split_bundle`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_write_verify_and_refuse_overwrite(tmp_path, split_spec, split_bundle):
     manifest = write_dataset_splits(split_bundle, tmp_path)
     assert manifest["counts"]["project_splits"] == EXPECTED_COUNTS
@@ -146,11 +173,19 @@ def test_write_verify_and_refuse_overwrite(tmp_path, split_spec, split_bundle):
         write_dataset_splits(split_bundle, tmp_path)
 
 
+# [项目注释] 功能：`test_source_count_drift_fails`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：raises,
+# [项目注释]    load_onechoice_tasks。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_source_count_drift_fails():
     with pytest.raises(DatasetSplitError, match="expected 999"):
         load_onechoice_tasks(SOURCE_ROOT, "22", "train", expected_count=999)
 
 
+# [项目注释] 功能：`_write_small_source`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：mkdir, write_table, write_text,
+# [项目注释]    read_table。
+# [项目注释] 输入：`tmp_path`: Path；`rows`: list[dict]；`task`: dict；`task_id`: str。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def _write_small_source(
     tmp_path: Path, rows: list[dict], task: dict, task_id: str
 ) -> Path:
@@ -172,6 +207,10 @@ def _write_small_source(
     return source_root
 
 
+# [项目注释] 功能：`_first_source_row_and_task`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：loads, to_pylist, read_text,
+# [项目注释]    slice。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _first_source_row_and_task():
     row = (
         pq.read_table(SOURCE_ROOT / "travel22_multiturn_onechoice" / "train.parquet")
@@ -195,6 +234,10 @@ def _first_source_row_and_task():
         ("tool_id", "task ID does not match"),
     ],
 )
+# [项目注释] 功能：`test_corrupt_source_rows_fail`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：parametrize,
+# [项目注释]    _first_source_row_and_task, deepcopy, _write_small_source。
+# [项目注释] 输入：`tmp_path`；`mutation`；`message`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_corrupt_source_rows_fail(tmp_path, mutation, message):
     row, task, task_id = _first_source_row_and_task()
     row = copy.deepcopy(row)
@@ -211,6 +254,10 @@ def test_corrupt_source_rows_fail(tmp_path, mutation, message):
         load_onechoice_tasks(source_root, "22", "train", expected_count=1)
 
 
+# [项目注释] 功能：`test_duplicate_source_task_id_fails`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_first_source_row_and_task, _write_small_source, raises, load_onechoice_tasks。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_duplicate_source_task_id_fails(tmp_path):
     row, task, task_id = _first_source_row_and_task()
     source_root = _write_small_source(
@@ -220,6 +267,10 @@ def test_duplicate_source_task_id_fails(tmp_path):
         load_onechoice_tasks(source_root, "22", "train", expected_count=2)
 
 
+# [项目注释] 功能：`test_missing_source_column_fails`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：mkdir, write_table,
+# [项目注释]    table, raises。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_missing_source_column_fails(tmp_path):
     source_root = tmp_path / "UserBench" / "data"
     parquet_dir = source_root / "travel22_multiturn_onechoice"
@@ -231,6 +282,9 @@ def test_missing_source_column_fails(tmp_path):
         load_onechoice_tasks(source_root, "22", "train", expected_count=1)
 
 
+# [项目注释] 功能：`test_cli_dry_run_writes_nothing`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：copy, str, run, loads。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_cli_dry_run_writes_nothing(tmp_path):
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(ROOT / "src")

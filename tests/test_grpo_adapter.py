@@ -31,7 +31,11 @@ from travel_grpo.training.grpo.adapter.tools import execute_userbench_action
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# [项目注释] 类型：`FakeWrapper` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class FakeWrapper:
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`task_id`；`result`；`snapshot`。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self, task_id, result, snapshot=None):
         self.task_id = task_id
         self.result = result
@@ -39,17 +43,30 @@ class FakeWrapper:
         self.closed = False
         self.snapshot = snapshot
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         self.calls += 1
         return self.result
 
+    # [项目注释] 功能：`reward_snapshot`：计算奖励、指标或聚合统计，供训练、评测或报告使用。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reward_snapshot(self):
         return self.snapshot
 
+    # [项目注释] 功能：`close`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def close(self):
         self.closed = True
 
 
+# [项目注释] 功能：`_recovery_session`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：TravelRewardTask,
+# [项目注释]    UserBenchRewardSnapshot, UserBenchObservation, FakeWrapper。
+# [项目注释] 输入：`answered_aspect`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _recovery_session(*, answered_aspect=False):
     task = TravelRewardTask(
         "recovery-task",
@@ -87,6 +104,10 @@ def _recovery_session(*, answered_aspect=False):
     return session, wrapper
 
 
+# [项目注释] 功能：`test_rollout_extra_info_duplicates_and_validates_task_id`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：build_rollout_extra_info, validate_rollout_extra_info, raises。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_rollout_extra_info_duplicates_and_validates_task_id():
     extra = build_rollout_extra_info("task-7")
     assert validate_rollout_extra_info(extra) == "task-7"
@@ -95,7 +116,15 @@ def test_rollout_extra_info_duplicates_and_validates_task_id():
         validate_rollout_extra_info(extra)
 
 
+# [项目注释] 功能：`test_tool_returns_zero_tool_reward_and_terminal_reward_v2`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, UserBenchObservation, UserBenchRewardSnapshot, FakeWrapper。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_tool_returns_zero_tool_reward_and_terminal_reward_v2():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：UserBenchObservation,
+    # [项目注释]    UserBenchRewardSnapshot, FakeWrapper, TravelRewardTask。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         observation = UserBenchObservation("accepted", 1, True, 0.8, {})
         before = UserBenchRewardSnapshot(frozenset(), 1, 0, frozenset(), frozenset())
@@ -130,7 +159,15 @@ def test_tool_returns_zero_tool_reward_and_terminal_reward_v2():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_malformed_tool_call_returns_stable_error_without_stepping_env`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, UserBenchObservation, FakeWrapper, set_current_session。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_malformed_tool_call_returns_stable_error_without_stepping_env():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：UserBenchObservation, FakeWrapper,
+    # [项目注释]    set_current_session, UserBenchStepResult。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         observation = UserBenchObservation("unused", 1, False, 0.0, {})
         wrapper = FakeWrapper(
@@ -150,6 +187,10 @@ def test_malformed_tool_call_returns_stable_error_without_stepping_env():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_parallel_tool_calls_terminate_before_environment_step`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：UserBenchObservation, FakeWrapper, UserBenchSessionState, set_current_session。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_parallel_tool_calls_terminate_before_environment_step():
     observation = UserBenchObservation("unused", 0, False, 0.0, {})
     wrapper = FakeWrapper(
@@ -171,6 +212,10 @@ def test_parallel_tool_calls_terminate_before_environment_step():
         clear_current_session()
 
 
+# [项目注释] 功能：`test_no_tool_output_is_a_penalized_protocol_error`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：SimpleNamespace, finalize_actor_stop。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_no_tool_output_is_a_penalized_protocol_error():
     session = SimpleNamespace(
         num_tool_calls=0,
@@ -195,7 +240,15 @@ def test_no_tool_output_is_a_penalized_protocol_error():
         {"thought": "answer", "choice": "answer"},
     ],
 )
+# [项目注释] 功能：`test_answer_only_recovery_rejects_without_environment_step`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：parametrize, run, _recovery_session, set_current_session。
+# [项目注释] 输入：`parameters`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_answer_only_recovery_rejects_without_environment_step(parameters):
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_recovery_session, set_current_session,
+    # [项目注释]    clear_current_session, execute_userbench_action。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         session, wrapper = _recovery_session()
         set_current_session(session)
@@ -211,7 +264,15 @@ def test_answer_only_recovery_rejects_without_environment_step(parameters):
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_visible_but_wrong_answer_is_executed_and_recovery_succeeds`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, _recovery_session, set_current_session, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_visible_but_wrong_answer_is_executed_and_recovery_succeeds():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_recovery_session, set_current_session,
+    # [项目注释]    clear_current_session, execute_userbench_action。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         session, wrapper = _recovery_session()
         set_current_session(session)
@@ -239,7 +300,15 @@ def test_visible_but_wrong_answer_is_executed_and_recovery_succeeds():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_answer_only_rejects_an_already_answered_aspect`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：run,
+# [项目注释]    _recovery_session, set_current_session, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_answer_only_rejects_an_already_answered_aspect():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_recovery_session, set_current_session,
+    # [项目注释]    clear_current_session, execute_userbench_action。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         session, wrapper = _recovery_session(answered_aspect=True)
         set_current_session(session)
@@ -255,6 +324,10 @@ def test_answer_only_rejects_an_already_answered_aspect():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_recovery_generation_cannot_be_started_twice`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_recovery_session, begin_answer_only_generation。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_recovery_generation_cannot_be_started_twice():
     session, _ = _recovery_session()
     session.answer_only_generation_started = False
@@ -265,6 +338,10 @@ def test_recovery_generation_cannot_be_started_twice():
     assert session.truncated is False
 
 
+# [项目注释] 功能：`test_verl_yaml_paths_and_simulator_roles_are_consistent`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：safe_load, rsplit, hasattr, read_text。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_verl_yaml_paths_and_simulator_roles_are_consistent():
     config_root = ROOT / "configs"
     grpo = yaml.safe_load(
@@ -273,6 +350,10 @@ def test_verl_yaml_paths_and_simulator_roles_are_consistent():
     multi_turn = grpo["actor_rollout_ref"]["rollout"]["multi_turn"]
     assert grpo["data"]["apply_chat_template_kwargs"]["enable_thinking"] is False
     assert multi_turn["max_parallel_calls"] == 1
+    assert multi_turn["max_tool_response_length"] == 4096
+    assert multi_turn["tool_response_truncate_side"] == "middle"
+    assert grpo["actor"]["reuse_rollout_updates"] is False
+    assert grpo["actor"]["ppo_epochs"] == 1
     assert multi_turn["tool_config_path"] == (
         "configs/tool_config/userbench_tools.yaml"
     )

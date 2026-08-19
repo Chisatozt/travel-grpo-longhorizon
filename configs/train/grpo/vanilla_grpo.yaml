@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义最小 vanilla GRPO profile，用于兼容性/冒烟。
 profile_version: travel-grpo-verl08-v1
 dynamic_sampling: false
 model_path: outputs/models/sft-merged
@@ -32,6 +33,10 @@ actor:
   mini_batch_size: 2
   micro_batch_size_per_gpu: 1
   gradient_checkpointing: true
+  # Keep the vanilla smoke profile as a one-pass baseline. The production
+  # profile enables same-rollout PPO reuse explicitly.
+  reuse_rollout_updates: false
+  ppo_epochs: 1
 algorithm: {adv_estimator: grpo, norm_adv_by_std_in_grpo: false, kl_in_reward: false, kl_loss: false}
 turn_credit:
   enabled: false
@@ -69,3 +74,5 @@ actor_rollout_ref:
       enable: true
       max_parallel_calls: 1
       tool_config_path: configs/tool_config/userbench_tools.yaml
+      max_tool_response_length: 4096
+      tool_response_truncate_side: middle

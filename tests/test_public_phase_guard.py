@@ -23,12 +23,19 @@ from travel_grpo.envs.userbench_tools import UserBenchAction
 from travel_grpo.training.grpo.adapter.tools import execute_userbench_action
 
 
+# [项目注释] 功能：`_action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：from_parameters。
+# [项目注释] 输入：`choice`: str；`content`: str。
+# [项目注释] 输出：标注返回 `UserBenchAction`；具体值由各分支决定。
 def _action(choice: str, content: str) -> UserBenchAction:
     return UserBenchAction.from_parameters(
         {"thought": "public test", "choice": choice, "content": content}
     )
 
 
+# [项目注释] 功能：`test_normal_eliciting_turn_preserves_progress_and_then_requires_answer`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_normal_eliciting_turn_preserves_progress_and_then_requires_answer():
     state = new_public_control_state("I need a hotel.", no_progress_threshold=2)
     state = reduce_public_feedback(
@@ -49,6 +56,10 @@ def test_normal_eliciting_turn_preserves_progress_and_then_requires_answer():
     assert state.current.visible_option_ids == {"H1", "H2"}
 
 
+# [项目注释] 功能：`test_synonymous_no_preference_repeats_force_search_required`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, validate_public_action, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_synonymous_no_preference_repeats_force_search_required():
     state = new_public_control_state("I need a hotel.", no_progress_threshold=2)
     repeated_feedback = "I still need a hotel preference."
@@ -65,6 +76,10 @@ def test_synonymous_no_preference_repeats_force_search_required():
     )
 
 
+# [项目注释] 功能：`test_threshold_forces_search_and_rejects_action`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, _action, reduce_public_control_state, PublicControlEvent。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_threshold_forces_search_and_rejects_action():
     state = new_public_control_state("I need a hotel.", no_progress_threshold=2)
     action = _action("action", "hotel name")
@@ -78,6 +93,10 @@ def test_threshold_forces_search_and_rejects_action():
     assert validate_public_action(state, _action("search", "hotel Madrid")) is None
 
 
+# [项目注释] 功能：`test_normal_candidates_force_one_visible_answer_only`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, _action, validate_public_action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_normal_candidates_force_one_visible_answer_only():
     state = new_public_control_state("I need a hotel.")
     state = reduce_public_feedback(
@@ -96,6 +115,10 @@ def test_normal_candidates_force_one_visible_answer_only():
     assert validate_public_action(state, _action("answer", "H2")) is None
 
 
+# [项目注释] 功能：`test_fallback_retry_is_one_substantive_rewrite_then_blocks`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, _action, reduce_public_feedback, validate_public_action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_fallback_retry_is_one_substantive_rewrite_then_blocks():
     state = new_public_control_state("I need a hotel.")
     first = _action("search", "hotel Madrid")
@@ -127,6 +150,10 @@ def test_fallback_retry_is_one_substantive_rewrite_then_blocks():
     )
 
 
+# [项目注释] 功能：`test_first_fallback_rewritten_query_can_recover_to_answer_required`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, _action, validate_public_action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_first_fallback_rewritten_query_can_recover_to_answer_required():
     state = new_public_control_state("I need a hotel.")
     state = reduce_public_feedback(
@@ -144,6 +171,10 @@ def test_first_fallback_rewritten_query_can_recover_to_answer_required():
     assert state.current.visible_option_ids == {"H1", "H2"}
 
 
+# [项目注释] 功能：`test_blocked_aspect_rejects_old_search_but_accepts_next_aspect_after_advance`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, advance_public_aspect, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_blocked_aspect_rejects_old_search_but_accepts_next_aspect_after_advance():
     state = new_public_control_state("I need a hotel and a flight.")
     state = reduce_public_feedback(
@@ -178,12 +209,20 @@ def test_blocked_aspect_rejects_old_search_but_accepts_next_aspect_after_advance
     assert state.blocked_aspects == ("hotel",)
 
 
+# [项目注释] 功能：`test_query_normalization_ignores_order_but_accepts_new_public_token`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：is_substantive_query_change。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_query_normalization_ignores_order_but_accepts_new_public_token():
     assert not is_substantive_query_change("Hotel, Madrid", "madrid hotel")
     assert not is_substantive_query_change("Hotel Madrid", " hotel   madrid ")
     assert is_substantive_query_change("Hotel Madrid", "Hotel Madrid airport")
 
 
+# [项目注释] 功能：`test_answered_and_blocked_aspects_advance_and_terminate_separately`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, advance_public_aspect, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_answered_and_blocked_aspects_advance_and_terminate_separately():
     state = new_public_control_state("I need a hotel and a flight.")
     state = reduce_public_feedback(state, _action("search", "hotel"), "H1")
@@ -215,23 +254,40 @@ def test_answered_and_blocked_aspects_advance_and_terminate_separately():
     assert state.blocked_count == 1
 
 
+# [项目注释] 类型：`_PublicGuardWrapper` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class _PublicGuardWrapper:
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self):
         self.calls = 0
         self.closed = False
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：UserBenchObservation, UserBenchStepResult。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         self.calls += 1
         observation = UserBenchObservation("Candidates: H1, H2", 1, False, 0.0, {})
         return UserBenchStepResult("public-task", observation, 0.0, False, False, {})
 
+    # [项目注释] 功能：`reward_snapshot`：计算奖励、指标或聚合统计，供训练、评测或报告使用。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reward_snapshot(self):
         return None
 
+    # [项目注释] 功能：`close`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def close(self):
         self.closed = True
 
 
+# [项目注释] 功能：`test_session_render_actor_feedback_is_unified_and_idempotent`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_PublicGuardWrapper, UserBenchSessionState, render_actor_feedback, startswith。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_session_render_actor_feedback_is_unified_and_idempotent():
     wrapper = _PublicGuardWrapper()
     session = UserBenchSessionState(
@@ -248,7 +304,15 @@ def test_session_render_actor_feedback_is_unified_and_idempotent():
     assert session.append_recovery_instruction("Candidates: H1") == rendered
 
 
+# [项目注释] 功能：`test_tool_guard_rejects_answer_required_search_before_environment`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, _PublicGuardWrapper, UserBenchSessionState, set_current_session。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_tool_guard_rejects_answer_required_search_before_environment():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_PublicGuardWrapper,
+    # [项目注释]    UserBenchSessionState, set_current_session, clear_current_session。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         wrapper = _PublicGuardWrapper()
         session = UserBenchSessionState(

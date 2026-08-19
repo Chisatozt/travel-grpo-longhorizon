@@ -18,6 +18,7 @@ from travel_grpo.models.openai_compatible import (
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`ActorRuntime` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class ActorRuntime:
     model: str
     base_url: str
@@ -26,6 +27,9 @@ class ActorRuntime:
     max_tokens: int = 4096
     timeout: float = 120.0
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ValueError, strip。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if not self.model.strip() or not self.base_url.strip() or not self.api_key.strip():
             raise ValueError("Actor model, base URL, and API key must be non-empty")
@@ -33,8 +37,14 @@ class ActorRuntime:
             raise ValueError("frozen evaluation requires Actor temperature=0")
 
     @classmethod
+    # [项目注释] 功能：`from_environment`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：cls, strip, ValueError, required。
+    # [项目注释] 输入：`environ`: Mapping[str, str] | None。
+    # [项目注释] 输出：标注返回 `'ActorRuntime'`；具体值由各分支决定。
     def from_environment(cls, environ: Mapping[str, str] | None = None) -> "ActorRuntime":
         env = os.environ if environ is None else environ
+        # [项目注释] 功能：`required`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：strip, ValueError。
+        # [项目注释] 输入：`name`: str。
+        # [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
         def required(name: str) -> str:
             value = env.get(name, "").strip()
             if not value:
@@ -59,7 +69,11 @@ class ActorRuntime:
             )
 
 
+# [项目注释] 类型：`OpenAICompatibleActorClient` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class OpenAICompatibleActorClient:
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：AsyncOpenAI, TeacherApiError。
+    # [项目注释] 输入：`runtime`: ActorRuntime；`client`: Any | None。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __init__(self, runtime: ActorRuntime, *, client: Any | None = None) -> None:
         self.runtime = runtime
         self._owns_client = client is None
@@ -71,6 +85,10 @@ class OpenAICompatibleActorClient:
             client = AsyncOpenAI(api_key=runtime.api_key, base_url=runtime.base_url, timeout=runtime.timeout)
         self._client = client
 
+    # [项目注释] 功能：`generate_action`：异步地根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：_parse_response, create,
+    # [项目注释]    TeacherApiError, dict。
+    # [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]。
+    # [项目注释] 输出：标注返回 `TeacherToolCall`；具体值由各分支决定。
     async def generate_action(self, messages: Sequence[Mapping[str, Any]]) -> TeacherToolCall:
         try:
             response = await self._client.chat.completions.create(
@@ -87,6 +105,9 @@ class OpenAICompatibleActorClient:
             raise TeacherApiError(f"Actor API request failed with {exc.__class__.__name__}") from exc
         return OpenAICompatibleTeacherClient._parse_response(response)
 
+    # [项目注释] 功能：`close`：异步地清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。 主要协作调用：getattr, callable, close, isawaitable。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     async def close(self) -> None:
         if not self._owns_client:
             return

@@ -20,6 +20,9 @@ from travel_grpo.training.sft.recovery import (
 from travel_grpo.training.sft.dataset import load_tool_schema
 
 
+# [项目注释] 功能：`build_parser`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.ArgumentParser`；具体值由各分支决定。
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -50,6 +53,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：parse_args, resolve,
+# [项目注释]    load_cpu_chat_template_tokenizer, load_tool_schema。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     args = build_parser().parse_args()
     root = ROOT.resolve()

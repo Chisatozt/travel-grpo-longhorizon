@@ -35,6 +35,9 @@ DEFAULT_VALIDATION_SOURCE = ROOT / "data/grpo/validation.parquet"
 DEFAULT_DATA_OUTPUT = ROOT / "outputs/grpo/data"
 
 
+# [项目注释] 功能：`_project_path`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：expanduser, resolve, is_absolute, Path。
+# [项目注释] 输入：`value`: str | Path；`field`: str。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def _project_path(value: str | Path, *, field: str) -> Path:
     path = Path(value).expanduser()
     if not path.is_absolute():
@@ -42,6 +45,9 @@ def _project_path(value: str | Path, *, field: str) -> Path:
     return path.resolve()
 
 
+# [项目注释] 功能：`_adapter_complete`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：is_dir, is_file, any。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _adapter_complete(path: Path) -> bool:
     return (
         path.is_dir()
@@ -53,6 +59,9 @@ def _adapter_complete(path: Path) -> bool:
     )
 
 
+# [项目注释] 功能：`_merged_model_complete`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：is_dir, is_file, any, glob。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _merged_model_complete(path: Path) -> bool:
     return (
         path.is_dir()
@@ -65,6 +74,10 @@ def _merged_model_complete(path: Path) -> bool:
     )
 
 
+# [项目注释] 功能：`_merge_manifest_matches`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：is_file, loads, isinstance,
+# [项目注释]    str。
+# [项目注释] 输入：`path`: Path；`adapter`: Path；`base_model`: str。
+# [项目注释] 输出：标注返回 `tuple[bool, str | None]`；具体值由各分支决定。
 def _merge_manifest_matches(
     path: Path, *, adapter: Path, base_model: str
 ) -> tuple[bool, str | None]:
@@ -93,6 +106,9 @@ def _merge_manifest_matches(
     return True, None
 
 
+# [项目注释] 功能：`_data_artifact_state`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：all, exists, any。
+# [项目注释] 输入：`output`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _data_artifact_state(output: Path) -> str:
     artifacts = (
         output / "train.parquet",
@@ -107,10 +123,16 @@ def _data_artifact_state(output: Path) -> str:
     return "partial"
 
 
+# [项目注释] 功能：`_command_text`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：join, str。
+# [项目注释] 输入：`command`: Sequence[str]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _command_text(command: Sequence[str]) -> str:
     return shlex.join(str(value) for value in command)
 
 
+# [项目注释] 功能：`_require_grpo_data_dependency`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：RuntimeError, find_spec。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _require_grpo_data_dependency() -> None:
     if importlib.util.find_spec("pyarrow") is not None:
         return
@@ -123,6 +145,9 @@ def _require_grpo_data_dependency() -> None:
     )
 
 
+# [项目注释] 功能：`_run`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：print, run, RuntimeError, _command_text。
+# [项目注释] 输入：`label`: str；`command`: Sequence[str]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _run(label: str, command: Sequence[str]) -> None:
     print(f"[grpo-from-sft] {label}: {_command_text(command)}", flush=True)
     completed = subprocess.run(command, cwd=ROOT, check=False)
@@ -132,6 +157,9 @@ def _run(label: str, command: Sequence[str]) -> None:
         )
 
 
+# [项目注释] 功能：`build_parser`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.ArgumentParser`；具体值由各分支决定。
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sft-adapter", type=Path, default=DEFAULT_SFT_ADAPTER)
@@ -161,6 +189,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="enable recovery only for GRPO training rollouts",
     )
     parser.add_argument("--stall-threshold", type=int, default=4)
+    parser.add_argument("--reuse-rollout-updates", action=argparse.BooleanOptionalAction, default=None, help="override whether each sampled rollout batch is reused for multiple PPO epochs")
+    parser.add_argument("--ppo-epochs", type=int, help="number of clipped actor epochs over one sampled rollout batch")
     parser.add_argument(
         "--turn-credit-mode", choices=("off", "shadow", "train")
     )
@@ -170,6 +200,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# [项目注释] 功能：`_merge_command`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str。
+# [项目注释] 输入：`args`: argparse.Namespace；`adapter`: Path；`merged`: Path。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _merge_command(args: argparse.Namespace, adapter: Path, merged: Path) -> list[str]:
     command = [
         sys.executable,
@@ -186,6 +219,9 @@ def _merge_command(args: argparse.Namespace, adapter: Path, merged: Path) -> lis
     return command
 
 
+# [项目注释] 功能：`_prepare_command`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：str, _project_path。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _prepare_command(args: argparse.Namespace) -> list[str]:
     command = [
         sys.executable,
@@ -204,6 +240,9 @@ def _prepare_command(args: argparse.Namespace) -> list[str]:
     return command
 
 
+# [项目注释] 功能：`_train_command`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：extend, str, _project_path。
+# [项目注释] 输入：`args`: argparse.Namespace；`merged`: Path。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _train_command(
     args: argparse.Namespace, *, merged: Path
 ) -> list[str]:
@@ -227,6 +266,10 @@ def _train_command(
         command.append("--dry-run")
     command.append("--stall-recovery" if args.stall_recovery else "--no-stall-recovery")
     command.extend(("--stall-threshold", str(args.stall_threshold)))
+    if args.reuse_rollout_updates is not None:
+        command.append("--reuse-rollout-updates" if args.reuse_rollout_updates else "--no-reuse-rollout-updates")
+    if args.ppo_epochs is not None:
+        command.extend(("--ppo-epochs", str(args.ppo_epochs)))
     if args.turn_credit_mode is not None:
         command.extend(("--turn-credit-mode", args.turn_credit_mode))
     if args.turn_credit_lambda is not None:
@@ -237,6 +280,10 @@ def _train_command(
     return command
 
 
+# [项目注释] 功能：`run`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：_require_grpo_data_dependency, _project_path,
+# [项目注释]    _merged_model_complete, _data_artifact_state。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def run(args: argparse.Namespace) -> dict[str, Any]:
     _require_grpo_data_dependency()
     if args.stall_threshold < 1:
@@ -314,9 +361,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "enabled": bool(args.stall_recovery),
             "threshold": int(args.stall_threshold),
         },
+        "rollout_reuse": {
+            "enabled": args.reuse_rollout_updates,
+            "ppo_epochs": args.ppo_epochs,
+            "rollout_batches_per_update": 1,
+        },
     }
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：print, run, dumps, parse_args。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     try:
         report = run(build_parser().parse_args())

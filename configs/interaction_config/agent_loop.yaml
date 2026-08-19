@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 agent loop 公共默认和 tool-call 行为。
 - name: userbench_tool_agent
   _target_: travel_grpo.training.grpo.adapter.agent_loop.UserBenchAgentLoop
   environment_config_path: configs/interaction_config/userbench.yaml

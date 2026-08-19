@@ -15,6 +15,10 @@ from travel_grpo.evaluation.artifacts import atomic_json
 from travel_grpo.evaluation.validation import summarize_validation_file
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args,
+# [项目注释]    to_pylist。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("generation_jsonl", type=Path)

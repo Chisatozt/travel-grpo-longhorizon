@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 UserBench task/session/environment 基础参数。
 environment:
   source_root: environments/UserBench
   max_steps: 20

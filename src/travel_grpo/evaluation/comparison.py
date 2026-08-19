@@ -8,6 +8,9 @@ from typing import Any
 from travel_grpo.evaluation.metrics import result_metrics
 
 
+# [项目注释] 功能：`compare_stage_results`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：len, any, tuple, ValueError。
+# [项目注释] 输入：`stages`: Mapping[str, Mapping[str, Any]]；`allow_subset`: bool。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def compare_stage_results(
     stages: Mapping[str, Mapping[str, Any]], *, allow_subset: bool = False
 ) -> dict[str, Any]:

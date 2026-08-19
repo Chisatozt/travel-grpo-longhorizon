@@ -1,3 +1,6 @@
+# [项目注释] 模块：测试模块，负责验证 test_grpo_pipeline 的行为契约。
+# [项目注释] 该文件的公共边界、输入输出和调用关系由下方实现及架构文档共同定义。
+
 from __future__ import annotations
 
 import json
@@ -8,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from travel_grpo.training.grpo.launcher import hydra_overrides, load_profile
 from travel_grpo.training.grpo.dynamic_sampling import (
     BoundedSamplingState,
     _ordered_unique,
@@ -24,6 +28,10 @@ from travel_grpo.training.grpo.preflight import PINNED
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# [项目注释] 功能：`_fake_verl_padding_modules`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ModuleType, tuple, zip,
+# [项目注释]    setattr。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _fake_verl_padding_modules():
     attention_utils = types.ModuleType("verl.utils.attention_utils")
     original_get_functions = lambda: ("original",)
@@ -46,6 +54,10 @@ def _fake_verl_padding_modules():
     return verl, utils, attention_utils, fallback_functions, original_get_functions
 
 
+# [项目注释] 功能：`test_grpo_worker_padding_hook_uses_pure_torch_only_when_flash_attn_is_missing`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_fake_verl_padding_modules, setitem, delitem, setattr。
+# [项目注释] 输入：`monkeypatch`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_worker_padding_hook_uses_pure_torch_only_when_flash_attn_is_missing(monkeypatch):
     verl, utils, attention_utils, fallback_functions, original_get_functions = (
         _fake_verl_padding_modules()
@@ -67,6 +79,10 @@ def test_grpo_worker_padding_hook_uses_pure_torch_only_when_flash_attn_is_missin
     assert attention_utils._get_attention_functions() is not original_get_functions
 
 
+# [项目注释] 功能：`test_grpo_worker_padding_hook_preserves_flash_attn_baseline`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_fake_verl_padding_modules, ModuleType, setitem, setattr。
+# [项目注释] 输入：`monkeypatch`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_worker_padding_hook_preserves_flash_attn_baseline(monkeypatch):
     verl, utils, attention_utils, fallback_functions, original_get_functions = (
         _fake_verl_padding_modules()
@@ -93,6 +109,10 @@ def test_grpo_worker_padding_hook_preserves_flash_attn_baseline(monkeypatch):
     assert fallback_functions != attention_utils._get_attention_functions()
 
 
+# [项目注释] 功能：`test_grpo_numpy_override_tracks_vllm_and_verl_metadata_conflict`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：read_text。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_numpy_override_tracks_vllm_and_verl_metadata_conflict():
     project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert '"numpy==2.2.6; platform_system == \'Linux\'"' in project
@@ -105,6 +125,10 @@ def test_grpo_numpy_override_tracks_vllm_and_verl_metadata_conflict():
     assert '--overrides "$GRPO_OVERRIDES"' in setup
 
 
+# [项目注释] 功能：`test_dynamic_sampling_discards_invalid_and_equal_groups`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：select_reward_varying_groups。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_dynamic_sampling_discards_invalid_and_equal_groups():
     uids = ["a"] * 4 + ["b"] * 4 + ["c"] * 4
     rewards = [0.1, 0.2, 0.1, 0.3] + [0.4] * 4 + [-0.1, 0.2, 0.3, 0.4]
@@ -118,6 +142,10 @@ def test_dynamic_sampling_discards_invalid_and_equal_groups():
     assert stats["sampling_invalid_group_count"] == 1
 
 
+# [项目注释] 功能：`test_bounded_sampling_three_batches_and_skip_limit`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：BoundedSamplingState, range, finish_update, raises。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_bounded_sampling_three_batches_and_skip_limit():
     state = BoundedSamplingState()
     for _ in range(3):
@@ -132,6 +160,10 @@ def test_bounded_sampling_three_batches_and_skip_limit():
         state.finish_update()
 
 
+# [项目注释] 功能：`test_reward_valid_false_is_sampling_invalid`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：extract_userbench_group_signals。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_reward_valid_false_is_sampling_invalid():
     rewards, invalid, reasons = extract_userbench_group_signals(
         [{"reward": {"terminal_reward": 0.0, "reward_valid": False}}]
@@ -141,6 +173,10 @@ def test_reward_valid_false_is_sampling_invalid():
     assert reasons == [("reward_invalid",)]
 
 
+# [项目注释] 功能：`test_stalled_valid_trajectory_remains_a_dynamic_sampling_candidate`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：extract_userbench_group_signals。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_stalled_valid_trajectory_remains_a_dynamic_sampling_candidate():
     rewards, invalid, reasons = extract_userbench_group_signals(
         [
@@ -158,6 +194,10 @@ def test_stalled_valid_trajectory_remains_a_dynamic_sampling_candidate():
     assert reasons == [()]
 
 
+# [项目注释] 功能：`test_training_and_validation_sampling_profiles_are_disjoint`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：is_validation_sampling。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_training_and_validation_sampling_profiles_are_disjoint():
     assert is_validation_sampling(
         {"temperature": 0.0, "top_p": 1.0, "do_sample": False}
@@ -165,35 +205,70 @@ def test_training_and_validation_sampling_profiles_are_disjoint():
     assert is_validation_sampling({"temperature": 0.7, "top_p": 0.9}) is False
 
 
+# [项目注释] 功能：`test_groups_are_restored_to_original_prompt_order`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_ordered_unique, Scalar。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_groups_are_restored_to_original_prompt_order():
+    # [项目注释] 类型：`Scalar` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class Scalar:
+        # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：`value`。
+        # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
         def __init__(self, value):
             self.value = value
 
+        # [项目注释] 功能：`item`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def item(self):
             return self.value
 
     assert _ordered_unique([Scalar("a"), "a", Scalar("b"), "b"]) == ["a", "b"]
 
 
+# [项目注释] 功能：`test_bounded_sampler_restores_cross_batch_group_order`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：setitem, iter, SimpleNamespace, install_verl_bounded_sampler。
+# [项目注释] 输入：`monkeypatch`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_bounded_sampler_restores_cross_batch_group_order(monkeypatch):
+    # [项目注释] 类型：`Scores` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class Scores:
+        # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：`values`。
+        # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
         def __init__(self, values):
             self.values = values
 
+        # [项目注释] 功能：`sum`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：`dim`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def sum(self, dim=-1):
             return self
 
+        # [项目注释] 功能：`detach`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def detach(self):
             return self
 
+        # [项目注释] 功能：`cpu`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def cpu(self):
             return self
 
+        # [项目注释] 功能：`tolist`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def tolist(self):
             return list(self.values)
 
+    # [项目注释] 类型：`Output` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class Output:
+        # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list, Scores。
+        # [项目注释] 输入：`uids`；`rewards`；`timing`。
+        # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
         def __init__(self, uids, rewards, timing=None):
             self.rows = list(uids)
             self.batch = {"rm_scores": Scores(rewards)}
@@ -206,6 +281,9 @@ def test_bounded_sampler_restores_cross_batch_group_order(monkeypatch):
             }
             self.meta_info = {"timing": {} if timing is None else timing}
 
+        # [项目注释] 功能：`slice`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：Output。
+        # [项目注释] 输入：`start`；`stop`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def slice(self, start, stop):
             return Output(
                 self.rows[start:stop],
@@ -213,8 +291,12 @@ def test_bounded_sampler_restores_cross_batch_group_order(monkeypatch):
                 timing=self.meta_info["timing"],
             )
 
+    # [项目注释] 类型：`DataProto` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class DataProto:
         @staticmethod
+        # [项目注释] 功能：`concat`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：all, Output。
+        # [项目注释] 输入：`outputs`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def concat(outputs):
             metadata = [output.meta_info for output in outputs]
             assert all(value == metadata[0] for value in metadata)
@@ -257,24 +339,48 @@ def test_bounded_sampler_restores_cross_batch_group_order(monkeypatch):
     assert result.meta_info["travel_dynamic_sampling"]["sampled_batches"] == 2
 
 
+# [项目注释] 功能：`test_bounded_sampler_keeps_valid_rows_across_batches_and_preserves_fields`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：setitem, SimpleNamespace, install_verl_bounded_sampler, generate_sequences。
+# [项目注释] 输入：`monkeypatch`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_bounded_sampler_keeps_valid_rows_across_batches_and_preserves_fields(monkeypatch):
+    # [项目注释] 类型：`Scores` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class Scores:
+        # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list。
+        # [项目注释] 输入：`values`。
+        # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
         def __init__(self, values):
             self.values = list(values)
 
+        # [项目注释] 功能：`sum`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：`dim`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def sum(self, dim=-1):
             return self
 
+        # [项目注释] 功能：`detach`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def detach(self):
             return self
 
+        # [项目注释] 功能：`cpu`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def cpu(self):
             return self
 
+        # [项目注释] 功能：`tolist`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def tolist(self):
             return list(self.values)
 
+    # [项目注释] 类型：`Output` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class Output:
+        # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list, Scores, len, zip。
+        # [项目注释] 输入：`row_ids`；`uids`；`rewards`；`valid`；`degraded`。
+        # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
         def __init__(self, row_ids, uids, rewards, valid=None, degraded=None):
             self.rows = list(row_ids)
             self.batch = {
@@ -304,6 +410,9 @@ def test_bounded_sampler_keeps_valid_rows_across_batches_and_preserves_fields(mo
             }
             self.meta_info = {"timing": {}}
 
+        # [项目注释] 功能：`slice`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：Output。
+        # [项目注释] 输入：`start`；`stop`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def slice(self, start, stop):
             valid = [
                 item["reward"]["reward_valid"]
@@ -321,8 +430,12 @@ def test_bounded_sampler_keeps_valid_rows_across_batches_and_preserves_fields(mo
                 degraded,
             )
 
+    # [项目注释] 类型：`DataProto` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class DataProto:
         @staticmethod
+        # [项目注释] 功能：`concat`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：Output。
+        # [项目注释] 输入：`outputs`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def concat(outputs):
             return Output(
                 [row for output in outputs for row in output.rows],
@@ -365,6 +478,9 @@ def test_bounded_sampler_keeps_valid_rows_across_batches_and_preserves_fields(mo
     ]
     seen_batches = []
 
+    # [项目注释] 功能：`generate`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：pop。
+    # [项目注释] 输入：`batch`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def generate(batch):
         seen_batches.append(batch)
         return batches.pop(0)
@@ -403,24 +519,48 @@ def test_bounded_sampler_keeps_valid_rows_across_batches_and_preserves_fields(mo
     assert diagnostics["degraded_candidate_count"] == 0
 
 
+# [项目注释] 功能：`test_bounded_sampler_uses_degraded_rows_only_when_clean_candidates_are_insufficient`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：setitem, Output, SimpleNamespace, install_verl_bounded_sampler。
+# [项目注释] 输入：`monkeypatch`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_bounded_sampler_uses_degraded_rows_only_when_clean_candidates_are_insufficient(monkeypatch):
+    # [项目注释] 类型：`Scores` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class Scores:
+        # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list。
+        # [项目注释] 输入：`values`。
+        # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
         def __init__(self, values):
             self.values = list(values)
 
+        # [项目注释] 功能：`sum`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：`dim`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def sum(self, dim=-1):
             return self
 
+        # [项目注释] 功能：`detach`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def detach(self):
             return self
 
+        # [项目注释] 功能：`cpu`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def cpu(self):
             return self
 
+        # [项目注释] 功能：`tolist`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list。
+        # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def tolist(self):
             return list(self.values)
 
+    # [项目注释] 类型：`Output` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class Output:
+        # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list, range, Scores, len。
+        # [项目注释] 输入：`uids`；`rewards`；`degraded`。
+        # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
         def __init__(self, uids, rewards, degraded):
             self.rows = list(range(len(uids)))
             self.batch = {"rm_scores": Scores(rewards)}
@@ -439,6 +579,9 @@ def test_bounded_sampler_uses_degraded_rows_only_when_clean_candidates_are_insuf
             }
             self.meta_info = {"timing": {}}
 
+        # [项目注释] 功能：`slice`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：Output。
+        # [项目注释] 输入：`start`；`stop`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def slice(self, start, stop):
             values = self.batch["rm_scores"].values[start:stop]
             items = self.non_tensor_batch["userbench"][start:stop]
@@ -448,8 +591,12 @@ def test_bounded_sampler_uses_degraded_rows_only_when_clean_candidates_are_insuf
                 [item["reward"]["reward_degraded"] for item in items],
             )
 
+    # [项目注释] 类型：`DataProto` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class DataProto:
         @staticmethod
+        # [项目注释] 功能：`concat`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：Output。
+        # [项目注释] 输入：`outputs`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def concat(outputs):
             return Output(
                 [
@@ -494,6 +641,27 @@ def test_bounded_sampler_uses_degraded_rows_only_when_clean_candidates_are_insuf
     assert result.meta_info["travel_dynamic_sampling"]["degraded_candidate_count"] == 1
 
 
+# [项目注释] 功能：`test_grpo_profile_wires_tool_budget_and_rollout_reuse`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：load_profile, hydra_overrides。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
+def test_grpo_profile_wires_tool_budget_and_rollout_reuse(tmp_path):
+    profile = load_profile(ROOT / "configs/train/grpo/grpo.yaml")
+    assert profile["actor"]["reuse_rollout_updates"] is True
+    assert profile["actor"]["ppo_epochs"] == 2
+    multi_turn = profile["actor_rollout_ref"]["rollout"]["multi_turn"]
+    assert multi_turn["max_tool_response_length"] == 4096
+    assert multi_turn["tool_response_truncate_side"] == "middle"
+    overrides = hydra_overrides(profile, tmp_path / "output", False, "console")
+    assert "actor_rollout_ref.actor.ppo_epochs=2" in overrides
+    assert "actor_rollout_ref.rollout.multi_turn.max_tool_response_length=4096" in overrides
+    assert "actor_rollout_ref.rollout.multi_turn.tool_response_truncate_side=middle" in overrides
+
+
+# [项目注释] 功能：`test_grpo_profile_dry_preflight_is_static_only`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：importorskip, safe_load, run_preflight, read_text。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_profile_dry_preflight_is_static_only(tmp_path):
     yaml = pytest.importorskip("yaml")
     profile = yaml.safe_load((ROOT / "configs/train/grpo/grpo.yaml").read_text(encoding="utf-8"))
@@ -512,6 +680,28 @@ def test_grpo_profile_dry_preflight_is_static_only(tmp_path):
     }
 
 
+# [项目注释] 功能：`test_preflight_rejects_incoherent_rollout_reuse_settings`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：load_profile, raises, run_preflight。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
+def test_preflight_rejects_incoherent_rollout_reuse_settings(tmp_path):
+    profile = load_profile(ROOT / "configs/train/grpo/grpo.yaml")
+    profile["actor"]["ppo_epochs"] = 1
+    with pytest.raises(RuntimeError, match="rollout reuse requires"):
+        run_preflight(
+            profile,
+            project_root=ROOT,
+            output_dir=tmp_path / "incoherent-output",
+            resume=False,
+            strict_runtime=False,
+            environ={},
+        )
+
+
+# [项目注释] 功能：`test_preflight_rejects_sampling_profile_drift`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：importorskip, safe_load, read_text, raises。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_preflight_rejects_sampling_profile_drift(tmp_path):
     yaml = pytest.importorskip("yaml")
     profile = yaml.safe_load((ROOT / "configs/train/grpo/grpo.yaml").read_text(encoding="utf-8"))
@@ -534,6 +724,10 @@ def test_preflight_rejects_sampling_profile_drift(tmp_path):
         (["--stall-recovery", "--stall-threshold", "4"], True),
     ],
 )
+# [项目注释] 功能：`test_grpo_dry_run_exposes_stall_configuration`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：parametrize,
+# [项目注释]    run, loads, str。
+# [项目注释] 输入：`tmp_path`；`flags`；`enabled`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_dry_run_exposes_stall_configuration(tmp_path, flags, enabled):
     command = [
         sys.executable,
@@ -565,12 +759,19 @@ def test_grpo_dry_run_exposes_stall_configuration(tmp_path, flags, enabled):
     ) in document["command"]
 
 
+# [项目注释] 功能：`_write_fake_sft_adapter`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：mkdir, write_text, write_bytes。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _write_fake_sft_adapter(path: Path) -> None:
     path.mkdir()
     (path / "adapter_config.json").write_text("{}", encoding="utf-8")
     (path / "adapter_model.safetensors").write_bytes(b"dry-run placeholder")
 
 
+# [项目注释] 功能：`test_grpo_from_sft_dry_run_chains_merge_data_and_training`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_write_fake_sft_adapter, run, exists, str。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_from_sft_dry_run_chains_merge_data_and_training(tmp_path):
     adapter = tmp_path / "stage2-adapter"
     _write_fake_sft_adapter(adapter)
@@ -593,6 +794,9 @@ def test_grpo_from_sft_dry_run_chains_merge_data_and_training(tmp_path):
             "5",
             "--turn-credit-mode",
             "shadow",
+            "--reuse-rollout-updates",
+            "--ppo-epochs",
+            "3",
             "--turn-credit-lambda",
             "0.4",
             "--turn-credit-band",
@@ -613,10 +817,16 @@ def test_grpo_from_sft_dry_run_chains_merge_data_and_training(tmp_path):
     assert "shadow" in completed.stdout
     assert "+algorithm.travel_turn_credit.mix_lambda=0.4" in completed.stdout
     assert "+algorithm.travel_turn_credit.multiplier_band=0.1" in completed.stdout
+    assert "--reuse-rollout-updates" in completed.stdout
+    assert "--ppo-epochs 3" in completed.stdout
     assert not (tmp_path / "merged").exists()
     assert not (tmp_path / "grpo-data").exists()
 
 
+# [项目注释] 功能：`test_grpo_from_sft_rejects_missing_adapter_before_any_write`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, exists, str。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_from_sft_rejects_missing_adapter_before_any_write(tmp_path):
     script = ROOT / "scripts/train/grpo/run_grpo_from_sft.py"
     completed = subprocess.run(
@@ -641,6 +851,10 @@ def test_grpo_from_sft_rejects_missing_adapter_before_any_write(tmp_path):
     assert not (tmp_path / "grpo-data").exists()
 
 
+# [项目注释] 功能：`test_grpo_dry_run_accepts_custom_model_and_data_paths`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：run,
+# [项目注释]    loads, str, resolve。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_dry_run_accepts_custom_model_and_data_paths(tmp_path):
     data_output = tmp_path / "prepared-data"
     model_path = tmp_path / "merged-model"
@@ -674,6 +888,10 @@ def test_grpo_dry_run_accepts_custom_model_and_data_paths(tmp_path):
     )
 
 
+# [项目注释] 功能：`test_verl_data_has_no_hidden_labels`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：importorskip,
+# [项目注释]    build_verl_records, len, list。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_verl_data_has_no_hidden_labels():
     pa = pytest.importorskip("pyarrow")
     from travel_grpo.training.grpo.data import build_verl_records
@@ -693,6 +911,10 @@ def test_verl_data_has_no_hidden_labels():
         assert "preference_ids_by_aspect" not in serialized
 
 
+# [项目注释] 功能：`test_verl_data_manifest_pins_runtime_and_generator_versions`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：prepare_verl_datasets, loads, read_text, raises。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_verl_data_manifest_pins_runtime_and_generator_versions(tmp_path):
     from travel_grpo.training.grpo.data import (
         VERL_DATA_GENERATOR_VERSION,
@@ -716,6 +938,10 @@ def test_verl_data_manifest_pins_runtime_and_generator_versions(tmp_path):
         )
 
 
+# [项目注释] 功能：`test_actor_export_requires_passed_selected_checkpoint`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：mkdir, write_text, run, dumps。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_actor_export_requires_passed_selected_checkpoint(tmp_path):
     actor = tmp_path / "run" / "global_step_100" / "actor"
     actor.mkdir(parents=True)
@@ -743,6 +969,10 @@ def test_actor_export_requires_passed_selected_checkpoint(tmp_path):
 
 
 
+# [项目注释] 功能：`test_preflight_rejects_turn_credit_mode_enabled_drift`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：importorskip, safe_load, read_text, raises。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_preflight_rejects_turn_credit_mode_enabled_drift(tmp_path):
     yaml = pytest.importorskip("yaml")
     profile = yaml.safe_load(
@@ -761,6 +991,10 @@ def test_preflight_rejects_turn_credit_mode_enabled_drift(tmp_path):
 
 
 @pytest.mark.parametrize("mode", ["shadow", "train"])
+# [项目注释] 功能：`test_grpo_dry_run_connects_turn_credit_mode_to_loop_and_trainer`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：parametrize, run, loads, str。
+# [项目注释] 输入：`tmp_path`；`mode`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_dry_run_connects_turn_credit_mode_to_loop_and_trainer(tmp_path, mode):
     command = [
         sys.executable,
@@ -789,6 +1023,10 @@ def test_grpo_dry_run_connects_turn_credit_mode_to_loop_and_trainer(tmp_path, mo
     ]
 
 
+# [项目注释] 功能：`test_hash_checked_verl_connection_contains_turn_credit_hook`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：read_text, chr。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_hash_checked_verl_connection_contains_turn_credit_hook():
     patch_source = (
         ROOT / "scripts/train/grpo/apply_verl_patch.py"

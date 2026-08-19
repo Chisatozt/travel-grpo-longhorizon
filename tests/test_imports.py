@@ -1,6 +1,9 @@
 """Project import checks."""
 
 
+# [项目注释] 功能：`test_stage_packages_import`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_stage_packages_import():
     import travel_grpo.envs
     import travel_grpo.evaluation
@@ -15,6 +18,9 @@ def test_stage_packages_import():
     assert travel_grpo.utils is not None
 
 
+# [项目注释] 功能：`test_dataset_split_public_api_imports`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：callable。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_dataset_split_public_api_imports():
     from travel_grpo.data import (
         build_dataset_splits,
@@ -31,6 +37,9 @@ def test_dataset_split_public_api_imports():
     assert callable(load_split_spec)
 
 
+# [项目注释] 功能：`test_refactored_stage_facades_preserve_public_symbols`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_refactored_stage_facades_preserve_public_symbols():
     from travel_grpo.data.recovery.boundaries import SourceSpec as CanonicalSourceSpec
     from travel_grpo.data.recovery_boundaries import SourceSpec as LegacySourceSpec

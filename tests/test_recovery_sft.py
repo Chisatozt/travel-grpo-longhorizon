@@ -1,3 +1,6 @@
+# [项目注释] 模块：测试模块，负责验证 test_recovery_sft 的行为契约。
+# [项目注释] 该文件的公共边界、输入输出和调用关系由下方实现及架构文档共同定义。
+
 from __future__ import annotations
 
 import copy
@@ -28,11 +31,15 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOL_CONFIG = ROOT / "configs/tool_config/userbench_tools.yaml"
 
 
+# [项目注释] 类型：`FakeQwenTokenizer` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class FakeQwenTokenizer:
     pad_token_id = 0
     eos_token_id = 2
     padding_side = "right"
 
+    # [项目注释] 功能：`apply_chat_template`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：dumps, str, ord。
+    # [项目注释] 输入：`conversation`；`tools`；`tokenize`；`add_generation_prompt`；`enable_thinking`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def apply_chat_template(
         self, conversation, *, tools, tokenize, add_generation_prompt, enable_thinking
     ):
@@ -51,6 +58,9 @@ class FakeQwenTokenizer:
         return [ord(value) + 3 for value in text]
 
 
+# [项目注释] 功能：`_call`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：dumps。
+# [项目注释] 输入：`call_id`: str；`choice`: str；`content`: str。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def _call(call_id: str, choice: str, content: str) -> dict:
     return {
         "role": "assistant",
@@ -70,6 +80,9 @@ def _call(call_id: str, choice: str, content: str) -> dict:
     }
 
 
+# [项目注释] 功能：`_tool`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：`call_id`: str；`content`: str。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def _tool(call_id: str, content: str) -> dict:
     return {
         "role": "tool",
@@ -79,6 +92,9 @@ def _tool(call_id: str, content: str) -> dict:
     }
 
 
+# [项目注释] 功能：`_target_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_call, _tool。
+# [项目注释] 输入：`choice`: str；`content`: str；`split`: str。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def _target_record(*, choice: str = "answer", content: str = "H1", split: str = "grpo_train") -> dict:
     messages = [
         {"role": "system", "content": "Base production system."},
@@ -114,6 +130,10 @@ def _target_record(*, choice: str = "answer", content: str = "H1", split: str = 
     }
 
 
+# [项目注释] 功能：`test_recovery_prompt_injects_policy_note_and_does_not_mutate_source`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_target_record, deepcopy, render_recovery_record, all。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_recovery_prompt_injects_policy_note_and_does_not_mutate_source() -> None:
     source = _target_record()
     original = copy.deepcopy(source)
@@ -134,6 +154,10 @@ def test_recovery_prompt_injects_policy_note_and_does_not_mutate_source() -> Non
     )
 
 
+# [项目注释] 功能：`test_recovery_reuses_action_only_loss_mask_for_final_target`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：render_recovery_record, build_action_only_examples, next, all。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_recovery_reuses_action_only_loss_mask_for_final_target() -> None:
     rendered = render_recovery_record(_target_record())
     examples = build_action_only_examples(
@@ -151,6 +175,10 @@ def test_recovery_reuses_action_only_loss_mask_for_final_target() -> None:
     assert example.assistant_turn_index == 2
 
 
+# [项目注释] 功能：`test_recovery_audit_checks_visible_answer_and_teacher_leakage`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：render_recovery_record, audit_rendered_record, dumps, deepcopy。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_recovery_audit_checks_visible_answer_and_teacher_leakage() -> None:
     rendered = render_recovery_record(_target_record())
     result = audit_rendered_record(
@@ -175,6 +203,10 @@ def test_recovery_audit_checks_visible_answer_and_teacher_leakage() -> None:
     assert "answer_id_not_visible" in bad.reasons
 
 
+# [项目注释] 功能：`test_recovery_audit_rejects_overlong_without_truncation`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：render_recovery_record, audit_rendered_record, _target_record, FakeQwenTokenizer。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_recovery_audit_rejects_overlong_without_truncation() -> None:
     rendered = render_recovery_record(_target_record())
     rendered["messages"][-2]["content"] = "x" * 20_000
@@ -188,6 +220,10 @@ def test_recovery_audit_rejects_overlong_without_truncation() -> None:
     assert "overlong_sample" in result.reasons
 
 
+# [项目注释] 功能：`test_recovery_requires_public_system_and_final_target`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_target_record, raises, render_recovery_record。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_recovery_requires_public_system_and_final_target() -> None:
     source = _target_record()
     source["messages"] = source["messages"][1:]
@@ -195,6 +231,10 @@ def test_recovery_requires_public_system_and_final_target() -> None:
         render_recovery_record(source)
 
 
+# [项目注释] 功能：`test_public_warning_history_is_kept_as_recovery_context`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_target_record, render_recovery_record, audit_rendered_record, FakeQwenTokenizer。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_public_warning_history_is_kept_as_recovery_context() -> None:
     source = _target_record()
     source["messages"][3]["content"] = "Your question is too vague and general."
@@ -208,6 +248,10 @@ def test_public_warning_history_is_kept_as_recovery_context() -> None:
     assert result.valid
 
 
+# [项目注释] 功能：`test_build_quarantines_exact_duplicates_but_allows_same_task_boundaries`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_target_record, mkdir, write_text, build_recovery_sft_dataset。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_build_quarantines_exact_duplicates_but_allows_same_task_boundaries(tmp_path: Path) -> None:
     source = _target_record(split="grpo_train")
     target_dir = tmp_path / "targets"

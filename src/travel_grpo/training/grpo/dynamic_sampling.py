@@ -170,6 +170,9 @@ class BoundedSamplingState:
     consecutive_skips: int = 0
     diagnostics: list[dict[str, Any]] = field(default_factory=list)
 
+    # [项目注释] 功能：`record_batch`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：int, RuntimeError, dict。
+    # [项目注释] 输入：`stats`: Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def record_batch(self, stats: Mapping[str, Any]) -> bool:
         if self.generation_batches >= self.max_generation_batches:
             raise RuntimeError("bounded sampler exceeded its generation-batch limit")
@@ -180,6 +183,9 @@ class BoundedSamplingState:
         return self.accepted_groups >= self.required_groups
 
     @property
+    # [项目注释] 功能：`may_generate`：根据输入配置和中间状态构建或生成新的项目产物。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def may_generate(self) -> bool:
         return (
             self.accepted_groups < self.required_groups
@@ -221,6 +227,7 @@ class _RolloutCandidate:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`_CandidateSelection` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class _CandidateSelection:
     candidates: tuple[_RolloutCandidate, ...]
     reward_min: float
@@ -228,14 +235,23 @@ class _CandidateSelection:
     unique_reward_count: int
 
     @property
+    # [项目注释] 功能：`reward_range`：计算奖励、指标或聚合统计，供训练、评测或报告使用。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
     def reward_range(self) -> float:
         return self.reward_max - self.reward_min
 
     @property
+    # [项目注释] 功能：`uses_degraded`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def uses_degraded(self) -> bool:
         return any(candidate.degraded for candidate in self.candidates)
 
 
+# [项目注释] 功能：`_python_value`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：hasattr, item。
+# [项目注释] 输入：`value`: Any。
+# [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
 def _python_value(value: Any) -> Any:
     return value.item() if hasattr(value, "item") else value
 
@@ -376,6 +392,10 @@ def install_verl_bounded_sampler(manager: Any, config: Mapping[str, Any]) -> Non
         max_consecutive_skips=max_skips,
     )
 
+    # [项目注释] 功能：`generate_sequences`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：_ordered_unique, Counter, range,
+    # [项目注释]    original。
+    # [项目注释] 输入：`batch`: Any。
+    # [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
     def generate_sequences(batch: Any) -> Any:
         if batch.meta_info.get("validate", False):
             return original(batch)

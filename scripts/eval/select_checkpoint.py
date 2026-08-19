@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# [项目注释] 模块：命令行/流水线入口，负责执行 eval/select_checkpoint 阶段。
+# [项目注释] 该文件的公共边界、输入输出和调用关系由下方实现及架构文档共同定义。
+
 from __future__ import annotations
 import argparse, json, re, sys
 from pathlib import Path
@@ -9,6 +12,10 @@ from travel_grpo.evaluation.artifacts import atomic_json
 from travel_grpo.evaluation.checkpoint_selection import select_checkpoint
 from travel_grpo.evaluation.validation import summarize_validation_file
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args,
+# [项目注释]    select_checkpoint。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser=argparse.ArgumentParser()
     parser.add_argument("--validation-dir", type=Path)

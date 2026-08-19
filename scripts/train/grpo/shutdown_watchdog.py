@@ -14,6 +14,9 @@ from pathlib import Path
 STEP_PATTERN = re.compile(r"training/global_step:(\d+)")
 
 
+# [项目注释] 功能：`parse_args`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument, parse_args。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.Namespace`；具体值由各分支决定。
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tmux-session", required=True)
@@ -29,6 +32,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# [项目注释] 功能：`tmux_session_alive`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：run。
+# [项目注释] 输入：`session`: str。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def tmux_session_alive(session: str) -> bool:
     result = subprocess.run(
         ["tmux", "has-session", "-t", session],
@@ -39,6 +45,9 @@ def tmux_session_alive(session: str) -> bool:
     return result.returncode == 0
 
 
+# [项目注释] 功能：`latest_completed_step`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：findall, is_file, read_text, int。
+# [项目注释] 输入：`log_path`: Path。
+# [项目注释] 输出：标注返回 `int | None`；具体值由各分支决定。
 def latest_completed_step(log_path: Path) -> int | None:
     if not log_path.is_file():
         return None
@@ -46,6 +55,10 @@ def latest_completed_step(log_path: Path) -> int | None:
     return int(matches[-1]) if matches else None
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：parse_args, latest_completed_step, monotonic,
+# [项目注释]    print。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     args = parse_args()
     stall_seconds = args.stall_minutes * 60.0

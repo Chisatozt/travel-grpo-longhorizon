@@ -24,14 +24,25 @@ from travel_grpo.envs.userbench_interaction import (
 )
 
 
+# [项目注释] 类型：`CloseOnlyWrapper` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class CloseOnlyWrapper:
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self):
         self.closed = False
 
+    # [项目注释] 功能：`close`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def close(self):
         self.closed = True
 
 
+# [项目注释] 功能：`_stall_state`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：TravelRewardTask, UserBenchRewardSnapshot,
+# [项目注释]    UserBenchSessionState, frozenset。
+# [项目注释] 输入：`threshold`；`aspects`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _stall_state(*, threshold=2, aspects=("hotel",)):
     preferences = {
         aspect: frozenset({f"P{index}"})
@@ -66,6 +77,10 @@ def _stall_state(*, threshold=2, aspects=("hotel",)):
     return state, before
 
 
+# [项目注释] 功能：`_step`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：record_step, UserBenchStepResult,
+# [项目注释]    UserBenchObservation。
+# [项目注释] 输入：`state`；`snapshot`；`action`；`feedback`；`step`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def _step(state, snapshot, *, action=None, feedback="no change", step=1):
     state.record_step(
         UserBenchStepResult(
@@ -81,6 +96,10 @@ def _step(state, snapshot, *, action=None, feedback="no change", step=1):
     )
 
 
+# [项目注释] 功能：`test_embedded_source_commit_and_license_are_pinned`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：validate_embedded_userbench。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_embedded_source_commit_and_license_are_pinned():
     source = validate_embedded_userbench()
     assert source.upstream_commit == PINNED_USERBENCH_COMMIT
@@ -88,6 +107,11 @@ def test_embedded_source_commit_and_license_are_pinned():
     assert source.license_file.name == "LICENSE.txt"
 
 
+# [项目注释] 功能：`test_simulator_repr_hides_api_key_and_process_rejects_mixing`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_reset_user_simulator_binding_for_tests, UserSimulatorRuntime,
+# [项目注释]    bind_user_simulator_process, repr。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_simulator_repr_hides_api_key_and_process_rejects_mixing():
     _reset_user_simulator_binding_for_tests()
     grpo = UserSimulatorRuntime(
@@ -113,6 +137,10 @@ def test_simulator_repr_hides_api_key_and_process_rejects_mixing():
         (SimulatorRole.GRPO, "GRPO_USER_SIM"),
     ],
 )
+# [项目注释] 功能：`test_deepseek_simulator_roles_load_from_separate_variables`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：parametrize, from_environment, repr。
+# [项目注释] 输入：`role`；`prefix`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_deepseek_simulator_roles_load_from_separate_variables(role, prefix):
     runtime = UserSimulatorRuntime.from_environment(
         role,
@@ -128,6 +156,10 @@ def test_deepseek_simulator_roles_load_from_separate_variables(role, prefix):
     assert "secret" not in repr(runtime)
 
 
+# [项目注释] 功能：`test_grpo_simulator_rejects_a_different_model`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：raises,
+# [项目注释]    from_environment。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_grpo_simulator_rejects_a_different_model():
     with pytest.raises(SimulatorBoundaryError, match="must be"):
         UserSimulatorRuntime.from_environment(
@@ -140,7 +172,15 @@ def test_grpo_simulator_rejects_a_different_model():
         )
 
 
+# [项目注释] 功能：`test_concurrent_contexts_keep_task_and_raw_rewards_isolated`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, CloseOnlyWrapper, UserBenchSessionState, set_current_session。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_concurrent_contexts_keep_task_and_raw_rewards_isolated():
+    # [项目注释] 功能：`trajectory`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：CloseOnlyWrapper,
+    # [项目注释]    UserBenchSessionState, set_current_session, enumerate。
+    # [项目注释] 输入：`task_id`；`values`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def trajectory(task_id, values):
         wrapper = CloseOnlyWrapper()
         state = UserBenchSessionState(task_id, task_id, wrapper)
@@ -164,6 +204,9 @@ def test_concurrent_contexts_keep_task_and_raw_rewards_isolated():
             clear_current_session()
             assert wrapper.closed
 
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：gather, trajectory。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def scenario():
         return await asyncio.gather(
             trajectory("task-a", [0.2, 1.0]),
@@ -178,6 +221,10 @@ def test_concurrent_contexts_keep_task_and_raw_rewards_isolated():
     assert second["cumulative_reward"] == 0.8
 
 
+# [项目注释] 功能：`test_complete_fallback_is_degraded_but_still_reward_valid`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：TravelRewardTask, UserBenchRewardSnapshot, UserBenchSessionState, record_step。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_complete_fallback_is_degraded_but_still_reward_valid():
     task = TravelRewardTask(
         task_id="task-fallback",
@@ -219,6 +266,10 @@ def test_complete_fallback_is_degraded_but_still_reward_valid():
     assert report["infrastructure_errors"] == []
 
 
+# [项目注释] 功能：`test_fallback_with_missing_snapshot_is_hard_invalid`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：TravelRewardTask, UserBenchRewardSnapshot, UserBenchSessionState, record_step。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_fallback_with_missing_snapshot_is_hard_invalid():
     task = TravelRewardTask(
         task_id="task-invalid",
@@ -255,6 +306,10 @@ def test_fallback_with_missing_snapshot_is_hard_invalid():
     assert "missing_reward_evidence" in report["infrastructure_errors"]
 
 
+# [项目注释] 功能：`test_progress_from_preference_search_and_answer_resets_streak`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_stall_state, UserBenchRewardSnapshot, _step, frozenset。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_progress_from_preference_search_and_answer_resets_streak():
     preference_state, before = _stall_state()
     preference_after = UserBenchRewardSnapshot(
@@ -307,6 +362,10 @@ def test_progress_from_preference_search_and_answer_resets_streak():
     assert answer_state.consecutive_no_progress == 0
 
 
+# [项目注释] 功能：`test_no_progress_and_invalid_protocol_events_increment_streak`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_stall_state, range, record_non_progress, _step。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_no_progress_and_invalid_protocol_events_increment_streak():
     state, before = _stall_state(threshold=3)
     for step in range(1, 3):
@@ -326,6 +385,10 @@ def test_no_progress_and_invalid_protocol_events_increment_streak():
     assert state.termination_reason == "stalled_no_progress"
 
 
+# [项目注释] 功能：`test_stall_without_visible_answer_evidence_hard_cuts_valid_reward`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_stall_state, _step, reward_report。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_stall_without_visible_answer_evidence_hard_cuts_valid_reward():
     state, before = _stall_state(threshold=2)
     _step(state, before, step=1)
@@ -339,6 +402,10 @@ def test_stall_without_visible_answer_evidence_hard_cuts_valid_reward():
     assert report["penalty_components"]["max_steps"] == 0.0
 
 
+# [项目注释] 功能：`test_stall_with_visible_options_enters_one_recovery_pending_state`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_stall_state, UserBenchRewardSnapshot, _step, frozenset。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_stall_with_visible_options_enters_one_recovery_pending_state():
     state, before = _stall_state(threshold=2)
     searched = UserBenchRewardSnapshot(
@@ -364,6 +431,10 @@ def test_stall_with_visible_options_enters_one_recovery_pending_state():
     assert state.visible_answer_options == {"H1", "H2", "H3"}
 
 
+# [项目注释] 功能：`test_infrastructure_invalid_does_not_become_stall`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_stall_state, _step。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_infrastructure_invalid_does_not_become_stall():
     state, _ = _stall_state(threshold=1)
     _step(state, None)
@@ -372,6 +443,10 @@ def test_infrastructure_invalid_does_not_become_stall():
     assert state.stall_recovery_triggered is False
 
 
+# [项目注释] 功能：`test_feature_off_keeps_no_progress_control_flow_unchanged`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_stall_state, configure_stall_recovery, _step, record_non_progress。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_feature_off_keeps_no_progress_control_flow_unchanged():
     state, before = _stall_state(threshold=1)
     state.configure_stall_recovery(enabled=False, threshold=1)
@@ -382,6 +457,10 @@ def test_feature_off_keeps_no_progress_control_flow_unchanged():
     assert state.stall_recovery_triggered is False
 
 
+# [项目注释] 功能：`test_second_stall_after_recovery_use_hard_cuts_without_retry`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_stall_state, _step。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_second_stall_after_recovery_use_hard_cuts_without_retry():
     state, before = _stall_state(threshold=2)
     state.stall_recovery_used = True

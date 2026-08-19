@@ -88,10 +88,16 @@ PUBLIC_SEARCH_FALLBACK_MARKERS = (
 )
 
 
+# [项目注释] 功能：`_normalise_public_text`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：join, split, casefold。
+# [项目注释] 输入：`value`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _normalise_public_text(value: str) -> str:
     return " ".join(value.casefold().split())
 
 
+# [项目注释] 功能：`_hint_pattern`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：compile, escape, split, join。
+# [项目注释] 输入：`hint`: str。
+# [项目注释] 输出：标注返回 `re.Pattern[str]`；具体值由各分支决定。
 def _hint_pattern(hint: str) -> re.Pattern[str]:
     parts = [re.escape(part) for part in hint.casefold().split()]
     return re.compile(
@@ -134,6 +140,10 @@ class PublicObservation:
     kind: PublicObservationKind
     visible_option_ids: frozenset[str] = frozenset()
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, isinstance, TypeError,
+    # [项目注释]    PublicControlError。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if not isinstance(self.text, str):
             raise TypeError("public observation text must be a string")
@@ -148,6 +158,9 @@ class PublicObservation:
             raise PublicControlError("visible_option_ids must contain official option IDs")
 
     @property
+    # [项目注释] 功能：`is_fallback`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def is_fallback(self) -> bool:
         return self.kind in {
             PublicObservationKind.SEARCH_FALLBACK,
@@ -155,6 +168,9 @@ class PublicObservation:
         }
 
     @property
+    # [项目注释] 功能：`is_normal_search`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def is_normal_search(self) -> bool:
         return self.kind is PublicObservationKind.SEARCH_NORMAL
 
@@ -166,6 +182,10 @@ class PublicObservation:
         return f"{self.kind.value}:{_normalise_public_text(self.text)}:{ids}"
 
 
+# [项目注释] 功能：`_coerce_choice`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, TypeError, ActionChoice,
+# [项目注释]    casefold。
+# [项目注释] 输入：`choice`: ActionChoice | str | None。
+# [项目注释] 输出：标注返回 `ActionChoice | None`；具体值由各分支决定。
 def _coerce_choice(choice: ActionChoice | str | None) -> ActionChoice | None:
     if choice is None:
         return None
@@ -248,6 +268,10 @@ def public_semantic_signature(
     return semantic
 
 
+# [项目注释] 功能：`_validate_public_aspects`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：isinstance, tuple, TypeError,
+# [项目注释]    strip。
+# [项目注释] 输入：`aspects`: Sequence[str]。
+# [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
 def _validate_public_aspects(aspects: Sequence[str]) -> tuple[str, ...]:
     if isinstance(aspects, (str, bytes)):
         raise TypeError("public_aspects must be a sequence of aspect names")
@@ -265,6 +289,10 @@ def _validate_public_aspects(aspects: Sequence[str]) -> tuple[str, ...]:
     return tuple(result)
 
 
+# [项目注释] 功能：`_aspect_mentioned_in_content`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, len, search,
+# [项目注释]    _hint_pattern。
+# [项目注释] 输入：`content`: str；`public_aspects`: Sequence[str]。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def _aspect_mentioned_in_content(content: str, public_aspects: Sequence[str]) -> str | None:
     matches: list[str] = []
     for aspect in public_aspects:
@@ -276,6 +304,9 @@ def _aspect_mentioned_in_content(content: str, public_aspects: Sequence[str]) ->
     return matches[0] if len(matches) == 1 else None
 
 
+# [项目注释] 功能：`_option_aspect`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：aspect_from_option_id。
+# [项目注释] 输入：`option_id`: str；`public_aspects`: Sequence[str]。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def _option_aspect(option_id: str, public_aspects: Sequence[str]) -> str | None:
     aspect = aspect_from_option_id(option_id)
     return aspect if aspect in public_aspects else None
@@ -298,6 +329,10 @@ class PublicAspectState:
     # public completion events. It never contains hidden preference IDs/values.
     preferences_complete: bool = False
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, PublicControlError, isinstance,
+    # [项目注释]    TypeError。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if not isinstance(self.aspect, str) or not self.aspect.strip():
             raise PublicControlError("aspect must be a non-empty string")
@@ -355,6 +390,9 @@ class PublicControlState:
     last_transition_aspect: str | None = None
     last_transition_status: PublicAspectStatus | None = None
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, isinstance, TypeError, len。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if not isinstance(self.aspects, tuple):
             raise TypeError("aspects must be a tuple")
@@ -392,10 +430,16 @@ class PublicControlState:
             raise TypeError("last_transition_status must be PublicAspectStatus or None")
 
     @property
+    # [项目注释] 功能：`public_aspects`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：tuple。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
     def public_aspects(self) -> tuple[str, ...]:
         return tuple(item.aspect for item in self.aspects)
 
     @property
+    # [项目注释] 功能：`open_aspects`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：tuple。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
     def open_aspects(self) -> tuple[str, ...]:
         return tuple(
             item.aspect
@@ -404,6 +448,9 @@ class PublicControlState:
         )
 
     @property
+    # [项目注释] 功能：`current`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：next。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `PublicAspectState | None`；具体值由各分支决定。
     def current(self) -> PublicAspectState | None:
         if self.current_aspect is None:
             return None
@@ -463,14 +510,23 @@ class PublicControlState:
         )
 
     @property
+    # [项目注释] 功能：`answered_count`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：len。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
     def answered_count(self) -> int:
         return len(self.answered_aspects)
 
     @property
+    # [项目注释] 功能：`blocked_count`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：len。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
     def blocked_count(self) -> int:
         return len(self.blocked_aspects)
 
     @property
+    # [项目注释] 功能：`all_aspects_terminal`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：bool。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def all_aspects_terminal(self) -> bool:
         return bool(self.aspects) and not self.open_aspects
 
@@ -482,6 +538,9 @@ class PublicControlEvent:
     action: UserBenchAction | None = None
     observation: PublicObservation | None = None
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：TypeError, isinstance。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if self.action is not None and not isinstance(self.action, UserBenchAction):
             raise TypeError("event action must be a UserBenchAction or None")
@@ -507,12 +566,18 @@ def new_public_control_state(
     )
 
 
+# [项目注释] 功能：`_validate_threshold`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：isinstance, PublicControlError。
+# [项目注释] 输入：`value`: Any。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def _validate_threshold(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise PublicControlError("no_progress_threshold must be an integer >= 1")
     return value
 
 
+# [项目注释] 功能：`_replace_aspect`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：replace, tuple。
+# [项目注释] 输入：`state`: PublicControlState；`updated`: PublicAspectState。
+# [项目注释] 输出：标注返回 `PublicControlState`；具体值由各分支决定。
 def _replace_aspect(
     state: PublicControlState,
     updated: PublicAspectState,
@@ -554,10 +619,16 @@ def mark_public_preference_complete(
     )
 
 
+# [项目注释] 功能：`_progress_reset`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。 主要协作调用：replace。
+# [项目注释] 输入：`state`: PublicControlState。
+# [项目注释] 输出：标注返回 `PublicControlState`；具体值由各分支决定。
 def _progress_reset(state: PublicControlState) -> PublicControlState:
     return replace(state, consecutive_no_progress=0)
 
 
+# [项目注释] 功能：`_progress_increment`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：replace, max。
+# [项目注释] 输入：`state`: PublicControlState。
+# [项目注释] 输出：标注返回 `PublicControlState`；具体值由各分支决定。
 def _progress_increment(state: PublicControlState) -> PublicControlState:
     current = state.consecutive_no_progress + 1
     # Only elicitation/no-op turns can trigger the forced-search phase. Once a
@@ -580,6 +651,10 @@ def _progress_increment(state: PublicControlState) -> PublicControlState:
     )
 
 
+# [项目注释] 功能：`_target_aspect`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_aspect_mentioned_in_content, discard,
+# [项目注释]    strip, _option_aspect。
+# [项目注释] 输入：`state`: PublicControlState；`action`: UserBenchAction。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def _target_aspect(
     state: PublicControlState,
     action: UserBenchAction,
@@ -645,6 +720,9 @@ def is_substantive_query_change(previous_query: str, candidate_query: str) -> bo
     return Counter(previous.split()) != Counter(candidate.split())
 
 
+# [项目注释] 功能：`_answer_option_ids`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：strip, split。
+# [项目注释] 输入：`action`: UserBenchAction。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _answer_option_ids(action: UserBenchAction) -> list[str]:
     return [item.strip() for item in action.content.split(",") if item.strip()]
 
@@ -751,6 +829,9 @@ def note_public_non_progress(state: PublicControlState) -> PublicControlState:
     return _progress_increment(state)
 
 
+# [项目注释] 功能：`_record_submitted_answers`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list, replace, strip, split。
+# [项目注释] 输入：`state`: PublicControlState；`action`: UserBenchAction。
+# [项目注释] 输出：标注返回 `PublicControlState`；具体值由各分支决定。
 def _record_submitted_answers(
     state: PublicControlState,
     action: UserBenchAction,
@@ -768,10 +849,17 @@ def _record_submitted_answers(
     return replace(state, submitted_answer_ids=tuple(merged))
 
 
+# [项目注释] 功能：`_all_public_aspects_terminal`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：bool。
+# [项目注释] 输入：`state`: PublicControlState。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _all_public_aspects_terminal(state: PublicControlState) -> bool:
     return bool(state.aspects) and not state.open_aspects
 
 
+# [项目注释] 功能：`_apply_search_action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_target_aspect,
+# [项目注释]    public_query_signature, list, replace。
+# [项目注释] 输入：`state`: PublicControlState；`action`: UserBenchAction；`observation`: PublicObservation | None。
+# [项目注释] 输出：标注返回 `PublicControlState`；具体值由各分支决定。
 def _apply_search_action(
     state: PublicControlState,
     action: UserBenchAction,
@@ -879,6 +967,10 @@ def _apply_search_action(
     return _progress_increment(state) if observation is None else state
 
 
+# [项目注释] 功能：`_apply_answer_action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_record_submitted_answers,
+# [项目注释]    _target_aspect, next, replace。
+# [项目注释] 输入：`state`: PublicControlState；`action`: UserBenchAction。
+# [项目注释] 输出：标注返回 `PublicControlState`；具体值由各分支决定。
 def _apply_answer_action(
     state: PublicControlState,
     action: UserBenchAction,

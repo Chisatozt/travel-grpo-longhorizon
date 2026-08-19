@@ -16,6 +16,9 @@ from travel_grpo.models.openai_compatible import (
 from travel_grpo.envs.userbench_tools import ActionChoice
 
 
+# [项目注释] 功能：`runtime`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：TeacherRuntime。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def runtime():
     return TeacherRuntime(
         model="deepseek-v4-flash",
@@ -24,12 +27,19 @@ def runtime():
     )
 
 
+# [项目注释] 类型：`FakeCompletions` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class FakeCompletions:
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`response`；`error`。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self, response=None, error=None):
         self.response = response
         self.error = error
         self.requests = []
 
+    # [项目注释] 功能：`create`：异步地根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：isinstance, pop。
+    # [项目注释] 输入：**`kwargs`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def create(self, **kwargs):
         self.requests.append(kwargs)
         if self.error is not None:
@@ -39,11 +49,18 @@ class FakeCompletions:
         return self.response
 
 
+# [项目注释] 类型：`FakeClient` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class FakeClient:
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：SimpleNamespace。
+    # [项目注释] 输入：`completions`。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self, completions):
         self.chat = SimpleNamespace(completions=completions)
 
 
+# [项目注释] 功能：`response`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：SimpleNamespace, range, dumps。
+# [项目注释] 输入：`arguments`；`name`；`count`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def response(arguments, *, name="interact_with_env", count=1):
     calls = [
         SimpleNamespace(
@@ -56,6 +73,10 @@ def response(arguments, *, name="interact_with_env", count=1):
     return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
 
+# [项目注释] 功能：`test_teacher_runtime_is_secret_safe_and_role_is_pinned`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：runtime, repr, raises, TeacherRuntime。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_runtime_is_secret_safe_and_role_is_pinned():
     value = runtime()
     assert "top-secret" not in repr(value)
@@ -64,6 +85,10 @@ def test_teacher_runtime_is_secret_safe_and_role_is_pinned():
         TeacherRuntime("other-model", "https://provider.example/v1", "secret")
 
 
+# [项目注释] 功能：`test_teacher_runtime_environment_defaults_to_three_action_retries`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：from_environment。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_runtime_environment_defaults_to_three_action_retries():
     value = TeacherRuntime.from_environment(
         {
@@ -75,7 +100,15 @@ def test_teacher_runtime_environment_defaults_to_three_action_retries():
     assert value.action_retries == 3
 
 
+# [项目注释] 功能：`test_teacher_client_sends_required_official_tool_and_parses_action`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, FakeCompletions, OpenAICompatibleTeacherClient, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_client_sends_required_official_tool_and_parses_action():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：FakeCompletions,
+    # [项目注释]    OpenAICompatibleTeacherClient, response, runtime。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         completions = FakeCompletions(
             response(
@@ -102,7 +135,15 @@ def test_teacher_client_sends_required_official_tool_and_parses_action():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_teacher_protocol_requires_exactly_one_tool_call`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：run,
+# [项目注释]    FakeCompletions, OpenAICompatibleTeacherClient, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_protocol_requires_exactly_one_tool_call():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：FakeCompletions,
+    # [项目注释]    OpenAICompatibleTeacherClient, response, runtime。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         completions = FakeCompletions(
             response({"thought": "x", "choice": "search", "content": "x"}, count=2)
@@ -117,7 +158,15 @@ def test_teacher_protocol_requires_exactly_one_tool_call():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_teacher_protocol_retries_before_accepting_one_call`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, FakeCompletions, OpenAICompatibleTeacherClient, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_protocol_retries_before_accepting_one_call():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：FakeCompletions,
+    # [项目注释]    OpenAICompatibleTeacherClient, runtime, generate_action。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         arguments = {"thought": "x", "choice": "search", "content": "hotels"}
         completions = FakeCompletions(
@@ -139,7 +188,15 @@ def test_teacher_protocol_retries_before_accepting_one_call():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_thought_retry_locks_action_and_gives_specific_length_correction`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, FakeCompletions, OpenAICompatibleTeacherClient, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_thought_retry_locks_action_and_gives_specific_length_correction():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：FakeCompletions,
+    # [项目注释]    OpenAICompatibleTeacherClient, runtime, generate_action。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         long_arguments = {
             "thought": "x" * 201,
@@ -172,7 +229,15 @@ def test_thought_retry_locks_action_and_gives_specific_length_correction():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_teacher_force_answer_narrows_tool_schema`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：run,
+# [项目注释]    FakeCompletions, OpenAICompatibleTeacherClient, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_force_answer_narrows_tool_schema():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：FakeCompletions,
+    # [项目注释]    OpenAICompatibleTeacherClient, response, runtime。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         completions = FakeCompletions(
             response({"thought": "finish", "choice": "answer", "content": "H1"})
@@ -191,7 +256,15 @@ def test_teacher_force_answer_narrows_tool_schema():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_teacher_request_constraint_narrows_choice_and_content`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, FakeCompletions, OpenAICompatibleTeacherClient, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_request_constraint_narrows_choice_and_content():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：FakeCompletions,
+    # [项目注释]    OpenAICompatibleTeacherClient, response, runtime。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         content = "Which hotel amenities are important to you?"
         completions = FakeCompletions(
@@ -213,7 +286,15 @@ def test_teacher_request_constraint_narrows_choice_and_content():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_teacher_rejects_nonempty_assistant_prose_with_tool_call`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, response, OpenAICompatibleTeacherClient, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_rejects_nonempty_assistant_prose_with_tool_call():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：response,
+    # [项目注释]    OpenAICompatibleTeacherClient, runtime, raises。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         value = response(
             {"thought": "x", "choice": "search", "content": "hotels"}
@@ -228,7 +309,15 @@ def test_teacher_rejects_nonempty_assistant_prose_with_tool_call():
     asyncio.run(scenario())
 
 
+# [项目注释] 功能：`test_teacher_api_error_does_not_echo_secret_or_endpoint`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, FakeCompletions, OpenAICompatibleTeacherClient, scenario。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_api_error_does_not_echo_secret_or_endpoint():
+    # [项目注释] 功能：`scenario`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：FakeCompletions,
+    # [项目注释]    OpenAICompatibleTeacherClient, runtime, raises。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def scenario():
         completions = FakeCompletions(error=RuntimeError("provider unavailable"))
         client = OpenAICompatibleTeacherClient(

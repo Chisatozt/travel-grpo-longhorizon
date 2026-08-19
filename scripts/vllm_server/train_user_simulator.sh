@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# [项目注释] 文件职责：启动训练用户模拟器服务。
 set -euo pipefail
 
 # UserBench simulation is now an external DeepSeek-compatible API, not a local

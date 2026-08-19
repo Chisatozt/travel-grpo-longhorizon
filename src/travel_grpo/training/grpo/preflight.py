@@ -35,17 +35,27 @@ PINNED = {
 TRANSFORMERS_COMMIT = "7ea2320c76117e6742364808a666ef6f2fb40a67"
 
 
+# [项目注释] 功能：`_check`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：RuntimeError。
+# [项目注释] 输入：`condition`: bool；`message`: str。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _check(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
 
 
+# [项目注释] 功能：`_sampling_value`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, getattr。
+# [项目注释] 输入：`sampling_params`: Mapping[str, Any]；`name`: str。
+# [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
 def _sampling_value(sampling_params: Mapping[str, Any], name: str) -> Any:
     if isinstance(sampling_params, Mapping):
         return sampling_params.get(name)
     return getattr(sampling_params, name, None)
 
 
+# [项目注释] 功能：`_sampling_float`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_sampling_value, float, isfinite,
+# [项目注释]    ValueError。
+# [项目注释] 输入：`sampling_params`: Mapping[str, Any]；`name`: str。
+# [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
 def _sampling_float(sampling_params: Mapping[str, Any], name: str) -> float:
     raw = _sampling_value(sampling_params, name)
     try:
@@ -102,6 +112,9 @@ def validate_sampling_profiles(
     )
 
 
+# [项目注释] 功能：`_complete_model`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_check, is_dir, is_file, any。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _complete_model(path: Path) -> None:
     _check(path.is_dir(), f"merged SFT model directory is missing: {path}")
     _check((path / "config.json").is_file(), f"model config.json is missing: {path}")
@@ -112,6 +125,9 @@ def _complete_model(path: Path) -> None:
     )
 
 
+# [项目注释] 功能：`_simulator_environment`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_check, bool, casefold, float。
+# [项目注释] 输入：`environ`: Mapping[str, str]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _simulator_environment(environ: Mapping[str, str]) -> None:
     for name in ("GRPO_USER_SIM_MODEL", "GRPO_USER_SIM_BASE_URL", "GRPO_USER_SIM_API_KEY"):
         _check(bool(environ.get(name, "").strip()), f"missing environment variable {name}")
@@ -151,6 +167,32 @@ def run_preflight(
     _check(int(data["train_batch_size"]) == 2 and int(data["val_batch_size"]) == 2, "GRPO batch sizes must be 2/2")
     _check(int(rollout["n"]) == 4 and int(rollout["max_parallel_calls"]) == 1, "rollout must use n=4 and one tool call")
     _check(rollout["format"] == "qwen3_coder" and rollout["enable_thinking"] is False, "Qwen tool format/thinking contract drift")
+    actor = profile.get("actor")
+    _check(isinstance(actor, Mapping), "actor must be a mapping")
+    reuse_rollout_updates = actor.get("reuse_rollout_updates", False)
+    _check(isinstance(reuse_rollout_updates, bool), "actor.reuse_rollout_updates must be a boolean")
+    try:
+        ppo_epochs = int(actor.get("ppo_epochs", 1))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("actor.ppo_epochs must be an integer") from exc
+    _check(ppo_epochs >= 1, "actor.ppo_epochs must be >= 1")
+    if reuse_rollout_updates:
+        _check(ppo_epochs >= 2, "rollout reuse requires actor.ppo_epochs >= 2")
+    else:
+        _check(ppo_epochs == 1, "actor.ppo_epochs must be 1 when rollout reuse is disabled")
+    actor_rollout_ref = profile.get("actor_rollout_ref")
+    _check(isinstance(actor_rollout_ref, Mapping), "actor_rollout_ref must be a mapping")
+    ref_rollout = actor_rollout_ref.get("rollout")
+    _check(isinstance(ref_rollout, Mapping), "actor_rollout_ref.rollout must be a mapping")
+    multi_turn = ref_rollout.get("multi_turn")
+    _check(isinstance(multi_turn, Mapping), "actor_rollout_ref.rollout.multi_turn must be a mapping")
+    try:
+        max_tool_response_length = int(multi_turn.get("max_tool_response_length", 256))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("multi_turn.max_tool_response_length must be an integer") from exc
+    _check(max_tool_response_length >= 1024, "multi_turn.max_tool_response_length must be >= 1024")
+    truncate_side = multi_turn.get("tool_response_truncate_side", "middle")
+    _check(truncate_side in {"left", "middle", "right"}, "tool_response_truncate_side must be left, middle, or right")
     _check(int(data["max_prompt_length"]) + int(data["max_response_length"]) == 32768, "context budget must be 32768")
     turn_credit = profile.get("turn_credit", {})
     _check(isinstance(turn_credit, Mapping), "turn_credit must be a mapping")

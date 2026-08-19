@@ -14,6 +14,10 @@ ROOT = Path(__file__).resolve().parents[3]
 SFT_TRAIN = ROOT / "scripts/train/sft/sft_train.py"
 
 
+# [项目注释] 功能：`build_parser`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument,
+# [项目注释]    add_mutually_exclusive_group。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.ArgumentParser`；具体值由各分支决定。
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -37,6 +41,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# [项目注释] 功能：`_load_config`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：safe_load, isinstance, ValueError,
+# [项目注释]    RuntimeError。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _load_config(path: Path) -> dict[str, Any]:
     try:
         import yaml
@@ -51,6 +59,9 @@ def _load_config(path: Path) -> dict[str, Any]:
     return value
 
 
+# [项目注释] 功能：`_project_path`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：Path, ValueError, is_absolute, resolve。
+# [项目注释] 输入：`value`: Any；`field`: str。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def _project_path(value: Any, field: str) -> Path:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field} must be a non-empty path")
@@ -58,6 +69,10 @@ def _project_path(value: Any, field: str) -> Path:
     return path.resolve() if path.is_absolute() else (ROOT / path).resolve()
 
 
+# [项目注释] 功能：`_stage_paths`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_load_config, _project_path, ValueError,
+# [项目注释]    isinstance。
+# [项目注释] 输入：`config_path`: Path。
+# [项目注释] 输出：标注返回 `tuple[Path, Path | None]`；具体值由各分支决定。
 def _stage_paths(config_path: Path) -> tuple[Path, Path | None]:
     config = _load_config(config_path)
     training = config.get("training")
@@ -72,6 +87,9 @@ def _stage_paths(config_path: Path) -> tuple[Path, Path | None]:
     return output, init_from
 
 
+# [项目注释] 功能：`_adapter_complete`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：is_file, any。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _adapter_complete(path: Path) -> bool:
     return (path / "adapter_config.json").is_file() and any(
         (path / name).is_file()
@@ -79,6 +97,9 @@ def _adapter_complete(path: Path) -> bool:
     )
 
 
+# [项目注释] 功能：`_command`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str, extend, resolve。
+# [项目注释] 输入：`config`: Path；`args`: argparse.Namespace；`resume`: Path | None。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _command(
     config: Path,
     args: argparse.Namespace,
@@ -98,6 +119,9 @@ def _command(
     return command
 
 
+# [项目注释] 功能：`_run`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：print, run, RuntimeError。
+# [项目注释] 输入：`label`: str；`command`: list[str]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _run(label: str, command: list[str]) -> None:
     print(f"[two-stage-sft] {label}", file=sys.stderr, flush=True)
     completed = subprocess.run(command, cwd=ROOT, check=False)
@@ -105,6 +129,9 @@ def _run(label: str, command: list[str]) -> None:
         raise RuntimeError(f"{label} failed with exit code {completed.returncode}")
 
 
+# [项目注释] 功能：`run`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：resolve, _stage_paths, ValueError, _run。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def run(args: argparse.Namespace) -> None:
     if args.limit is not None and args.limit <= 0:
         raise ValueError("--limit must be positive")
@@ -136,6 +163,9 @@ def run(args: argparse.Namespace) -> None:
         )
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：run, parse_args, SystemExit, build_parser。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def main() -> None:
     try:
         run(build_parser().parse_args())

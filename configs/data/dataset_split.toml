@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 canonical 数据划分、seed、比例和输出路径。
 # Frozen, deterministic project-level split contract.
 schema_version = "travel-dataset-split-v2"
 variant = "multiturn_onechoice"

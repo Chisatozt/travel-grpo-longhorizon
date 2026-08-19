@@ -34,6 +34,9 @@ RESULT_METRIC_KEYS = (
 )
 
 
+# [项目注释] 功能：`sanitize_reward`：计算奖励、指标或聚合统计，供训练、评测或报告使用。
+# [项目注释] 输入：`report`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def sanitize_reward(report: Mapping[str, Any]) -> dict[str, Any]:
     allowed = (
         "reward_version", "reward_valid", "terminal_reward", "raw_terminal_reward",
@@ -53,6 +56,9 @@ def sanitize_reward(report: Mapping[str, Any]) -> dict[str, Any]:
     return {key: report[key] for key in allowed if key in report}
 
 
+# [项目注释] 功能：`result_metrics`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：min, isinstance, float, values。
+# [项目注释] 输入：`result`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, float]`；具体值由各分支决定。
 def result_metrics(result: Mapping[str, Any]) -> dict[str, float]:
     if result.get("infrastructure_valid") is not True:
         return {}

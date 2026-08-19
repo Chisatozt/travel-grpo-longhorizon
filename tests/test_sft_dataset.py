@@ -35,19 +35,30 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOL_CONFIG = ROOT / "configs/tool_config/userbench_tools.yaml"
 
 
+# [项目注释] 类型：`FakeQwenTokenizer` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class FakeQwenTokenizer:
     pad_token_id = 0
     eos_token_id = 2
     padding_side = "right"
 
     @staticmethod
+    # [项目注释] 功能：`encode`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ord。
+    # [项目注释] 输入：`text`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def encode(text):
         return [ord(value) + 3 for value in text]
 
     @staticmethod
+    # [项目注释] 功能：`decode`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：join, chr。
+    # [项目注释] 输入：`tokens`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def decode(tokens):
         return "".join(chr(value - 3) for value in tokens)
 
+    # [项目注释] 功能：`apply_chat_template`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：encode, load_tool_schema,
+    # [项目注释]    isinstance, dumps。
+    # [项目注释] 输入：`conversation`；`tools`；`tokenize`；`add_generation_prompt`；`enable_thinking`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def apply_chat_template(
         self, conversation, *, tools, tokenize, add_generation_prompt, enable_thinking
     ):
@@ -73,6 +84,9 @@ class FakeQwenTokenizer:
         return self.encode(text)
 
 
+# [项目注释] 功能：`_call`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：dumps。
+# [项目注释] 输入：`call_id`；`choice`；`content`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _call(call_id, choice, content):
     arguments = json.dumps(
         {"thought": "next step", "choice": choice, "content": content},
@@ -91,6 +105,9 @@ def _call(call_id, choice, content):
     }
 
 
+# [项目注释] 功能：`valid_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_call。
+# [项目注释] 输入：`task_id`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def valid_record(task_id="hotel:2-1"):
     reward = {
         "reward_version": REWARD_VERSION,
@@ -150,6 +167,10 @@ def valid_record(task_id="hotel:2-1"):
     }
 
 
+# [项目注释] 功能：`test_legacy_reward_v2_fixture_without_new_diagnostics_remains_sft_compatible`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：loads, audit_trajectory_file, build_action_only_dataset, sft_admission_reasons。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_legacy_reward_v2_fixture_without_new_diagnostics_remains_sft_compatible():
     fixture = ROOT / "tests/fixtures/teacher_reward_v2_legacy.jsonl"
     record = json.loads(fixture.read_text(encoding="utf-8").splitlines()[0])
@@ -184,6 +205,9 @@ def test_legacy_reward_v2_fixture_without_new_diagnostics_remains_sft_compatible
     }
 
 
+# [项目注释] 功能：`valid_prefix_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_call。
+# [项目注释] 输入：`task_id`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def valid_prefix_record(task_id="hotel:2-prefix"):
     return {
         "schema_version": PREFIX_SCHEMA_VERSION,
@@ -226,6 +250,9 @@ def valid_prefix_record(task_id="hotel:2-prefix"):
     }
 
 
+# [项目注释] 功能：`write_jsonl`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：write_text, join, dumps。
+# [项目注释] 输入：`path`；`records`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def write_jsonl(path, records):
     path.write_text(
         "".join(json.dumps(value, ensure_ascii=False) + "\n" for value in records),
@@ -233,6 +260,10 @@ def write_jsonl(path, records):
     )
 
 
+# [项目注释] 功能：`test_valid_multiturn_empty_content_renders_only_tool_calls_as_labels`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：valid_record, FakeQwenTokenizer, build_action_only_examples, load_tool_schema。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_valid_multiturn_empty_content_renders_only_tool_calls_as_labels():
     record = valid_record()
     tokenizer = FakeQwenTokenizer()
@@ -252,6 +283,11 @@ def test_valid_multiturn_empty_content_renders_only_tool_calls_as_labels():
         assert "H1 is available" not in target
 
 
+# [项目注释] 功能：`test_safe_prefix_has_a_separate_gate_and_uses_action_only_rendering`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：valid_prefix_record, build_action_only_examples, prefix_admission_reasons,
+# [项目注释]    FakeQwenTokenizer。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_safe_prefix_has_a_separate_gate_and_uses_action_only_rendering():
     record = valid_prefix_record()
     assert prefix_admission_reasons(record) == ()
@@ -267,6 +303,10 @@ def test_safe_prefix_has_a_separate_gate_and_uses_action_only_rendering():
     assert examples[0].label_tokens > 0
 
 
+# [项目注释] 功能：`test_prefix_gate_rejects_a_retained_failed_answer`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：valid_prefix_record, extend, prefix_admission_reasons, _call。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_prefix_gate_rejects_a_retained_failed_answer():
     record = valid_prefix_record()
     record["messages"].extend(
@@ -294,6 +334,10 @@ def test_prefix_gate_rejects_a_retained_failed_answer():
     )
 
 
+# [项目注释] 功能：`test_loss_masked_assistant_turn_is_kept_in_context_but_not_supervised`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：valid_record, insert, FakeQwenTokenizer, build_action_only_examples。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_loss_masked_assistant_turn_is_kept_in_context_but_not_supervised():
     record = valid_record()
     record["messages"].insert(2, _call("call-repair", "search", "invalid search"))
@@ -352,6 +396,10 @@ def test_loss_masked_assistant_turn_is_kept_in_context_but_not_supervised():
         ),
     ],
 )
+# [项目注释] 功能：`test_message_contract_failures`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：parametrize, valid_record,
+# [项目注释]    mutate, trajectory_rejection_reasons。
+# [项目注释] 输入：`mutate`；`reason`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_message_contract_failures(mutate, reason):
     record = valid_record()
     mutate(record)
@@ -372,12 +420,20 @@ def test_message_contract_failures(mutate, reason):
         ("wrong_answers", 1, "wrong_answers"),
     ],
 )
+# [项目注释] 功能：`test_reward_admission_failures`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：parametrize, valid_record,
+# [项目注释]    trajectory_rejection_reasons。
+# [项目注释] 输入：`field`；`value`；`reason`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_reward_admission_failures(field, value, reason):
     record = valid_record()
     record[field] = value
     assert reason in trajectory_rejection_reasons(record)
 
 
+# [项目注释] 功能：`test_missing_reward_and_vague_feedback_are_both_reported`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：valid_record, trajectory_rejection_reasons。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_missing_reward_and_vague_feedback_are_both_reported():
     record = valid_record()
     record["schema_version"] = "userbench-teacher-trajectory-v3"
@@ -389,6 +445,10 @@ def test_missing_reward_and_vague_feedback_are_both_reported():
     assert "vague_action_feedback" in reasons
 
 
+# [项目注释] 功能：`test_loader_rejects_duplicate_task_ids`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：write_jsonl,
+# [项目注释]    audit_trajectory_file, raises, load_sft_trajectories。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_loader_rejects_duplicate_task_ids(tmp_path):
     source = tmp_path / "duplicate.jsonl"
     write_jsonl(source, [valid_record(), valid_record()])
@@ -399,6 +459,10 @@ def test_loader_rejects_duplicate_task_ids(tmp_path):
 
 
 @pytest.mark.parametrize("declared", ["silver", "forged", None])
+# [项目注释] 功能：`test_sft_gate_ignores_serialized_quality_tier_for_gold_evidence`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：parametrize, valid_record, sft_admission_reasons。
+# [项目注释] 输入：`declared`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_sft_gate_ignores_serialized_quality_tier_for_gold_evidence(declared):
     record = valid_record()
     record["quality_tier"] = declared
@@ -410,6 +474,10 @@ def test_sft_gate_ignores_serialized_quality_tier_for_gold_evidence(declared):
     ) == ("quality_tier_not_accepted",)
 
 
+# [项目注释] 功能：`test_legacy_silver_judgment_fallback_without_marker_is_admitted`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：valid_record, sft_admission_reasons。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_legacy_silver_judgment_fallback_without_marker_is_admitted():
     record = valid_record()
     record["quality_tier"] = "silver"
@@ -428,6 +496,10 @@ def test_legacy_silver_judgment_fallback_without_marker_is_admitted():
     ) == ()
 
 
+# [项目注释] 功能：`test_overlength_fails_without_truncation`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：FakeQwenTokenizer, raises, build_action_only_examples, load_tool_schema。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_overlength_fails_without_truncation():
     tokenizer = FakeQwenTokenizer()
     with pytest.raises(SFTDatasetError, match="silent truncation is forbidden"):
@@ -436,6 +508,10 @@ def test_overlength_fails_without_truncation():
         )
 
 
+# [项目注释] 功能：`test_dataset_builder_rejects_whole_overlong_trajectory_and_reports_it`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：valid_record, build_action_only_dataset, FakeQwenTokenizer, load_tool_schema。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_dataset_builder_rejects_whole_overlong_trajectory_and_reports_it():
     short = valid_record("hotel:2-short")
     long = valid_record("hotel:2-long")
@@ -458,6 +534,10 @@ def test_dataset_builder_rejects_whole_overlong_trajectory_and_reports_it():
     assert "silent truncation is forbidden" in rejected[0]["detail"]
 
 
+# [项目注释] 功能：`test_collator_uses_minus_100_for_label_padding`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：FakeQwenTokenizer, build_action_only_examples, min, all。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_collator_uses_minus_100_for_label_padding():
     tokenizer = FakeQwenTokenizer()
     examples = build_action_only_examples(
@@ -472,6 +552,10 @@ def test_collator_uses_minus_100_for_label_padding():
     assert (batch["labels"][shorter][padding] == IGNORE_INDEX).all()
 
 
+# [项目注释] 功能：`test_merge_lora_model_class_manifest_and_output_guard`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：spec_from_file_location, module_from_spec, exec_module, build_merge_manifest。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_merge_lora_model_class_manifest_and_output_guard(tmp_path):
     script = ROOT / "scripts/train/sft/merge_lora.py"
     spec = importlib.util.spec_from_file_location("travel_merge_lora", script)
@@ -510,11 +594,19 @@ def test_merge_lora_model_class_manifest_and_output_guard(tmp_path):
     assert "must be new or empty" in rejected.stderr
 
 
+# [项目注释] 功能：`test_train_validation_overlap_fails`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：raises,
+# [项目注释]    assert_train_validation_disjoint, valid_record。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_train_validation_overlap_fails():
     with pytest.raises(SFTDatasetError, match="overlap"):
         assert_train_validation_disjoint([valid_record()], [valid_record()])
 
 
+# [项目注释] 功能：`test_sft_task_must_remain_in_its_frozen_split`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：raises,
+# [项目注释]    assert_task_ids_within_split, valid_record。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_sft_task_must_remain_in_its_frozen_split():
     with pytest.raises(SFTDatasetError, match="outside its frozen split"):
         assert_task_ids_within_split(
@@ -522,8 +614,16 @@ def test_sft_task_must_remain_in_its_frozen_split():
         )
 
 
+# [项目注释] 功能：`test_chat_template_prefix_mismatch_fails`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：raises,
+# [项目注释]    build_action_only_examples, apply_chat_template, BrokenTokenizer。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_chat_template_prefix_mismatch_fails():
+    # [项目注释] 类型：`BrokenTokenizer` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class BrokenTokenizer(FakeQwenTokenizer):
+        # [项目注释] 功能：`apply_chat_template`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：apply_chat_template, super。
+        # [项目注释] 输入：`conversation`；**`kwargs`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def apply_chat_template(self, conversation, **kwargs):
             result = super().apply_chat_template(conversation, **kwargs)
             if not kwargs["add_generation_prompt"]:
@@ -539,8 +639,16 @@ def test_chat_template_prefix_mismatch_fails():
         )
 
 
+# [项目注释] 功能：`test_no_assistant_completion_tokens_fails`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：raises,
+# [项目注释]    build_action_only_examples, apply_chat_template, EmptyCompletionTokenizer。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_no_assistant_completion_tokens_fails():
+    # [项目注释] 类型：`EmptyCompletionTokenizer` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class EmptyCompletionTokenizer(FakeQwenTokenizer):
+        # [项目注释] 功能：`apply_chat_template`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：apply_chat_template, super。
+        # [项目注释] 输入：`conversation`；**`kwargs`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         def apply_chat_template(self, conversation, **kwargs):
             if conversation and conversation[-1].get("role") == "assistant":
                 return super().apply_chat_template(
@@ -561,6 +669,10 @@ def test_no_assistant_completion_tokens_fails():
         )
 
 
+# [项目注释] 功能：`test_rendering_does_not_rewrite_archived_json_arguments`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：valid_record, deepcopy, build_action_only_examples, isinstance。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_rendering_does_not_rewrite_archived_json_arguments():
     record = valid_record()
     original = copy.deepcopy(record)
@@ -576,6 +688,10 @@ def test_rendering_does_not_rewrite_archived_json_arguments():
     )
 
 
+# [项目注释] 功能：`test_dry_run_is_offline_and_writes_no_checkpoint`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：write_jsonl, write_text, dict, run。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_dry_run_is_offline_and_writes_no_checkpoint(tmp_path):
     train_path = tmp_path / "train.jsonl"
     validation_path = tmp_path / "validation.jsonl"

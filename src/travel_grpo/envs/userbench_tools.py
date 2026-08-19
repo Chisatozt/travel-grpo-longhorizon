@@ -191,6 +191,9 @@ class UserBenchAction:
     content: str
 
     @classmethod
+    # [项目注释] 功能：`from_parameters`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：set, strip, match, cls。
+    # [项目注释] 输入：`parameters`: Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `UserBenchAction`；具体值由各分支决定。
     def from_parameters(cls, parameters: Mapping[str, Any]) -> UserBenchAction:
         if not isinstance(parameters, Mapping):
             raise UserBenchActionError("tool parameters must be a mapping")
@@ -313,10 +316,16 @@ def normalized_action_signature(action: UserBenchAction) -> str:
     return f"{action.choice.value}:{content}"
 
 
+# [项目注释] 功能：`_contains_hint`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：search, escape。
+# [项目注释] 输入：`query`: str；`hint`: str。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _contains_hint(query: str, hint: str) -> bool:
     return re.search(rf"(?<![a-z0-9]){re.escape(hint)}(?![a-z0-9])", query) is not None
 
 
+# [项目注释] 功能：`_hint_spans`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：tuple, escape, span, finditer。
+# [项目注释] 输入：`query`: str；`hint`: str。
+# [项目注释] 输出：标注返回 `tuple[tuple[int, int], ...]`；具体值由各分支决定。
 def _hint_spans(query: str, hint: str) -> tuple[tuple[int, int], ...]:
     pattern = rf"(?<![a-z0-9]){re.escape(hint)}(?![a-z0-9])"
     return tuple(match.span() for match in re.finditer(pattern, query))
@@ -387,6 +396,10 @@ def action_field_matches(
     return result
 
 
+# [项目注释] 功能：`action_mentions_aspect`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_normalize_query_words, any,
+# [项目注释]    _contains_hint。
+# [项目注释] 输入：`content`: str；`aspect`: str。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def action_mentions_aspect(content: str, aspect: str) -> bool:
     if aspect not in ASPECT_QUERY_HINTS:
         return False

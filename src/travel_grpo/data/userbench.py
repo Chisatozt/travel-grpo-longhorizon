@@ -107,6 +107,9 @@ class SplitBundle:
     manifest_base: Mapping[str, Any]
 
 
+# [项目注释] 功能：`_require_pyarrow`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：RuntimeError。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _require_pyarrow():
     try:
         import pyarrow as pa
@@ -119,6 +122,9 @@ def _require_pyarrow():
     return pa, pq
 
 
+# [项目注释] 功能：`_require_string`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：DatasetSplitError, isinstance。
+# [项目注释] 输入：`mapping`: Mapping[str, Any]；`key`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _require_string(mapping: Mapping[str, Any], key: str) -> str:
     value = mapping.get(key)
     if not isinstance(value, str) or not value:
@@ -128,6 +134,10 @@ def _require_string(mapping: Mapping[str, Any], key: str) -> str:
     return value
 
 
+# [项目注释] 功能：`_require_non_negative_int`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance,
+# [项目注释]    DatasetSplitError。
+# [项目注释] 输入：`mapping`: Mapping[str, Any]；`key`: str。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def _require_non_negative_int(mapping: Mapping[str, Any], key: str) -> int:
     value = mapping.get(key)
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -209,6 +219,9 @@ def load_split_spec(path: str | Path) -> SplitSpec:
     )
 
 
+# [项目注释] 功能：`_sha256_file`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, open, iter。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -217,6 +230,9 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_canonical_json`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：dumps。
+# [项目注释] 输入：`record`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _canonical_json(record: Mapping[str, Any]) -> str:
     return json.dumps(
         record,
@@ -234,6 +250,9 @@ def compute_jsonl_sha256(records: Sequence[Mapping[str, Any]]) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_nested`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：join, DatasetSplitError, isinstance。
+# [项目注释] 输入：`mapping`: Mapping[str, Any]；`path`: Sequence[str]；`context`: str。
+# [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
 def _nested(mapping: Mapping[str, Any], path: Sequence[str], *, context: str) -> Any:
     value: Any = mapping
     for key in path:
@@ -244,6 +263,11 @@ def _nested(mapping: Mapping[str, Any], path: Sequence[str], *, context: str) ->
     return value
 
 
+# [项目注释] 功能：`_validate_source_row`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：any, _nested, DatasetSplitError,
+# [项目注释]    isinstance。
+# [项目注释] 输入：`row`: Mapping[str, Any]；`task_data`: Mapping[str, Any]；`composition`: str；`upstream_split`:
+# [项目注释]    str；`source_path`: str；`source_row_index`: int。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _validate_source_row(
     row: Mapping[str, Any],
     *,
@@ -430,14 +454,23 @@ def load_onechoice_tasks(
     )
 
 
+# [项目注释] 功能：`_stable_task_key`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：hexdigest, sha256, encode。
+# [项目注释] 输入：`task_id`: str；`seed`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _stable_task_key(task_id: str, seed: str) -> str:
     return hashlib.sha256(f"{seed}\0{task_id}".encode("utf-8")).hexdigest()
 
 
+# [项目注释] 功能：`_as_output_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：`record`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _as_output_record(record: Mapping[str, Any]) -> dict[str, Any]:
     return {column: record[column] for column in OUTPUT_COLUMNS}
 
 
+# [项目注释] 功能：`_pairwise_intersections`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list, enumerate, len。
+# [项目注释] 输入：`records`: Mapping[str, Sequence[Mapping[str, Any]]]。
+# [项目注释] 输出：标注返回 `dict[str, int]`；具体值由各分支决定。
 def _pairwise_intersections(
     records: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> dict[str, int]:
@@ -450,6 +483,10 @@ def _pairwise_intersections(
     return result
 
 
+# [项目注释] 功能：`_read_embedded_source`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：is_file, DatasetSplitError, open,
+# [项目注释]    load。
+# [项目注释] 输入：`source_root`: Path；`expected_commit`: str。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _read_embedded_source(source_root: Path, expected_commit: str) -> dict[str, Any]:
     path = source_root.parent / "EMBEDDED_SOURCE.json"
     if not path.is_file():
@@ -596,6 +633,9 @@ def build_dataset_splits(spec: SplitSpec, source_root: str | Path) -> SplitBundl
     return SplitBundle(spec=spec, records=frozen_records, manifest_base=manifest_base)
 
 
+# [项目注释] 功能：`_write_jsonl`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：open, write, _canonical_json。
+# [项目注释] 输入：`path`: Path；`records`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _write_jsonl(path: Path, records: Sequence[Mapping[str, Any]]) -> None:
     with path.open("w", encoding="utf-8", newline="\n") as handle:
         for record in records:
@@ -603,6 +643,9 @@ def _write_jsonl(path: Path, records: Sequence[Mapping[str, Any]]) -> None:
             handle.write("\n")
 
 
+# [项目注释] 功能：`_temporary_path`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：mkstemp, close, Path。
+# [项目注释] 输入：`target`: Path。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def _temporary_path(target: Path) -> Path:
     descriptor, raw_path = tempfile.mkstemp(
         prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
@@ -696,6 +739,9 @@ def write_dataset_splits(
                 temp.unlink()
 
 
+# [项目注释] 功能：`_read_jsonl`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：open, enumerate, strip, loads。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     records = []
     with path.open(encoding="utf-8") as handle:
@@ -716,6 +762,10 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+# [项目注释] 功能：`_safe_artifact_path`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：resolve, relative_to,
+# [项目注释]    DatasetSplitError。
+# [项目注释] 输入：`output_root`: Path；`relative`: str。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def _safe_artifact_path(output_root: Path, relative: str) -> Path:
     candidate = (output_root / relative).resolve()
     try:

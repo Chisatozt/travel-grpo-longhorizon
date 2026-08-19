@@ -21,6 +21,10 @@ from travel_grpo.data import (  # noqa: E402
 )
 
 
+# [项目注释] 功能：`parse_args`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument,
+# [项目注释]    add_mutually_exclusive_group, parse_args。
+# [项目注释] 输入：`argv`: list[str] | None。
+# [项目注释] 输出：标注返回 `argparse.Namespace`；具体值由各分支决定。
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build deterministic, disjoint UserBench SFT/GRPO/evaluation task splits."
@@ -63,6 +67,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：parse_args, load_split_spec, print,
+# [项目注释]    verify_dataset_splits。
+# [项目注释] 输入：`argv`: list[str] | None。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     spec = load_split_spec(args.config)

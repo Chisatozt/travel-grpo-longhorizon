@@ -48,6 +48,10 @@ _SEARCH_FALLBACK_MARKERS = (
 )
 
 
+# [项目注释] 功能：`_extract_search_calls`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：loads, read_text, isinstance,
+# [项目注释]    strip。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _extract_search_calls(path: Path) -> list[str]:
     value = json.loads(path.read_text(encoding="utf-8"))
     transcript = value.get("visible_transcript", [])
@@ -75,6 +79,9 @@ def _extract_search_calls(path: Path) -> list[str]:
     return calls
 
 
+# [项目注释] 功能：`_candidate_ids`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：set, isinstance, str。
+# [项目注释] 输入：`task`: Mapping[str, Any]；`aspect`: str | None。
+# [项目注释] 输出：标注返回 `set[str]`；具体值由各分支决定。
 def _candidate_ids(task: Mapping[str, Any], aspect: str | None) -> set[str]:
     if not aspect:
         return set()
@@ -87,6 +94,9 @@ def _candidate_ids(task: Mapping[str, Any], aspect: str | None) -> set[str]:
     }
 
 
+# [项目注释] 功能：`_has_candidate_list`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, search, escape。
+# [项目注释] 输入：`feedback`: str；`ids`: set[str]。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _has_candidate_list(feedback: str, ids: set[str]) -> bool:
     if not ids:
         return False
@@ -96,11 +106,17 @@ def _has_candidate_list(feedback: str, ids: set[str]) -> bool:
     )
 
 
+# [项目注释] 功能：`_is_fallback`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：casefold, any。
+# [项目注释] 输入：`feedback`: str。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _is_fallback(feedback: str) -> bool:
     lowered = feedback.casefold()
     return any(marker in lowered for marker in _SEARCH_FALLBACK_MARKERS)
 
 
+# [项目注释] 功能：`_initial_state`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list。
+# [项目注释] 输入：`task`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _initial_state(task: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "search_times": 0,
@@ -110,6 +126,9 @@ def _initial_state(task: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+# [项目注释] 功能：`_model_config`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：`runtime`: UserSimulatorRuntime。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _model_config(runtime: UserSimulatorRuntime) -> dict[str, Any]:
     return {
         "api_key": runtime.api_key,
@@ -120,6 +139,9 @@ def _model_config(runtime: UserSimulatorRuntime) -> dict[str, Any]:
     }
 
 
+# [项目注释] 功能：`replay`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：sorted, mkdir, Counter, atomic_json。
+# [项目注释] 输入：`trace_dir`: Path；`output`: Path；`api_fallback`: bool。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 async def replay(
     trace_dir: Path,
     output: Path,
@@ -228,6 +250,9 @@ async def replay(
     return summary
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args, run。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

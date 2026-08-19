@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# [项目注释] 文件职责：启动标准 GRPO 训练入口。
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT"

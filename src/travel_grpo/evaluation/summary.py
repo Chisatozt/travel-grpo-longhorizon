@@ -9,6 +9,9 @@ from typing import Any
 from travel_grpo.evaluation.metrics import RESULT_METRIC_KEYS, result_metrics
 
 
+# [项目注释] 功能：`_aggregate`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：Counter, defaultdict, averages, isinstance。
+# [项目注释] 输入：`records`: Sequence[Mapping[str, Any]]；`denominator`: int。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _aggregate(records: Sequence[Mapping[str, Any]], denominator: int) -> dict[str, Any]:
     sums: Counter[str] = Counter()
     valid = 0
@@ -35,6 +38,9 @@ def _aggregate(records: Sequence[Mapping[str, Any]], denominator: int) -> dict[s
             for aspect, value in reward.get("quality_by_aspect", {}).items():
                 aspects[str(aspect)].append(float(value))
         terminations[str(result.get("termination_reason") or "missing")] += 1
+    # [项目注释] 功能：`averages`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：pop。
+    # [项目注释] 输入：`divisor`: int。
+    # [项目注释] 输出：标注返回 `dict[str, float]`；具体值由各分支决定。
     def averages(divisor: int) -> dict[str, float]:
         values = {key: sums[key] / divisor for key in RESULT_METRIC_KEYS}
         values["avg_number_of_1"] = values.pop("number_of_1")
@@ -59,6 +65,10 @@ def _aggregate(records: Sequence[Mapping[str, Any]], denominator: int) -> dict[s
     }
 
 
+# [项目注释] 功能：`summarize_results`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：tuple, dict, defaultdict, Counter。
+# [项目注释] 输入：`records`: Sequence[Mapping[str, Any]]；`expected_task_ids`:
+# [项目注释]    Sequence[str]；`expected_compositions`: Sequence[str] | None。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def summarize_results(
     records: Sequence[Mapping[str, Any]],
     *,

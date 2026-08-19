@@ -23,6 +23,9 @@ from travel_grpo.training.grpo.compat import TORCH_PADDING_WORKER_SETUP_HOOK
 from travel_grpo.training.grpo.preflight import run_preflight
 
 
+# [项目注释] 功能：`load_profile`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：safe_load, read_text, isinstance, TypeError。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def load_profile(path: Path) -> dict[str, Any]:
     value = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -30,8 +33,17 @@ def load_profile(path: Path) -> dict[str, Any]:
     return value
 
 
+# [项目注释] 功能：`hydra_overrides`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：bool, int, str, items。
+# [项目注释] 输入：`profile`: dict[str, Any]；`output`: Path；`resume`: bool；`logger`: str。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def hydra_overrides(profile: dict[str, Any], output: Path, resume: bool, logger: str) -> list[str]:
     d, r, v, a, alg, t = (profile[name] for name in ("data", "rollout", "validation", "actor", "algorithm", "trainer"))
+    multi_turn = profile["actor_rollout_ref"]["rollout"]["multi_turn"]
+    reuse_rollout_updates = bool(a.get("reuse_rollout_updates", False))
+    configured_ppo_epochs = int(a.get("ppo_epochs", 1))
+    ppo_epochs = configured_ppo_epochs if reuse_rollout_updates else 1
+    max_tool_response_length = int(multi_turn.get("max_tool_response_length", 256))
+    tool_response_truncate_side = str(multi_turn.get("tool_response_truncate_side", "middle"))
     absolute = lambda value: str((ROOT / str(value)).resolve())
     values = {
         "data.train_files": f"['{absolute(d['train_files'])}']",
@@ -48,6 +60,7 @@ def hydra_overrides(profile: dict[str, Any], output: Path, resume: bool, logger:
         "actor_rollout_ref.actor.optim.lr": a["learning_rate"],
         "actor_rollout_ref.actor.ppo_mini_batch_size": a["mini_batch_size"],
         "actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu": a["micro_batch_size_per_gpu"],
+        "actor_rollout_ref.actor.ppo_epochs": ppo_epochs,
         "actor_rollout_ref.model.enable_gradient_checkpointing": a["gradient_checkpointing"],
         "actor_rollout_ref.actor.use_kl_loss": alg["kl_loss"],
         "actor_rollout_ref.rollout.name": r["backend"],
@@ -63,6 +76,8 @@ def hydra_overrides(profile: dict[str, Any], output: Path, resume: bool, logger:
         "actor_rollout_ref.rollout.agent.agent_loop_config_path": str((ROOT / "configs/interaction_config/agent_loop.yaml").resolve()),
         "actor_rollout_ref.rollout.multi_turn.enable": True,
         "actor_rollout_ref.rollout.multi_turn.max_parallel_calls": r["max_parallel_calls"],
+        "actor_rollout_ref.rollout.multi_turn.max_tool_response_length": max_tool_response_length,
+        "actor_rollout_ref.rollout.multi_turn.tool_response_truncate_side": tool_response_truncate_side,
         "actor_rollout_ref.rollout.multi_turn.max_assistant_turns": r["max_assistant_turns"],
         "actor_rollout_ref.rollout.multi_turn.format": r["format"],
         "actor_rollout_ref.rollout.multi_turn.tool_config_path": str((ROOT / "configs/tool_config/userbench_tools.yaml").resolve()),
@@ -112,6 +127,10 @@ def hydra_overrides(profile: dict[str, Any], output: Path, resume: bool, logger:
     return overrides
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args,
+# [项目注释]    load_profile。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
@@ -135,6 +154,8 @@ def main() -> int:
         default=False,
     )
     parser.add_argument("--stall-threshold", type=int, default=4)
+    parser.add_argument("--reuse-rollout-updates", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--ppo-epochs", type=int)
     parser.add_argument(
         "--turn-credit-mode", choices=("off", "shadow", "train")
     )
@@ -154,6 +175,13 @@ def main() -> int:
         profile["data"]["train_files"] = str(data_output / "train.parquet")
         profile["data"]["val_files"] = str(data_output / "validation.parquet")
     turn_credit = dict(profile.get("turn_credit", {}))
+    if args.reuse_rollout_updates is not None or args.ppo_epochs is not None:
+        actor = dict(profile["actor"])
+        if args.reuse_rollout_updates is not None:
+            actor["reuse_rollout_updates"] = args.reuse_rollout_updates
+        if args.ppo_epochs is not None:
+            actor["ppo_epochs"] = args.ppo_epochs
+        profile["actor"] = actor
     if args.turn_credit_mode is not None:
         turn_credit["mode"] = args.turn_credit_mode
     if args.turn_credit_lambda is not None:
@@ -216,6 +244,12 @@ def main() -> int:
                         "TRAVEL_GRPO_TURN_CREDIT_CONFIG_JSON": launch_env[
                             "TRAVEL_GRPO_TURN_CREDIT_CONFIG_JSON"
                         ],
+                    },
+                    "rollout_reuse": {
+                        "enabled": bool(profile["actor"].get("reuse_rollout_updates", False)),
+                        "ppo_epochs": int(profile["actor"].get("ppo_epochs", 1)),
+                        "rollout_batches_per_update": 1,
+                        "old_policy_anchor": "fixed per sampled batch",
                     },
                 },
                 indent=2,

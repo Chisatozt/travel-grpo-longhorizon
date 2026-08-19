@@ -1,3 +1,6 @@
+# [项目注释] 模块：测试模块，负责验证 test_evaluation_pipeline 的行为契约。
+# [项目注释] 该文件的公共边界、输入输出和调用关系由下方实现及架构文档共同定义。
+
 from __future__ import annotations
 
 import json
@@ -18,6 +21,9 @@ from travel_grpo.models.vllm_policy import ActorRuntime
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# [项目注释] 功能：`result`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：`task_id`: str；`reward`: float；`valid`: bool；`composition`: str。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def result(task_id: str, reward: float = 0.5, *, valid: bool = True, composition: str = "22"):
     return {
         "task_id": task_id,
@@ -44,6 +50,10 @@ def result(task_id: str, reward: float = 0.5, *, valid: bool = True, composition
     }
 
 
+# [项目注释] 功能：`test_summary_uses_fixed_denominator_for_invalid_and_missing`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：summarize_results, result。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_summary_uses_fixed_denominator_for_invalid_and_missing():
     summary = summarize_results(
         [result("a", 1.0), result("b", valid=False)],
@@ -55,6 +65,10 @@ def test_summary_uses_fixed_denominator_for_invalid_and_missing():
     assert summary["valid_only"]["terminal_reward"] == 1.0
 
 
+# [项目注释] 功能：`test_summary_keeps_metric_schema_when_every_task_is_invalid`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：summarize_results, result。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_summary_keeps_metric_schema_when_every_task_is_invalid():
     summary = summarize_results(
         [result("a", valid=False)], expected_task_ids=("a", "b")
@@ -64,6 +78,10 @@ def test_summary_keeps_metric_schema_when_every_task_is_invalid():
     assert summary["valid_only"]["terminal_reward"] == 0.0
 
 
+# [项目注释] 功能：`test_actor_runtime_rejects_wrong_frozen_stage_model`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：ActorRuntime, require_model, raises。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_actor_runtime_rejects_wrong_frozen_stage_model():
     runtime = ActorRuntime(
         model="Qwen/Qwen3.5-2B",
@@ -75,6 +93,10 @@ def test_actor_runtime_rejects_wrong_frozen_stage_model():
         runtime.require_model("outputs/models/sft-merged")
 
 
+# [项目注释] 功能：`test_explicit_infrastructure_retry_preserves_attempt_diagnostics`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：result, attach_attempt_history, len。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_explicit_infrastructure_retry_preserves_attempt_diagnostics():
     first = result("a", valid=False)
     first["termination_reason"] = "actor_infrastructure_failure"
@@ -89,6 +111,9 @@ def test_explicit_infrastructure_retry_preserves_attempt_diagnostics():
     assert second["attempt_history"][1]["infrastructure_valid"] is True
 
 
+# [项目注释] 功能：`summary`：计算奖励、指标或聚合统计，供训练、评测或报告使用。
+# [项目注释] 输入：`correct`；`aligned`；`reward`；`valid`；`efficiency`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def summary(correct=0.8, aligned=0.7, reward=0.4, valid=1.0, efficiency=0.5):
     return {
         "denominator": 132,
@@ -102,6 +127,10 @@ def summary(correct=0.8, aligned=0.7, reward=0.4, valid=1.0, efficiency=0.5):
     }
 
 
+# [项目注释] 功能：`test_checkpoint_selection_applies_gates_and_tiebreaks`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：select_checkpoint, summary。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_checkpoint_selection_applies_gates_and_tiebreaks():
     selected = select_checkpoint(
         [
@@ -116,6 +145,10 @@ def test_checkpoint_selection_applies_gates_and_tiebreaks():
     assert selected["candidates"][2]["rejection_reasons"] == ["valid_rate_below_0.98"]
 
 
+# [项目注释] 功能：`test_validation_directory_is_summarized_and_selected_atomically`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：importorskip, write_table, mkdir, run。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_validation_directory_is_summarized_and_selected_atomically(tmp_path):
     pa = pytest.importorskip("pyarrow")
     pq = pytest.importorskip("pyarrow.parquet")
@@ -128,6 +161,9 @@ def test_validation_directory_is_summarized_and_selected_atomically(tmp_path):
     validation_dir = tmp_path / "run" / "validation_rollouts"
     validation_dir.mkdir(parents=True)
 
+    # [项目注释] 功能：`rows`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`reward`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def rows(reward):
         return [
             {
@@ -170,6 +206,10 @@ def test_validation_directory_is_summarized_and_selected_atomically(tmp_path):
     assert (tmp_path / "run/validation_summaries/step_0.summary.json").is_file()
 
 
+# [项目注释] 功能：`test_subset_contract_and_comparison_use_subset_denominator`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：build_subset_contract, list, compare_stage_results, raises。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_subset_contract_and_comparison_use_subset_denominator():
     records = [
         {"task_id": "a", "composition": "22", "source_split": "test"},
@@ -195,6 +235,10 @@ def test_subset_contract_and_comparison_use_subset_denominator():
     assert comparison["expected_tasks"] == 2
 
 
+# [项目注释] 功能：`test_formal_comparison_requires_complete_matching_contract`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：compare_stage_results, range, result, enumerate。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_formal_comparison_requires_complete_matching_contract():
     task_ids = [f"t{index}" for index in range(471)]
     stages = {

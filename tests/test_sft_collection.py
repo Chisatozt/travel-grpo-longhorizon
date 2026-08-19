@@ -36,6 +36,10 @@ from travel_grpo.training.sft_collection import (
 )
 
 
+# [项目注释] 功能：`test_collection_cli_rejects_existing_output_before_runtime_loading`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：spec_from_file_location, module_from_spec, exec_module, write_text。
+# [项目注释] 输入：`tmp_path`: Path；`monkeypatch`: pytest.MonkeyPatch。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_collection_cli_rejects_existing_output_before_runtime_loading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -51,6 +55,9 @@ def test_collection_cli_rejects_existing_output_before_runtime_loading(
     output.write_text("do not replace\n", encoding="utf-8")
     args = module.build_parser().parse_args(["--output", str(output)])
 
+    # [项目注释] 功能：`unexpected_runtime`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：AssertionError。
+    # [项目注释] 输入：*`args`；**`kwargs`。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def unexpected_runtime(*args: object, **kwargs: object) -> None:
         raise AssertionError("runtime credentials must not be loaded")
 
@@ -59,6 +66,10 @@ def test_collection_cli_rejects_existing_output_before_runtime_loading(
         asyncio.run(module.run(args))
 
 
+# [项目注释] 功能：`test_collection_cli_checkpoints_and_resumes_without_recollecting`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：spec_from_file_location, module_from_spec, exec_module, write_pool。
+# [项目注释] 输入：`tmp_path`: Path；`monkeypatch`: pytest.MonkeyPatch。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_collection_cli_checkpoints_and_resumes_without_recollecting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -82,6 +93,10 @@ def test_collection_cli_checkpoints_and_resumes_without_recollecting(
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(module, "OpenAICompatibleTeacherClient", lambda runtime: FakeTeacher())
 
+    # [项目注释] 功能：`collect`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：tuple, on_outcome,
+    # [项目注释]    collect_teacher_task_with_retries。
+    # [项目注释] 输入：`tasks`；`teacher`；`simulator`；`on_outcome`；**`kwargs`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def collect(tasks, *, teacher, simulator, on_outcome, **kwargs):
         values = []
         for value in tasks:
@@ -116,6 +131,9 @@ def test_collection_cli_checkpoints_and_resumes_without_recollecting(
     assert first["quality"]["accepted"] == 1
     assert len(list((run_dir / "tasks").glob("*.json"))) == 1
 
+    # [项目注释] 功能：`unexpected_collect`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：AssertionError。
+    # [项目注释] 输入：*`args`；**`kwargs`。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     async def unexpected_collect(*args, **kwargs):
         raise AssertionError("resume must not recollect checkpointed tasks")
 
@@ -127,6 +145,10 @@ def test_collection_cli_checkpoints_and_resumes_without_recollecting(
     assert resumed["new_tasks"] == 0
 
 
+# [项目注释] 功能：`test_adaptive_collection_reaches_per_composition_quota_in_waves`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：spec_from_file_location, module_from_spec, exec_module, write_pool。
+# [项目注释] 输入：`tmp_path`: Path；`monkeypatch`: pytest.MonkeyPatch。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_adaptive_collection_reaches_per_composition_quota_in_waves(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -156,6 +178,10 @@ def test_adaptive_collection_reaches_per_composition_quota_in_waves(
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(module, "OpenAICompatibleTeacherClient", lambda runtime: FakeTeacher())
 
+    # [项目注释] 功能：`collect`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：tuple, on_outcome,
+    # [项目注释]    collect_teacher_task_with_retries。
+    # [项目注释] 输入：`tasks`；`teacher`；`simulator`；`on_outcome`；**`kwargs`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def collect(tasks, *, teacher, simulator, on_outcome, **kwargs):
         values = []
         for value in tasks:
@@ -210,6 +236,10 @@ def test_adaptive_collection_reaches_per_composition_quota_in_waves(
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# [项目注释] 功能：`test_stratified_plan_uses_largest_remainder_and_stable_order`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：build_stratified_task_plan, list, range, reversed。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_stratified_plan_uses_largest_remainder_and_stable_order() -> None:
     tasks = [
         {"task_id": f"{composition}:{index}", "composition": composition}
@@ -241,6 +271,10 @@ def test_stratified_plan_uses_largest_remainder_and_stable_order() -> None:
     ]
 
 
+# [项目注释] 功能：`test_stratified_wave_refills_rejected_stratum_without_repeating_tasks`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：select_stratified_task_wave, len, str, sum。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_stratified_wave_refills_rejected_stratum_without_repeating_tasks() -> None:
     tasks = [
         {"task_id": f"{composition}:{index}", "composition": composition}
@@ -271,6 +305,10 @@ def test_stratified_wave_refills_rejected_stratum_without_repeating_tasks() -> N
     assert sum(task["composition"] == "33" for task in second) == 2
 
 
+# [项目注释] 功能：`test_collection_script_runs_from_source_checkout`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：copy,
+# [项目注释]    pop, update, run。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_collection_script_runs_from_source_checkout() -> None:
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
@@ -304,6 +342,10 @@ def test_collection_script_runs_from_source_checkout() -> None:
     assert json.loads(completed.stdout)["dry_run"] is True
 
 
+# [项目注释] 功能：`test_collection_cli_uses_fixed_development_batch`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：copy,
+# [项目注释]    pop, update, run。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_collection_cli_uses_fixed_development_batch() -> None:
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
@@ -343,6 +385,10 @@ def test_collection_cli_uses_fixed_development_batch() -> None:
     ]
 
 
+# [项目注释] 功能：`test_teacher_smoke_batches_are_unique_train_tasks_and_pairwise_disjoint`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：loads, set, values, read_text。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_teacher_smoke_batches_are_unique_train_tasks_and_pairwise_disjoint() -> None:
     config = json.loads(
         (ROOT / "configs/train/sft/teacher_smoke_batches.json").read_text(
@@ -369,6 +415,10 @@ def test_teacher_smoke_batches_are_unique_train_tasks_and_pairwise_disjoint() ->
         seen.update(task_ids)
 
 
+# [项目注释] 功能：`test_upstream_preference_fields_narrow_local_phase_without_exposing_values`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：from_upstream, dumps。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_upstream_preference_fields_narrow_local_phase_without_exposing_values() -> None:
     task = {
         "id": "hotel:2-1|rental_car:2-2",
@@ -399,6 +449,10 @@ def test_upstream_preference_fields_narrow_local_phase_without_exposing_values()
     assert "secret" not in serialized
 
 
+# [项目注释] 功能：`test_generic_amenity_question_is_rejected_before_environment_consumes_a_step`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：TeacherTurnPlan, from_parameters, validate。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_generic_amenity_question_is_rejected_before_environment_consumes_a_step() -> None:
     plan = TeacherTurnPlan(TeacherPhase.ELICIT, "apartment", "amenities")
     generic = UserBenchAction.from_parameters(
@@ -420,6 +474,10 @@ def test_generic_amenity_question_is_rejected_before_environment_consumes_a_step
     assert plan.validate(concrete) is None
 
 
+# [项目注释] 功能：`test_answer_instruction_can_include_only_public_visible_candidate_facts`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：TeacherTurnPlan, instruction。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_answer_instruction_can_include_only_public_visible_candidate_facts():
     plan = TeacherTurnPlan(
         TeacherPhase.ANSWER,
@@ -435,6 +493,10 @@ def test_answer_instruction_can_include_only_public_visible_candidate_facts():
     assert "best_id" not in instruction
 
 
+# [项目注释] 功能：`test_answer_validation_rejects_visible_option_missing_public_search_requirement`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：TeacherTurnPlan, from_parameters, validate。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_answer_validation_rejects_visible_option_missing_public_search_requirement():
     plan = TeacherTurnPlan(
         TeacherPhase.ANSWER,
@@ -462,6 +524,10 @@ def test_answer_validation_rejects_visible_option_missing_public_search_requirem
         ("rental_car", "insurance", "belongings"),
     ],
 )
+# [项目注释] 功能：`test_primary_and_repair_questions_cover_global_preference_taxonomy_regressions`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：parametrize, TeacherTurnPlan, casefold。
+# [项目注释] 输入：`aspect`；`field`；`required_phrase`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_primary_and_repair_questions_cover_global_preference_taxonomy_regressions(
     aspect, field, required_phrase
 ):
@@ -470,6 +536,10 @@ def test_primary_and_repair_questions_cover_global_preference_taxonomy_regressio
     assert required_phrase in plan.elicitation_repair_content.casefold()
 
 
+# [项目注释] 功能：`test_search_validation_rejects_preferences_and_years_absent_from_public_context`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：TeacherTurnPlan, from_parameters, validate, instruction。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_search_validation_rejects_preferences_and_years_absent_from_public_context():
     plan = TeacherTurnPlan(
         TeacherPhase.SEARCH,
@@ -531,6 +601,10 @@ def test_search_validation_rejects_preferences_and_years_absent_from_public_cont
         ),
     ],
 )
+# [项目注释] 功能：`test_search_validation_accepts_inflected_and_paraphrased_public_evidence`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：parametrize, TeacherTurnPlan, from_parameters, validate。
+# [项目注释] 输入：`aspect`；`context`；`query`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_search_validation_accepts_inflected_and_paraphrased_public_evidence(
     aspect, context, query
 ):
@@ -545,6 +619,10 @@ def test_search_validation_accepts_inflected_and_paraphrased_public_evidence(
     assert plan.validate(action) is None
 
 
+# [项目注释] 功能：`test_search_validation_does_not_equate_generic_shared_bed_with_king_bed`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：TeacherTurnPlan, from_parameters, validate。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_search_validation_does_not_equate_generic_shared_bed_with_king_bed():
     plan = TeacherTurnPlan(
         TeacherPhase.SEARCH,
@@ -563,13 +641,20 @@ def test_search_validation_does_not_equate_generic_shared_bed_with_king_bed():
     assert plan.validate(action) == "search_invents_preference.king_room"
 
 
+# [项目注释] 类型：`FakeTeacher` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class FakeTeacher:
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：TeacherRuntime。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self):
         self.runtime = TeacherRuntime(
             "deepseek-v4-flash", "https://teacher.example/v1", "teacher-secret"
         )
         self.index = 0
 
+    # [项目注释] 功能：`generate_action`：异步地根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：TeacherToolCall, from_parameters, next。
+    # [项目注释] 输入：`messages`；`force_answer`；`constraint`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def generate_action(self, messages, *, force_answer=False, constraint=None):
         choice = constraint.choice.value
         if constraint.allowed_contents:
@@ -601,13 +686,20 @@ class FakeTeacher:
         self.index += 1
         return call
 
+    # [项目注释] 功能：`close`：异步地清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def close(self):
         return None
 
 
+# [项目注释] 类型：`FakeWrapper` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class FakeWrapper:
     instances: ClassVar[list] = []
 
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`task_id`；`runtime`；`config`；**`kwargs`。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self, task_id, runtime, config, **kwargs):
         self.task_id = task_id
         self.runtime = runtime
@@ -617,10 +709,16 @@ class FakeWrapper:
         self.closed = False
         self.__class__.instances.append(self)
 
+    # [项目注释] 功能：`reset`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。 主要协作调用：UserBenchObservation。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reset(self):
         self.steps = 0
         return UserBenchObservation("initial", 0, False, 0.0, {})
 
+    # [项目注释] 功能：`reward_task`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：TravelRewardTask, frozenset。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reward_task(self):
         return TravelRewardTask(
             self.task_id,
@@ -630,6 +728,9 @@ class FakeWrapper:
             {"hotel": frozenset({"P1"})},
         )
 
+    # [项目注释] 功能：`reward_snapshot`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：UserBenchRewardSnapshot, frozenset。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reward_snapshot(self):
         choices = [value.choice.value for value in self.actions]
         return UserBenchRewardSnapshot(
@@ -640,6 +741,9 @@ class FakeWrapper:
             choice_initials=frozenset({"H"}) if "answer" in choices else frozenset(),
         )
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：UserBenchStepResult, UserBenchObservation。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         self.actions.append(action)
         self.steps += 1
@@ -657,10 +761,16 @@ class FakeWrapper:
             {},
         )
 
+    # [项目注释] 功能：`close`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def close(self):
         self.closed = True
 
 
+# [项目注释] 功能：`task`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：`task_id`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def task(task_id="hotel:2-1"):
     return {
         "task_id": task_id,
@@ -674,6 +784,9 @@ def task(task_id="hotel:2-1"):
     }
 
 
+# [项目注释] 功能：`simulator`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：UserSimulatorRuntime。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def simulator():
     return UserSimulatorRuntime(
         SimulatorRole.COLLECTION,
@@ -683,6 +796,10 @@ def simulator():
     )
 
 
+# [项目注释] 功能：`test_collects_tool_only_messages_and_raw_rewards`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：clear,
+# [项目注释]    run, to_record, collect_teacher_trajectory。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_collects_tool_only_messages_and_raw_rewards():
     FakeWrapper.instances.clear()
     trajectory = asyncio.run(
@@ -719,12 +836,19 @@ def test_collects_tool_only_messages_and_raw_rewards():
     assert FakeWrapper.instances[0].closed
 
 
+# [项目注释] 功能：`write_pool`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：write_text, join, dumps。
+# [项目注释] 输入：`path`；`records`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def write_pool(path, records):
     path.write_text(
         "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
     )
 
 
+# [项目注释] 功能：`test_task_pool_disjointness_and_atomic_output`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：write_pool,
+# [项目注释]    load_teacher_task_pool, assert_disjoint_from_evaluation, run。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_task_pool_disjointness_and_atomic_output(tmp_path):
     train_path = tmp_path / "train.jsonl"
     evaluation_path = tmp_path / "evaluation.jsonl"
@@ -748,6 +872,10 @@ def test_task_pool_disjointness_and_atomic_output(tmp_path):
         write_teacher_trajectories([trajectory], output)
 
 
+# [项目注释] 功能：`test_collection_config_pins_both_deepseek_roles`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：validate_teacher_collection_config。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_collection_config_pins_both_deepseek_roles():
     config = validate_teacher_collection_config(
         ROOT / "configs/train/sft/teacher_collection.yaml"
@@ -765,6 +893,10 @@ def test_collection_config_pins_both_deepseek_roles():
     assert config["collection"]["silver"]["max_elicitation_repairs_per_field"] == 1
 
 
+# [项目注释] 功能：`test_teacher_pool_rejects_frozen_test_rows`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：write_pool,
+# [项目注释]    raises, load_teacher_task_pool, task。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_pool_rejects_frozen_test_rows(tmp_path):
     source = tmp_path / "wrong.jsonl"
     write_pool(source, [{**task(), "source_split": "test"}])
@@ -772,13 +904,21 @@ def test_teacher_pool_rejects_frozen_test_rows(tmp_path):
         load_teacher_task_pool(source)
 
 
+# [项目注释] 类型：`SequenceTeacher` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class SequenceTeacher(FakeTeacher):
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：__init__, list, super。
+    # [项目注释] 输入：`actions`。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self, actions):
         super().__init__()
         self.actions = list(actions)
         self.requests = []
         self.constraints = []
 
+    # [项目注释] 功能：`generate_action`：异步地根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：pop, TeacherToolCall, list,
+    # [项目注释]    from_parameters。
+    # [项目注释] 输入：`messages`；`force_answer`；`constraint`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def generate_action(self, messages, *, force_answer=False, constraint=None):
         self.requests.append(list(messages))
         self.constraints.append(constraint)
@@ -793,6 +933,10 @@ class SequenceTeacher(FakeTeacher):
         )
 
 
+# [项目注释] 功能：`test_wrong_phase_choice_is_retried_without_stepping_environment`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：SequenceTeacher, run, collect_teacher_trajectory, len。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_wrong_phase_choice_is_retried_without_stepping_environment():
     teacher = SequenceTeacher(
         [
@@ -812,6 +956,10 @@ def test_wrong_phase_choice_is_retried_without_stepping_environment():
     assert teacher.constraints[0].choice.value == "action"
 
 
+# [项目注释] 功能：`test_search_with_invented_preference_is_retried_before_environment_step`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：clear, SequenceTeacher, run, collect_teacher_trajectory。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_search_with_invented_preference_is_retried_before_environment_step():
     FakeWrapper.instances.clear()
     teacher = SequenceTeacher(
@@ -834,6 +982,10 @@ def test_search_with_invented_preference_is_retried_before_environment_step():
     )
 
 
+# [项目注释] 功能：`test_state_machine_stops_eliciting_after_active_coverage`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：clear, run, collect_teacher_trajectory, task。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_state_machine_stops_eliciting_after_active_coverage():
     FakeWrapper.instances.clear()
     trajectory = asyncio.run(
@@ -849,6 +1001,10 @@ def test_state_machine_stops_eliciting_after_active_coverage():
     assert trajectory.reward_breakdown["active_preference_coverage"] == 1.0
 
 
+# [项目注释] 功能：`test_bundled_preference_question_is_retried_before_environment_step`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：clear, SequenceTeacher, run, collect_teacher_trajectory。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_bundled_preference_question_is_retried_before_environment_step():
     FakeWrapper.instances.clear()
     teacher = SequenceTeacher(
@@ -875,6 +1031,10 @@ def test_bundled_preference_question_is_retried_before_environment_step():
     )
 
 
+# [项目注释] 功能：`test_strict_gate_rejects_truncation_fallback_and_missing_answer`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, __class__, collect_teacher_trajectory, set。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_strict_gate_rejects_truncation_fallback_and_missing_answer():
     trajectory = asyncio.run(
         collect_teacher_trajectory(
@@ -916,6 +1076,10 @@ def test_strict_gate_rejects_truncation_fallback_and_missing_answer():
         ("wrong_answers", 1, "wrong_answers"),
     ],
 )
+# [项目注释] 功能：`test_teacher_strict_gate_rejects_reward_policy_failures`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：parametrize, run, dict, __class__。
+# [项目注释] 输入：`field`；`value`；`reason`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_teacher_strict_gate_rejects_reward_policy_failures(field, value, reason):
     trajectory = asyncio.run(
         collect_teacher_trajectory(
@@ -933,14 +1097,21 @@ def test_teacher_strict_gate_rejects_reward_policy_failures(field, value, reason
     assert reason in trajectory_rejection_reasons(invalid)
 
 
+# [项目注释] 类型：`RetryWrapper` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class RetryWrapper(FakeWrapper):
     attempt = 0
 
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：__init__, super。
+    # [项目注释] 输入：*`args`；**`kwargs`。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.this_attempt = self.__class__.attempt
         self.__class__.attempt += 1
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：astep, UserBenchStepResult, super。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         result = await super().astep(action)
         if self.this_attempt == 0 and result.done:
@@ -955,9 +1126,14 @@ class RetryWrapper(FakeWrapper):
         return result
 
 
+# [项目注释] 类型：`SearchRepairWrapper` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class SearchRepairWrapper(FakeWrapper):
     failed_search = False
 
+    # [项目注释] 功能：`reward_snapshot`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：reward_snapshot, sum,
+    # [项目注释]    UserBenchRewardSnapshot, super。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reward_snapshot(self):
         snapshot = super().reward_snapshot()
         search_count = sum(action.choice.value == "search" for action in self.actions)
@@ -971,6 +1147,10 @@ class SearchRepairWrapper(FakeWrapper):
             )
         return snapshot
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：UserBenchStepResult, astep,
+    # [项目注释]    UserBenchObservation, super。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         if action.choice.value == "search" and not self.failed_search:
             self.failed_search = True
@@ -987,6 +1167,10 @@ class SearchRepairWrapper(FakeWrapper):
         return await super().astep(action)
 
 
+# [项目注释] 功能：`test_search_not_recorded_is_retried_once_and_failed_turn_is_loss_masked`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：SequenceTeacher, run, collect_teacher_trajectory, task。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_search_not_recorded_is_retried_once_and_failed_turn_is_loss_masked():
     teacher = SequenceTeacher(
         [
@@ -1020,6 +1204,10 @@ def test_search_not_recorded_is_retried_once_and_failed_turn_is_loss_masked():
     assert trajectory.generation_diagnostics[-1]["reason"] == "search_repair_allowed"
 
 
+# [项目注释] 功能：`test_whole_trajectory_retry_and_artifact_routing`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：run,
+# [项目注释]    write_teacher_collection_artifacts, collect_teacher_task_with_retries, read_text。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_whole_trajectory_retry_and_artifact_routing(tmp_path):
     RetryWrapper.attempt = 0
     outcome = asyncio.run(
@@ -1045,6 +1233,10 @@ def test_whole_trajectory_retry_and_artifact_routing(tmp_path):
     assert len(paths[3].read_text(encoding="utf-8").splitlines()) == 2
 
 
+# [项目注释] 功能：`test_failed_attempt_diagnostic_contains_safe_partial_trajectory`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, dumps, collect_teacher_task_with_retries, to_record。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_failed_attempt_diagnostic_contains_safe_partial_trajectory():
     outcome = asyncio.run(
         collect_teacher_task_with_retries(
@@ -1078,7 +1270,12 @@ def test_failed_attempt_diagnostic_contains_safe_partial_trajectory():
     assert "simulator-secret" not in serialized
 
 
+# [项目注释] 类型：`ConstraintEchoTeacher` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class ConstraintEchoTeacher(FakeTeacher):
+    # [项目注释] 功能：`generate_action`：异步地根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：TeacherToolCall, from_parameters, str,
+    # [项目注释]    AssertionError。
+    # [项目注释] 输入：`messages`；`force_answer`；`constraint`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def generate_action(self, messages, *, force_answer=False, constraint=None):
         assert constraint is not None
         if constraint.allowed_contents:
@@ -1103,13 +1300,20 @@ class ConstraintEchoTeacher(FakeTeacher):
         return call
 
 
+# [项目注释] 类型：`TwoAspectWrapper` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TwoAspectWrapper(FakeWrapper):
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：__init__, set, super。
+    # [项目注释] 输入：*`args`；**`kwargs`。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.elicited = set()
         self.searched = set()
         self.chosen = set()
 
+    # [项目注释] 功能：`reward_task`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：TravelRewardTask, frozenset。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reward_task(self):
         return TravelRewardTask(
             self.task_id,
@@ -1125,6 +1329,9 @@ class TwoAspectWrapper(FakeWrapper):
             },
         )
 
+    # [项目注释] 功能：`reward_snapshot`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：UserBenchRewardSnapshot, frozenset, len。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reward_snapshot(self):
         all_preferences = {"P1", "P2", "P3", "P4"}
         return UserBenchRewardSnapshot(
@@ -1137,6 +1344,10 @@ class TwoAspectWrapper(FakeWrapper):
             choice_initials=frozenset(self.chosen),
         )
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：casefold, UserBenchStepResult, add,
+    # [项目注释]    UserBenchObservation。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         self.actions.append(action)
         self.steps += 1
@@ -1169,6 +1380,10 @@ class TwoAspectWrapper(FakeWrapper):
         )
 
 
+# [项目注释] 功能：`test_composition_22_state_machine_completes_in_eight_steps`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, collect_teacher_trajectory, len, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_composition_22_state_machine_completes_in_eight_steps():
     trajectory = asyncio.run(
         collect_teacher_trajectory(
@@ -1199,6 +1414,10 @@ def test_composition_22_state_machine_completes_in_eight_steps():
     assert trajectory.reward_breakdown["active_preference_coverage"] == 1.0
 
 
+# [项目注释] 功能：`test_every_canonical_preference_template_satisfies_its_own_contract`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：items, TeacherTurnPlan, from_parameters, validate。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_every_canonical_preference_template_satisfies_its_own_contract():
     for aspect, fields in FIELD_QUERY_HINTS.items():
         for field in fields:
@@ -1213,6 +1432,10 @@ def test_every_canonical_preference_template_satisfies_its_own_contract():
             assert plan.validate(action) is None, (aspect, field, plan.canonical_content)
 
 
+# [项目注释] 功能：`test_every_elicitation_repair_template_is_distinct_and_satisfies_contract`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：items, TeacherTurnPlan, from_parameters, validate。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_every_elicitation_repair_template_is_distinct_and_satisfies_contract():
     for aspect, fields in FIELD_QUERY_HINTS.items():
         for field in fields:
@@ -1235,6 +1458,10 @@ def test_every_elicitation_repair_template_is_distinct_and_satisfies_contract():
 class ElicitationRepairWrapper(FakeWrapper):
     """Ignore the first valid preference question and credit the repair."""
 
+    # [项目注释] 功能：`reward_snapshot`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：count, UserBenchRewardSnapshot,
+    # [项目注释]    frozenset。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reward_snapshot(self):
         choices = [value.choice.value for value in self.actions]
         action_count = choices.count("action")
@@ -1254,6 +1481,9 @@ class ElicitationRepairWrapper(FakeWrapper):
 class UnrecordedJudgmentThenRecoveryWrapper(ElicitationRepairWrapper):
     """Return one judgment fallback without crediting its elicitation turn."""
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sum, astep, UserBenchStepResult, super。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         result = await super().astep(action)
         action_count = sum(value.choice.value == "action" for value in self.actions)
@@ -1272,6 +1502,10 @@ class UnrecordedJudgmentThenRecoveryWrapper(ElicitationRepairWrapper):
 class UnrecordedVagueThenRecoveryWrapper(ElicitationRepairWrapper):
     """Reject one elicitation as vague without credit, then accept its rephrase."""
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sum, astep, UserBenchStepResult,
+    # [项目注释]    UserBenchObservation。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         result = await super().astep(action)
         action_count = sum(value.choice.value == "action" for value in self.actions)
@@ -1300,6 +1534,10 @@ class UnrecordedVagueThenRecoveryWrapper(ElicitationRepairWrapper):
         (UnrecordedVagueThenRecoveryWrapper, "vague_action_repair_allowed"),
     ],
 )
+# [项目注释] 功能：`test_uncommitted_fallback_rephrases_without_duplicate_exhaustion`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：parametrize, SequenceTeacher, run, collect_teacher_trajectory。
+# [项目注释] 输入：`wrapper_factory`；`repair_marker`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_uncommitted_fallback_rephrases_without_duplicate_exhaustion(
     wrapper_factory, repair_marker
 ):
@@ -1335,6 +1573,10 @@ def test_uncommitted_fallback_rephrases_without_duplicate_exhaustion(
 class NeverRecordsElicitationWrapper(ElicitationRepairWrapper):
     """Never credit preference questions, including the one allowed repair."""
 
+    # [项目注释] 功能：`reward_snapshot`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：reward_snapshot, UserBenchRewardSnapshot,
+    # [项目注释]    super, frozenset。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def reward_snapshot(self):
         snapshot = super().reward_snapshot()
         return UserBenchRewardSnapshot(
@@ -1346,6 +1588,10 @@ class NeverRecordsElicitationWrapper(ElicitationRepairWrapper):
         )
 
 
+# [项目注释] 功能：`test_elicitation_not_recorded_retries_same_field_once_and_masks_failed_turn`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：SequenceTeacher, run, collect_teacher_trajectory, task。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_elicitation_not_recorded_retries_same_field_once_and_masks_failed_turn():
     teacher = SequenceTeacher(
         [
@@ -1387,6 +1633,10 @@ def test_elicitation_not_recorded_retries_same_field_once_and_masks_failed_turn(
     )
 
 
+# [项目注释] 功能：`test_second_unrecorded_elicitation_aborts_without_consuming_another_field`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, collect_teacher_task_with_retries, task, SequenceTeacher。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_second_unrecorded_elicitation_aborts_without_consuming_another_field():
     outcome = asyncio.run(
         collect_teacher_task_with_retries(
@@ -1413,7 +1663,11 @@ def test_second_unrecorded_elicitation_aborts_without_consuming_another_field():
     ] == ["name", "name"]
 
 
+# [项目注释] 类型：`JudgmentFallbackWrapper` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class JudgmentFallbackWrapper(FakeWrapper):
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：UserBenchStepResult, astep, super。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         result = await super().astep(action)
         return UserBenchStepResult(
@@ -1429,10 +1683,16 @@ class JudgmentFallbackWrapper(FakeWrapper):
 class OneJudgmentFallbackWrapper(FakeWrapper):
     """Inject exactly one simulator judgment fallback, then recover normally."""
 
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：__init__, super。
+    # [项目注释] 输入：*`args`；**`kwargs`。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.injected = False
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：UserBenchStepResult, astep, super。
+    # [项目注释] 输入：`action`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def astep(self, action):
         result = await super().astep(action)
         if self.injected:
@@ -1448,6 +1708,10 @@ class OneJudgmentFallbackWrapper(FakeWrapper):
         )
 
 
+# [项目注释] 功能：`test_one_judgment_fallback_is_admitted_as_silver_and_loss_masked`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, any, write_teacher_collection_artifacts, collect_teacher_task_with_retries。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_one_judgment_fallback_is_admitted_as_silver_and_loss_masked(tmp_path):
     outcome = asyncio.run(
         collect_teacher_task_with_retries(
@@ -1485,6 +1749,10 @@ def test_one_judgment_fallback_is_admitted_as_silver_and_loss_masked(tmp_path):
     assert paths[2].read_text(encoding="utf-8") == ""
 
 
+# [项目注释] 功能：`test_second_simulator_fallback_aborts_after_the_consumed_step`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：FakeTeacher, run, collect_teacher_task_with_retries, task。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_second_simulator_fallback_aborts_after_the_consumed_step():
     teacher = FakeTeacher()
     outcome = asyncio.run(
@@ -1504,6 +1772,10 @@ def test_second_simulator_fallback_aborts_after_the_consumed_step():
     assert teacher.index == 2
 
 
+# [项目注释] 功能：`test_per_task_checkpoint_round_trip_and_manifest_resume`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：run, initialize_teacher_run, write_teacher_outcome_checkpoint, exists。
+# [项目注释] 输入：`tmp_path`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_per_task_checkpoint_round_trip_and_manifest_resume(tmp_path):
     outcome = asyncio.run(
         collect_teacher_task_with_retries(

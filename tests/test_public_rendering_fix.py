@@ -1,3 +1,6 @@
+# [项目注释] 模块：测试模块，负责验证 test_public_rendering_fix 的行为契约。
+# [项目注释] 该文件的公共边界、输入输出和调用关系由下方实现及架构文档共同定义。
+
 from __future__ import annotations
 
 import importlib.util
@@ -20,10 +23,18 @@ from travel_grpo.training.recovery_sft import public_state_from_payload
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# [项目注释] 功能：`_action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：from_parameters。
+# [项目注释] 输入：`choice`: str；`content`: str。
+# [项目注释] 输出：标注返回 `UserBenchAction`；具体值由各分支决定。
 def _action(choice: str, content: str) -> UserBenchAction:
     return UserBenchAction.from_parameters({"thought": "test", "choice": choice, "content": content})
 
 
+# [项目注释] 功能：`test_public_completion_hint_renders_search_required_and_rejects_action`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：mark_public_preference_complete, render_actor_control_info, new_public_control_state,
+# [项目注释]    validate_public_action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_public_completion_hint_renders_search_required_and_rejects_action() -> None:
     state = mark_public_preference_complete(new_public_control_state("I need a hotel."))
     assert state.phase is RecoveryMode.SEARCH_REQUIRED
@@ -38,6 +49,11 @@ def test_public_completion_hint_renders_search_required_and_rejects_action() -> 
         assert forbidden not in rendered
 
 
+# [项目注释] 功能：`test_advance_preserves_explicit_answered_switch_note`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, advance_public_aspect,
+# [项目注释]    render_actor_control_info。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_advance_preserves_explicit_answered_switch_note() -> None:
     state = new_public_control_state("I need a hotel and a flight.")
     state = reduce_public_feedback(state, _action("search", "hotel Paris"), "Candidates: H1, H2")
@@ -52,6 +68,11 @@ def test_advance_preserves_explicit_answered_switch_note() -> None:
     assert "Continue only with current public aspect: flight" in rendered
 
 
+# [项目注释] 功能：`test_advance_preserves_explicit_blocked_switch_note`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, advance_public_aspect,
+# [项目注释]    render_actor_control_info。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_advance_preserves_explicit_blocked_switch_note() -> None:
     state = new_public_control_state("I need a hotel and a flight.")
     state = reduce_public_feedback(state, _action("search", "hotel Paris"), "The search backend is experiencing some issues.")
@@ -65,6 +86,10 @@ def test_advance_preserves_explicit_blocked_switch_note() -> None:
     assert "do not call that aspect again" in rendered
 
 
+# [项目注释] 功能：`test_boundary_phase_hint_round_trips_without_hidden_fields`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：public_state_from_payload, dumps。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_boundary_phase_hint_round_trips_without_hidden_fields() -> None:
     messages = [
         {"role": "system", "content": "system"},
@@ -89,6 +114,10 @@ def test_boundary_phase_hint_round_trips_without_hidden_fields() -> None:
     assert "remaining_preference_ids" not in json.dumps(state, default=str)
 
 
+# [项目注释] 功能：`test_inference_gate_renders_corrected_public_phases`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：spec_from_file_location, module_from_spec, exec_module, load_boundary_records。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_inference_gate_renders_corrected_public_phases() -> None:
     spec = importlib.util.spec_from_file_location(
         "inference_gate", ROOT / "scripts/eval/inference_gate.py"
@@ -112,6 +141,10 @@ def test_inference_gate_renders_corrected_public_phases() -> None:
         assert "Transition: SWITCH_ASPECT_REQUIRED" in messages[-1]["content"]
         assert payload["last_transition_status"] == "BLOCKED"
 
+# [项目注释] 功能：`test_switch_note_clears_on_next_public_event`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, advance_public_aspect, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_switch_note_clears_on_next_public_event() -> None:
     state = new_public_control_state("I need a hotel and a flight.")
     state = reduce_public_feedback(state, _action("search", "hotel Paris"), "Candidates: H1, H2")

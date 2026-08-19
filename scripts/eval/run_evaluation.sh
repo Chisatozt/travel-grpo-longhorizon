@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# [项目注释] 文件职责：统一阶段评测启动包装器。
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"

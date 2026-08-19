@@ -14,6 +14,9 @@ from travel_grpo.envs.reward import (
 )
 
 
+# [项目注释] 功能：`_task`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：TravelRewardTask, frozenset。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `TravelRewardTask`；具体值由各分支决定。
 def _task() -> TravelRewardTask:
     return TravelRewardTask(
         task_id="task-1",
@@ -30,6 +33,9 @@ def _task() -> TravelRewardTask:
     )
 
 
+# [项目注释] 功能：`_score`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：update, compute_travel_reward, _task, set。
+# [项目注释] 输入：**`overrides`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _score(**overrides):
     values = {
         "task": _task(),
@@ -43,6 +49,10 @@ def _score(**overrides):
     return compute_travel_reward(**values)
 
 
+# [项目注释] 功能：`test_completion_dominates_and_gold_remains_one`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：_score,
+# [项目注释]    approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_completion_dominates_and_gold_remains_one():
     gold = _score()
     alternative = _score(answers={"flight": "F2", "hotel": "H2"})
@@ -54,6 +64,10 @@ def test_completion_dominates_and_gold_remains_one():
     assert alternative["terminal_reward"] == pytest.approx(3.392 / 3.4)
 
 
+# [项目注释] 功能：`test_completion_is_correct_answer_rate_not_submission_rate`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_score, approx, set。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_completion_is_correct_answer_rate_not_submission_rate():
     wrong = _score(
         answers={"flight": "F99", "hotel": "H99"},
@@ -79,6 +93,10 @@ def test_completion_is_correct_answer_rate_not_submission_rate():
     assert partial["terminal_reward"] > wrong["terminal_reward"]
 
 
+# [项目注释] 功能：`test_policy_penalties_are_decomposed_and_bounded`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：_score,
+# [项目注释]    approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_policy_penalties_are_decomposed_and_bounded():
     report = _score(
         invalid_actions=4,
@@ -96,6 +114,10 @@ def test_policy_penalties_are_decomposed_and_bounded():
     assert report["penalty_components"]["blocked_aspect"] == pytest.approx(0.08)
 
 
+# [项目注释] 功能：`test_error_counts_decrease_reward_until_each_cap`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：_score,
+# [项目注释]    approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_error_counts_decrease_reward_until_each_cap():
     r1 = _score(invalid_actions=1)["terminal_reward"]
     r4 = _score(invalid_actions=4)["terminal_reward"]
@@ -104,6 +126,10 @@ def test_error_counts_decrease_reward_until_each_cap():
     assert r4 == pytest.approx(r8)
 
 
+# [项目注释] 功能：`test_passive_preference_coverage_is_positive_and_not_a_penalty`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_score, set。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_passive_preference_coverage_is_positive_and_not_a_penalty():
     no_passive = _score(active_preference_ids=set(), passive_preference_ids=set())
     passive = _score(active_preference_ids=set(), passive_preference_ids={"P1"})
@@ -111,18 +137,29 @@ def test_passive_preference_coverage_is_positive_and_not_a_penalty():
     assert passive["terminal_reward"] > no_passive["terminal_reward"]
 
 
+# [项目注释] 功能：`test_blocked_aspect_is_not_completion`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：_score, approx, set。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_blocked_aspect_is_not_completion():
     report = _score(answers={}, active_preference_ids=set(), searched_aspects=set(), blocked_aspects=1)
     assert report["completion_rate"] == pytest.approx(0.0)
     assert report["blocked_aspects"] == 1
 
 
+# [项目注释] 功能：`test_public_phase_transition_score_is_vacuously_one_without_opportunities`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_score, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_public_phase_transition_score_is_vacuously_one_without_opportunities():
     report = _score()
     assert report["phase_transition_score"] == pytest.approx(1.0)
     assert report["phase_transition_breakdown"]["search_required"]["rate"] == pytest.approx(1.0)
 
 
+# [项目注释] 功能：`test_public_phase_failures_are_small_relative_to_completion`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_score, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_public_phase_failures_are_small_relative_to_completion():
     report = _score(
         valid_search_required_transitions=0,
@@ -136,6 +173,10 @@ def test_public_phase_failures_are_small_relative_to_completion():
     assert report["terminal_reward"] > 0.8
 
 
+# [项目注释] 功能：`test_negative_terminal_rewards_are_smooth_and_distinct`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：tuple, all, len, squash_terminal_reward。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_negative_terminal_rewards_are_smooth_and_distinct():
     values = tuple(squash_terminal_reward(value) for value in (-1.0, -1.1, -1.4))
     assert values[0] > values[1] > values[2]
@@ -143,6 +184,10 @@ def test_negative_terminal_rewards_are_smooth_and_distinct():
     assert all(-1.0 < value < 0.0 for value in values)
 
 
+# [项目注释] 功能：`test_search_coverage_distinguishes_progress_and_actor_attempts_affect_efficiency`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_score, approx, set。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_search_coverage_distinguishes_progress_and_actor_attempts_affect_efficiency():
     no_progress = _score(
         answers={}, active_preference_ids=set(), searched_aspects=set(), steps=0
@@ -162,12 +207,20 @@ def test_search_coverage_distinguishes_progress_and_actor_attempts_affect_effici
     assert inefficient["efficiency"] < efficient["efficiency"]
 
 
+# [项目注释] 功能：`test_infrastructure_invalid_is_zero_not_a_negative_training_example`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_score。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_infrastructure_invalid_is_zero_not_a_negative_training_example():
     report = _score(reward_valid=False, termination_reason="infrastructure_error")
     assert report["terminal_reward"] == 0.0
     assert report["infrastructure_invalid"] is True
 
 
+# [项目注释] 功能：`test_reward_trace_remains_raw_diagnostic_only`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：RawRewardTrace, approx。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_reward_trace_remains_raw_diagnostic_only():
     trace = RawRewardTrace()
     for reward in (0.2, 0.2, 0.8, 1.0):
@@ -177,6 +230,10 @@ def test_reward_trace_remains_raw_diagnostic_only():
 
 
 @pytest.mark.parametrize("value", [True, math.inf, -math.inf, math.nan, "1"])
+# [项目注释] 功能：`test_invalid_raw_rewards_fail`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：parametrize, raises,
+# [项目注释]    RawRewardTrace。
+# [项目注释] 输入：`value`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_invalid_raw_rewards_fail(value):
     with pytest.raises(UserBenchRewardError):
         RawRewardTrace().append(value)

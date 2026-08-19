@@ -49,6 +49,9 @@ MODELS = {
 }
 
 
+# [项目注释] 功能：`load_tasks`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：read_table, to_pylist, tuple, ValueError。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `list[dict]`；具体值由各分支决定。
 def load_tasks(path: Path) -> list[dict]:
     table = pq.read_table(path)
     expected = ("task_id", "composition", "difficulty", "source_split", "prompt")
@@ -57,6 +60,9 @@ def load_tasks(path: Path) -> list[dict]:
     return table.to_pylist()
 
 
+# [项目注释] 功能：`_sha256`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, open, iter。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -65,6 +71,9 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_load_subset_manifest`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：tuple, Counter, loads, isinstance。
+# [项目注释] 输入：`path`: Path；`records`: Sequence[Mapping[str, object]]。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def _load_subset_manifest(path: Path, records: Sequence[Mapping[str, object]]) -> dict:
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -127,6 +136,10 @@ async def _run_pending_tasks(
     semaphore = asyncio.Semaphore(concurrency)
     finished = selected_count - len(pending)
 
+    # [项目注释] 功能：`run_one`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：str, attach_attempt_history,
+    # [项目注释]    atomic_json, print。
+    # [项目注释] 输入：`task`: dict。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     async def run_one(task: dict) -> None:
         nonlocal finished
         async with semaphore:
@@ -165,6 +178,9 @@ async def _run_pending_tasks(
             raise outcome
 
 
+# [项目注释] 功能：`run`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：load_tasks, to_dict, loads, from_environment。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 async def run(args: argparse.Namespace) -> int:
     records = load_tasks(args.dataset)
     subset_manifest = None

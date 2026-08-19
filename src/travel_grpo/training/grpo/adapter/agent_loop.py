@@ -41,11 +41,17 @@ except ImportError:  # pragma: no cover
     ToolResponse = None  # type: ignore[assignment]
 
 
+# [项目注释] 功能：`session_requests_termination`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：get_current_session。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def session_requests_termination() -> bool:
     session = get_current_session()
     return session is not None and session.done
 
 
+# [项目注释] 功能：`_parse_bool`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：isinstance, ValueError, casefold, strip。
+# [项目注释] 输入：`value`: Any；`name`: str。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _parse_bool(value: Any, *, name: str) -> bool:
     if isinstance(value, bool):
         return value
@@ -58,6 +64,9 @@ def _parse_bool(value: Any, *, name: str) -> bool:
     raise ValueError(f"{name} must be a boolean")
 
 
+# [项目注释] 功能：`_parse_threshold`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：isinstance, ValueError, isdigit, int。
+# [项目注释] 输入：`value`: Any。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def _parse_threshold(value: Any) -> int:
     if isinstance(value, bool):
         raise ValueError("stall_no_progress_threshold must be an integer >= 1")
@@ -72,10 +81,17 @@ def _parse_threshold(value: Any) -> int:
     return threshold
 
 
+# [项目注释] 功能：`select_post_tool_state`：按固定约束拆分、采样或选择输入集合，保持确定性和边界条件。 主要协作调用：session_requests_termination。
+# [项目注释] 输入：`default_state`: Any；`terminated_state`: Any。
+# [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
 def select_post_tool_state(default_state: Any, terminated_state: Any) -> Any:
     return terminated_state if session_requests_termination() else default_state
 
 
+# [项目注释] 功能：`reject_parallel_tool_calls`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：getattr,
+# [项目注释]    get_current_session, callable, RuntimeError。
+# [项目注释] 输入：`state`: Any。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def reject_parallel_tool_calls(state: Any) -> bool:
     tool_calls = getattr(state, "tool_calls", None)
     if not isinstance(tool_calls, (list, tuple)) or len(tool_calls) <= 1:
@@ -127,6 +143,9 @@ def finalize_actor_stop(session: Any) -> None:
 _DISABLED_ACTOR_POLICY_VERSION = "disabled"
 
 
+# [项目注释] 功能：`_parse_actor_policy_version`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：strip, ValueError, str。
+# [项目注释] 输入：`value`: Any；`enabled`: bool。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _parse_actor_policy_version(value: Any, *, enabled: bool) -> str:
     if value is None:
         version = ACTOR_RUNTIME_POLICY_VERSION
@@ -193,6 +212,14 @@ def actor_policy_metadata(
 class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
     """Own the environment lifecycle and assign the v3 reward exactly once."""
 
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：require_verl_080, _parse_bool,
+    # [项目注释]    _parse_threshold, _parse_actor_policy_version。
+    # [项目注释] 输入：`environment_config_path`: str | Path；`simulator_config_path`: str | Path；`max_steps`:
+    # [项目注释]    int；`stall_recovery_enabled`: bool | str；`stall_no_progress_threshold`: int |
+    # [项目注释]    str；`actor_policy_enabled`: bool | str；`actor_policy_version`: str |
+    # [项目注释]    None；`turn_credit_mode`: str；`turn_credit_config`: Mapping[str, Any] |
+    # [项目注释]    None；`turn_credit_config_json`: str | None；*`args`；**`kwargs`。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __init__(
         self,
         *args: Any,
@@ -239,12 +266,21 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
             environment_config_path, simulator_config_path
         )
 
+    # [项目注释] 功能：`_handle_processing_tools_state`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释]    主要协作调用：reject_parallel_tool_calls, select_post_tool_state, _handle_processing_tools_state,
+    # [项目注释]    super。
+    # [项目注释] 输入：`state`: Any。
+    # [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
     async def _handle_processing_tools_state(self, state: Any) -> Any:
         if reject_parallel_tool_calls(state):
             return AgentState.TERMINATED
         next_state = await super()._handle_processing_tools_state(state)
         return select_post_tool_state(next_state, AgentState.TERMINATED)
 
+    # [项目注释] 功能：`_handle_generating_state`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：get_current_session,
+    # [项目注释]    getattr, callable, RuntimeError。
+    # [项目注释] 输入：`state`: Any；`sampling_params`: Any；`ignore_termination`: bool。
+    # [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
     async def _handle_generating_state(
         self, state: Any, sampling_params: Any, ignore_termination: bool = False
     ) -> Any:
@@ -321,6 +357,10 @@ class UserBenchAgentLoop(ToolAgentLoop):  # type: ignore[misc]
             )
         return await super()._call_tool(tool_call, tools_kwargs, agent_data)
 
+    # [项目注释] 功能：`run`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：dict, task_id_from_run_kwargs,
+    # [项目注释]    prepare_actor_prompt, astart_session。
+    # [项目注释] 输入：`sampling_params`: Any；**`kwargs`。
+    # [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
     async def run(self, sampling_params: Any, **kwargs: Any) -> Any:
         # veRL reuses the input mapping when launching multiple rollouts.
         # Prepare a private prompt before the parent loop sees it so policy

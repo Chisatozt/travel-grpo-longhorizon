@@ -40,6 +40,9 @@ from travel_grpo.training.sft.collection import (  # noqa: E402
 )
 
 
+# [项目注释] 功能：`build_parser`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.ArgumentParser`；具体值由各分支决定。
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -126,6 +129,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# [项目注释] 功能：`_sha256_file`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, open, iter。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -134,6 +140,10 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_stratified_manifest_core`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str, _sha256_file, len, dict。
+# [项目注释] 输入：`input_path`: Path；`tasks`: tuple[dict[str, object], ...]；`quotas`: dict[str, int]；`target`:
+# [项目注释]    int；`field`: str；`seed`: str；`wave_size`: int。
+# [项目注释] 输出：标注返回 `dict[str, object]`；具体值由各分支决定。
 def _stratified_manifest_core(
     *,
     input_path: Path,
@@ -158,6 +168,11 @@ def _stratified_manifest_core(
     }
 
 
+# [项目注释] 功能：`_write_stratified_state`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：Counter,
+# [项目注释]    write_stratified_selection_manifest, getattr, str。
+# [项目注释] 输入：`path`: Path；`core`: dict[str, object]；`status`: str；`outcomes`: dict[str, object]；`waves`:
+# [项目注释]    list[dict[str, object]]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _write_stratified_state(
     path: Path,
     *,
@@ -311,6 +326,10 @@ async def _run_stratified_collection(
                 waves=waves,
             )
 
+            # [项目注释] 功能：`checkpoint`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。
+            # [项目注释]    主要协作调用：write_teacher_outcome_checkpoint, print, dumps, len。
+            # [项目注释] 输入：`outcome`: object。
+            # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
             def checkpoint(outcome: object) -> None:
                 nonlocal completed_this_run
                 write_teacher_outcome_checkpoint(outcome, run_dir)
@@ -400,6 +419,10 @@ async def _run_stratified_collection(
     return summary
 
 
+# [项目注释] 功能：`run`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：validate_teacher_collection_config, endswith,
+# [项目注释]    load_teacher_task_pool, assert_disjoint_from_evaluation。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `dict[str, object]`；具体值由各分支决定。
 async def run(args: argparse.Namespace) -> dict[str, object]:
     validate_teacher_collection_config(args.config)
     artifact_stem = args.output.stem
@@ -532,6 +555,10 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
         teacher = OpenAICompatibleTeacherClient(teacher_runtime)
         completed_now = 0
 
+        # [项目注释] 功能：`checkpoint`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：write_teacher_outcome_checkpoint,
+        # [项目注释]    print, dumps, len。
+        # [项目注释] 输入：`outcome`。
+        # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
         def checkpoint(outcome):
             nonlocal completed_now
             path = write_teacher_outcome_checkpoint(outcome, run_dir)
@@ -591,6 +618,9 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
     return summary
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：parse_args, print, dumps, build_parser。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def main() -> None:
     args = build_parser().parse_args()
     print(json.dumps(asyncio.run(run(args)), ensure_ascii=False, indent=2))

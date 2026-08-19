@@ -21,6 +21,9 @@ def choose_model_class(config: Any, causal_class: Any, multimodal_class: Any) ->
     )
 
 
+# [项目注释] 功能：`build_merge_manifest`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：str, resolve。
+# [项目注释] 输入：`base_model`: str；`adapter`: Path；`output`: Path；`model_type`: str；`dtype`: str。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def build_merge_manifest(
     *, base_model: str, adapter: Path, output: Path, model_type: str, dtype: str
 ) -> dict[str, Any]:
@@ -35,6 +38,9 @@ def build_merge_manifest(
     }
 
 
+# [项目注释] 功能：`build_parser`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.ArgumentParser`；具体值由各分支决定。
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-model", default="Qwen/Qwen3.5-2B")
@@ -52,6 +58,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：parse_args, resolve, from_pretrained,
+# [项目注释]    choose_model_class。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def main() -> None:
     args = build_parser().parse_args()
     adapter = args.adapter.expanduser().resolve()

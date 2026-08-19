@@ -57,10 +57,16 @@ AFTER_TURN_CREDIT = BEFORE_TURN_CREDIT + '''                        travel_turn_
 '''
 
 
+# [项目注释] 功能：`digest`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：upper, hexdigest, sha256。
+# [项目注释] 输入：`data`: bytes。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest().upper()
 
 
+# [项目注释] 功能：`trainer_path`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：find_spec, resolve, RuntimeError, Path。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def trainer_path() -> Path:
     spec = find_spec("verl.trainer.ppo.ray_trainer")
     if spec is None or spec.origin is None:
@@ -68,6 +74,9 @@ def trainer_path() -> Path:
     return Path(spec.origin).resolve()
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args, version。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="verify only")

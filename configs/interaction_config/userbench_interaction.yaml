@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义对话交互和 context 参数。
 interaction:
   - name: userbench
     class_name: travel_grpo.training.grpo.adapter.session.UserBenchInteraction

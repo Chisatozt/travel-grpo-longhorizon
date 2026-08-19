@@ -55,6 +55,9 @@ FINAL_ANSWER_FAILURE_PREFIXES = (
 )
 
 
+# [项目注释] 功能：`_read_jsonl`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：enumerate, splitlines, FileNotFoundError, strip。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `tuple[list[dict[str, Any]], list[dict[str, Any]]]`；具体值由各分支决定。
 def _read_jsonl(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     records: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -123,6 +126,9 @@ def _valid_tool_pairs(messages: Any) -> tuple[bool, str | None]:
     return True, None
 
 
+# [项目注释] 功能：`_action_parameters`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, loads, len。
+# [项目注释] 输入：`message`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `Mapping[str, Any] | None`；具体值由各分支决定。
 def _action_parameters(message: Mapping[str, Any]) -> Mapping[str, Any] | None:
     calls = message.get("tool_calls")
     if not isinstance(calls, list) or len(calls) != 1:
@@ -139,6 +145,9 @@ def _action_parameters(message: Mapping[str, Any]) -> Mapping[str, Any] | None:
     return value if isinstance(value, Mapping) else None
 
 
+# [项目注释] 功能：`_composition`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：split, join, isdigit。
+# [项目注释] 输入：`task_id`: str。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def _composition(task_id: str) -> str | None:
     parts: list[str] = []
     for item in task_id.split("|"):
@@ -152,6 +161,9 @@ def _composition(task_id: str) -> str | None:
     return "".join(parts) if parts else None
 
 
+# [项目注释] 功能：`_has_final_answer_failure`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, isinstance, startswith。
+# [项目注释] 输入：`reasons`: Sequence[Any]。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _has_final_answer_failure(reasons: Sequence[Any]) -> bool:
     return any(
         isinstance(reason, str)
@@ -160,6 +172,10 @@ def _has_final_answer_failure(reasons: Sequence[Any]) -> bool:
     )
 
 
+# [项目注释] 功能：`_candidate`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, _valid_tool_pairs, isinstance,
+# [项目注释]    _action_parameters。
+# [项目注释] 输入：`envelope`: Mapping[str, Any]；`line_number`: int。
+# [项目注释] 输出：标注返回 `tuple[dict[str, Any] | None, str | None]`；具体值由各分支决定。
 def _candidate(
     envelope: Mapping[str, Any],
     *,
@@ -265,6 +281,9 @@ def _candidate(
     return output, None
 
 
+# [项目注释] 功能：`prepare`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：_read_jsonl, Counter, mkdir, write_text。
+# [项目注释] 输入：`diagnostics`: Path；`output`: Path；`manifest`: Path；`keep_all`: bool。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def prepare(
     diagnostics: Path,
     output: Path,
@@ -333,6 +352,9 @@ def prepare(
     return report
 
 
+# [项目注释] 功能：`build_parser`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.ArgumentParser`；具体值由各分支决定。
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--diagnostics", type=Path, default=DEFAULT_DIAGNOSTICS)
@@ -346,6 +368,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：prepare, print, dumps, vars。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def main() -> None:
     report = prepare(**vars(build_parser().parse_args()))
     print(json.dumps(report, ensure_ascii=False, indent=2))

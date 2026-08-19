@@ -71,6 +71,9 @@ LEGACY_TEACHER_ACTOR_POLICY = """Teacher policy for strict UserBench trajectorie
 - Never repeat an exact action, semantic preference field, search aspect, or answered aspect."""
 
 
+# [项目注释] 功能：`_copy_messages`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：deepcopy, list, ValueError, isinstance。
+# [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def _copy_messages(messages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     copied = copy.deepcopy(list(messages))
     if not copied or copied[0].get("role") != "system":
@@ -80,6 +83,9 @@ def _copy_messages(messages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]
     return copied
 
 
+# [项目注释] 功能：`_remove_blocks`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：strip, replace。
+# [项目注释] 输入：`content`: str；`blocks`: Sequence[str]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _remove_blocks(content: str, blocks: Sequence[str]) -> str:
     result = content
     for block in blocks:

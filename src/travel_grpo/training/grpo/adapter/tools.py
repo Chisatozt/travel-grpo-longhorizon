@@ -176,12 +176,19 @@ async def execute_userbench_action(
 class UserBenchTool(BaseTool):  # type: ignore[misc]
     """veRL BaseTool adapter; step rewards are metadata, never tool rewards."""
 
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：require_verl_080, __init__, super。
+    # [项目注释] 输入：`config`: dict[str, Any]；`tool_schema`: OpenAIFunctionToolSchema。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __init__(
         self, config: dict[str, Any], tool_schema: OpenAIFunctionToolSchema
     ) -> None:
         require_verl_080()
         super().__init__(config, tool_schema)
 
+    # [项目注释] 功能：`create`：异步地根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：require_current_session, isinstance, TypeError,
+    # [项目注释]    ValueError。
+    # [项目注释] 输入：`instance_id`: str | None；**`kwargs`。
+    # [项目注释] 输出：标注返回 `tuple[str, Any]`；具体值由各分支决定。
     async def create(
         self, instance_id: str | None = None, **kwargs: Any
     ) -> tuple[str, Any]:
@@ -200,6 +207,10 @@ class UserBenchTool(BaseTool):  # type: ignore[misc]
         resolved_id = instance_id or session.request_id
         return resolved_id, ToolResponse(text="")
 
+    # [项目注释] 功能：`execute`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：require_current_session, ValueError,
+    # [项目注释]    execute_userbench_action, ToolResponse。
+    # [项目注释] 输入：`instance_id`: str；`parameters`: dict[str, Any]；**`kwargs`。
+    # [项目注释] 输出：标注返回 `tuple[Any, float, dict[str, Any]]`；具体值由各分支决定。
     async def execute(
         self, instance_id: str, parameters: dict[str, Any], **kwargs: Any
     ) -> tuple[Any, float, dict[str, Any]]:
@@ -211,12 +222,21 @@ class UserBenchTool(BaseTool):  # type: ignore[misc]
         result = await execute_userbench_action(parameters)
         return ToolResponse(text=result.text), result.reward, result.metadata
 
+    # [项目注释] 功能：`calc_reward`：异步地计算奖励、指标或聚合统计，供训练、评测或报告使用。
+    # [项目注释] 输入：`instance_id`: str；**`kwargs`。
+    # [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
     async def calc_reward(self, instance_id: str, **kwargs: Any) -> float:
         return 0.0
 
+    # [项目注释] 功能：`release`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`instance_id`: str；**`kwargs`。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     async def release(self, instance_id: str, **kwargs: Any) -> None:
         return None
 
     @staticmethod
+    # [项目注释] 功能：`schema_dict`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：get_interact_with_env_schema。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def schema_dict() -> dict[str, Any]:
         return get_interact_with_env_schema()

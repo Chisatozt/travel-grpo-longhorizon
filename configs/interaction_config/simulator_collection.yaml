@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 teacher collection simulator 边界。
 simulator:
   role: collection
   backend: openai_compatible

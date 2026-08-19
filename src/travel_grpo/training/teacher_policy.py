@@ -50,18 +50,23 @@ _PUBLIC_SEARCH_REQUIREMENTS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+# [项目注释] 类型：`TeacherPhase` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TeacherPhase(str, Enum):
     ELICIT = "elicit"
     SEARCH = "search"
     ANSWER = "answer"
 
 
+# [项目注释] 类型：`AttemptStrategy` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class AttemptStrategy(str, Enum):
     NATURAL = "natural"
     STRICT = "strict"
     CANONICAL = "canonical"
 
     @classmethod
+    # [项目注释] 功能：`for_attempt`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：min, max。
+    # [项目注释] 输入：`attempt`: int。
+    # [项目注释] 输出：标注返回 `'AttemptStrategy'`；具体值由各分支决定。
     def for_attempt(cls, attempt: int) -> "AttemptStrategy":
         return (cls.NATURAL, cls.STRICT, cls.CANONICAL)[min(max(attempt, 1), 3) - 1]
 
@@ -350,6 +355,9 @@ def _search_tokens(text: str) -> tuple[str, ...]:
     return tuple(_SEARCH_TOKEN.findall(normalized))
 
 
+# [项目注释] 功能：`_search_token_matches`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：endswith, len。
+# [项目注释] 输入：`actual`: str；`expected`: str。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _search_token_matches(actual: str, expected: str) -> bool:
     if actual == expected:
         return True
@@ -381,6 +389,9 @@ def _contains_public_alias(text: str, alias: str) -> bool:
     return False
 
 
+# [项目注释] 功能：`_search_query_issue`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：join, items, set, findall。
+# [项目注释] 输入：`content`: str；`aspect`: str；`public_context`: tuple[str, ...]。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def _search_query_issue(
     content: str, aspect: str, public_context: tuple[str, ...]
 ) -> str | None:
@@ -404,6 +415,7 @@ def _search_query_issue(
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`TeacherTurnPlan` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TeacherTurnPlan:
     phase: TeacherPhase
     aspect: str
@@ -415,10 +427,16 @@ class TeacherTurnPlan:
     public_search_context: tuple[str, ...] = ()
 
     @property
+    # [项目注释] 功能：`choice`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ActionChoice。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `ActionChoice`；具体值由各分支决定。
     def choice(self) -> ActionChoice:
         return ActionChoice(self.phase.value if self.phase is not TeacherPhase.ELICIT else "action")
 
     @property
+    # [项目注释] 功能：`canonical_content`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
     def canonical_content(self) -> str | None:
         if self.phase is TeacherPhase.ELICIT:
             assert self.field is not None
@@ -433,12 +451,18 @@ class TeacherTurnPlan:
         return None
 
     @property
+    # [项目注释] 功能：`elicitation_repair_content`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
     def elicitation_repair_content(self) -> str | None:
         if self.phase is not TeacherPhase.ELICIT:
             return None
         assert self.field is not None
         return _ELICITATION_REPAIR_QUESTIONS[self.aspect][self.field]
 
+    # [项目注释] 功能：`instruction`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：join。
+    # [项目注释] 输入：`generation_attempt`: int。
+    # [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
     def instruction(self, generation_attempt: int) -> str:
         label = _ASPECT_LABEL[self.aspect]
         if self.phase is TeacherPhase.ELICIT:
@@ -494,6 +518,9 @@ class TeacherTurnPlan:
             "option order or ID, and do not ask or search."
         )
 
+    # [项目注释] 功能：`validate`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：strip, action_field_matches, set, replace。
+    # [项目注释] 输入：`action`: UserBenchAction。
+    # [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
     def validate(self, action: UserBenchAction) -> str | None:
         if action.choice is not self.choice:
             return "wrong_phase_choice"
@@ -551,18 +578,28 @@ class TeacherTurnPlan:
 
 
 @dataclass
+# [项目注释] 类型：`TeacherPolicyState` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TeacherPolicyState:
     task: TravelRewardTask
     strategy: AttemptStrategy
     asked_fields: dict[str, set[str]] = field(default_factory=dict)
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：set。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         self.asked_fields = {aspect: set() for aspect in self.task.aspects}
 
+    # [项目注释] 功能：`_active_complete`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：set。
+    # [项目注释] 输入：`aspect`: str；`session`: 'UserBenchSessionState'。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def _active_complete(self, aspect: str, session: "UserBenchSessionState") -> bool:
         expected = set(self.task.preference_ids_by_aspect[aspect])
         return expected <= session.active_preference_ids
 
+    # [项目注释] 功能：`_field_order`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：tuple, len, reversed。
+    # [项目注释] 输入：`aspect`: str。
+    # [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
     def _field_order(self, aspect: str) -> tuple[str, ...]:
         configured = tuple(self.task.preference_fields_by_aspect.get(aspect, ()))
         known = tuple(value for value in configured if value in FIELD_QUERY_HINTS[aspect])
@@ -577,6 +614,10 @@ class TeacherPolicyState:
             return tuple(reversed(values))
         return values
 
+    # [项目注释] 功能：`_visible_option_ids`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：tuple, findall, str,
+    # [项目注释]    startswith。
+    # [项目注释] 输入：`aspect`: str；`messages`: list[dict]。
+    # [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
     def _visible_option_ids(self, aspect: str, messages: list[dict]) -> tuple[str, ...]:
         prefix = _PREFIX_BY_ASPECT[aspect]
         found: list[str] = []
@@ -703,6 +744,10 @@ class TeacherPolicyState:
             values.append(str(following["content"])[:1600])
         return tuple(values)
 
+    # [项目注释] 功能：`next_plan`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_visible_option_ids, TeacherTurnPlan,
+    # [项目注释]    RuntimeError, _active_complete。
+    # [项目注释] 输入：`session`: 'UserBenchSessionState'；`messages`: list[dict]。
+    # [项目注释] 输出：标注返回 `TeacherTurnPlan`；具体值由各分支决定。
     def next_plan(
         self, session: "UserBenchSessionState", messages: list[dict]
     ) -> TeacherTurnPlan:
@@ -740,6 +785,9 @@ class TeacherPolicyState:
             public_requirements=self._public_search_requirements(messages),
         )
 
+    # [项目注释] 功能：`record_committed`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：add。
+    # [项目注释] 输入：`plan`: TeacherTurnPlan。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def record_committed(self, plan: TeacherTurnPlan) -> None:
         if plan.phase is TeacherPhase.ELICIT:
             assert plan.field is not None
@@ -754,6 +802,9 @@ def _public_candidate_satisfies(detail: str, aliases: tuple[str, ...]) -> bool:
     except json.JSONDecodeError:
         return False
 
+    # [项目注释] 功能：`non_null_key`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, any, non_null_key, values。
+    # [项目注释] 输入：`node`: object；`key`: str。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def non_null_key(node: object, key: str) -> bool:
         if isinstance(node, dict):
             if key in node and node[key] is not None:

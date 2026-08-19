@@ -61,6 +61,9 @@ class TurnEvent:
     reward_correct_answer: bool = False
     reward_wrong_answer: bool = False
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, TurnCreditError。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if isinstance(self.turn_index, bool) or self.turn_index < 0:
             raise TurnCreditError("turn_index must be a non-negative integer")
@@ -74,6 +77,7 @@ class TurnEvent:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`AspectCausalTrace` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class AspectCausalTrace:
     aspect: str
     preference_turn_indices: tuple[int, ...] = ()
@@ -84,6 +88,7 @@ class AspectCausalTrace:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`TurnCreditConfig` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TurnCreditConfig:
     preference_chain: float = 0.20
     successful_search: float = 0.45
@@ -106,6 +111,10 @@ class TurnCreditConfig:
     multiplier_band: float = 0.20
     epsilon: float = 1.0e-6
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：float, TurnCreditError, getattr,
+    # [项目注释]    isfinite。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         for name in (
             "preference_chain",
@@ -143,6 +152,9 @@ class TurnCreditConfig:
                 raise TurnCreditError(f"{name} must be non-positive and finite")
 
     @classmethod
+    # [项目注释] 功能：`from_mapping`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：cls, all, TurnCreditError, float。
+    # [项目注释] 输入：`value`: Mapping[str, Any] | None。
+    # [项目注释] 输出：标注返回 `'TurnCreditConfig'`；具体值由各分支决定。
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "TurnCreditConfig":
         if value is None:
             return cls()
@@ -176,6 +188,7 @@ class TurnCreditConfig:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`TurnCreditTrace` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TurnCreditTrace:
     version: str
     reward_valid: bool
@@ -184,6 +197,9 @@ class TurnCreditTrace:
     evidence: tuple[float, ...]
     _config: TurnCreditConfig = field(repr=False, compare=False)
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, TurnCreditError, len, isfinite。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if self.version != TURN_CREDIT_VERSION:
             raise TurnCreditError(f"unsupported turn-credit version: {self.version!r}")
@@ -192,6 +208,10 @@ class TurnCreditTrace:
         if any(not math.isfinite(value) for value in self.evidence):
             raise TurnCreditError("turn evidence must be finite")
 
+    # [项目注释] 功能：`to_extra_field`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：validate_turn_credit_mode, len,
+    # [项目注释]    list。
+    # [项目注释] 输入：`mode`: str。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def to_extra_field(self, *, mode: str) -> dict[str, Any]:
         normalized_mode = validate_turn_credit_mode(mode)
         return {
@@ -202,6 +222,9 @@ class TurnCreditTrace:
             "evidence": list(self.evidence),
         }
 
+    # [项目注释] 功能：`metrics`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：validate_turn_credit_mode, len, sum, min。
+    # [项目注释] 输入：`mode`: str。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def metrics(self, *, mode: str) -> dict[str, Any]:
         values = self.evidence
         return {
@@ -217,6 +240,10 @@ class TurnCreditTrace:
         }
 
 
+# [项目注释] 功能：`validate_turn_credit_mode`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：casefold, isinstance,
+# [项目注释]    TurnCreditError, strip。
+# [项目注释] 输入：`value`: Any。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def validate_turn_credit_mode(value: Any) -> str:
     if not isinstance(value, str):
         raise TurnCreditError("turn-credit mode must be a string")
@@ -410,6 +437,11 @@ def allocate_turn_evidence(
     return tuple(float(value) for value in evidence)
 
 
+# [项目注释] 功能：`build_turn_credit_trace`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：build_aspect_causal_traces,
+# [项目注释]    allocate_turn_evidence, TurnCreditTrace, TurnCreditConfig。
+# [项目注释] 输入：`events`: Sequence[TurnEvent]；`aspects`: Sequence[str]；`blocked_aspects`:
+# [项目注释]    Sequence[str]；`reward_valid`: bool；`config`: TurnCreditConfig | None。
+# [项目注释] 输出：标注返回 `TurnCreditTrace`；具体值由各分支决定。
 def build_turn_credit_trace(
     events: Sequence[TurnEvent],
     aspects: Sequence[str],
@@ -435,6 +467,9 @@ def build_turn_credit_trace(
     )
 
 
+# [项目注释] 功能：`normalized_turn_evidence`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, sqrt, tuple, float。
+# [项目注释] 输入：`evidence`: Sequence[float]；`epsilon`: float。
+# [项目注释] 输出：标注返回 `tuple[float, ...]`；具体值由各分支决定。
 def normalized_turn_evidence(
     evidence: Sequence[float], *, epsilon: float = 1.0e-6
 ) -> tuple[float, ...]:

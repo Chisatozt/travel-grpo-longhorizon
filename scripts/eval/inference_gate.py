@@ -82,16 +82,25 @@ FIXED_COUNTS = {
 EXCLUDED_COMPOSITIONS = ("333", "334", "444", "2222")
 
 
+# [项目注释] 功能：`_sha256_bytes`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：hexdigest, sha256。
+# [项目注释] 输入：`value`: bytes。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+# [项目注释] 功能：`_sha256_json`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_sha256_bytes, encode, dumps。
+# [项目注释] 输入：`value`: Any。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sha256_json(value: Any) -> str:
     return _sha256_bytes(
         json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     )
 
 
+# [项目注释] 功能：`_sha256_file`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, is_file, open。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def _sha256_file(path: Path) -> str | None:
     if not path.is_file():
         return None
@@ -102,6 +111,9 @@ def _sha256_file(path: Path) -> str | None:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_relative`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str, relative_to, resolve。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _relative(path: Path) -> str:
     try:
         return str(path.resolve().relative_to(ROOT.resolve()))
@@ -109,6 +121,9 @@ def _relative(path: Path) -> str:
         return str(path)
 
 
+# [项目注释] 功能：`_source_info`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, bool。
+# [项目注释] 输入：`record`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _source_info(record: Mapping[str, Any]) -> dict[str, Any]:
     provenance = record.get("source_provenance")
     first = provenance[0] if isinstance(provenance, list) and provenance else {}
@@ -123,6 +138,10 @@ def _source_info(record: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+# [项目注释] 功能：`load_boundary_records`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：is_file, FileNotFoundError, open,
+# [项目注释]    enumerate。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def load_boundary_records(path: Path = BOUNDARY_FILE) -> list[dict[str, Any]]:
     if not path.is_file():
         raise FileNotFoundError(
@@ -141,6 +160,9 @@ def load_boundary_records(path: Path = BOUNDARY_FILE) -> list[dict[str, Any]]:
     return records
 
 
+# [项目注释] 功能：`_stable_record_key`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_sha256_json, isinstance。
+# [项目注释] 输入：`record`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _stable_record_key(record: Mapping[str, Any]) -> str:
     quality = record.get("quality_checks")
     dedupe = quality.get("dedupe_key") if isinstance(quality, Mapping) else None
@@ -154,6 +176,9 @@ def _stable_record_key(record: Mapping[str, Any]) -> str:
     )
 
 
+# [项目注释] 功能：`_is_grpo_source`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, any。
+# [项目注释] 输入：`record`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _is_grpo_source(record: Mapping[str, Any]) -> bool:
     provenance = record.get("source_provenance")
     return isinstance(provenance, list) and any(
@@ -223,6 +248,10 @@ def choose_probe_records(
         # Such a record is still useful for quarantine/audit, but it cannot
         # measure search@1 or an aspect switch. The check uses only the public
         # snapshot and public messages.
+        # [项目注释] 功能：`_eligible_open_transition`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any,
+        # [项目注释]    public_state_from_payload, str。
+        # [项目注释] 输入：`value`: Mapping[str, Any]。
+        # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
         def _eligible_open_transition(value: Mapping[str, Any]) -> bool:
             try:
                 state = public_state_from_payload(
@@ -264,6 +293,9 @@ def choose_probe_records(
     return unique[:count]
 
 
+# [项目注释] 功能：`load_frozen_tasks`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：read_table, to_pylist, tuple, ValueError。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def load_frozen_tasks(path: Path) -> list[dict[str, Any]]:
     table = pq.read_table(path)
     expected = ("task_id", "composition", "difficulty", "source_split", "prompt")
@@ -300,6 +332,9 @@ def choose_closed_loop_tasks(rows: Sequence[Mapping[str, Any]], count: int = 8) 
     return [dict(value) for value in selected]
 
 
+# [项目注释] 功能：`_initial_user_content`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ValueError, isinstance, str。
+# [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _initial_user_content(messages: Sequence[Mapping[str, Any]]) -> str:
     for message in messages:
         if message.get("role") == "user" and isinstance(message.get("content"), str):
@@ -307,6 +342,10 @@ def _initial_user_content(messages: Sequence[Mapping[str, Any]]) -> str:
     raise ValueError("public context has no user message")
 
 
+# [项目注释] 功能：`_extract_actions`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, len, loads,
+# [项目注释]    from_parameters。
+# [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `list[UserBenchAction]`；具体值由各分支决定。
 def _extract_actions(messages: Sequence[Mapping[str, Any]]) -> list[UserBenchAction]:
     actions: list[UserBenchAction] = []
     for message in messages:
@@ -329,6 +368,9 @@ def _extract_actions(messages: Sequence[Mapping[str, Any]]) -> list[UserBenchAct
     return actions
 
 
+# [项目注释] 功能：`_append_control_note`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str, ValueError。
+# [项目注释] 输入：`messages`: list[dict[str, Any]]；`note`: str。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def _append_control_note(messages: list[dict[str, Any]], note: str) -> list[dict[str, Any]]:
     if not messages:
         raise ValueError("cannot render control note on an empty prompt")
@@ -341,6 +383,10 @@ def _append_control_note(messages: list[dict[str, Any]], note: str) -> list[dict
     return messages
 
 
+# [项目注释] 功能：`_public_messages`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：normalize_actor_messages,
+# [项目注释]    public_state_from_payload, ensure_actor_runtime_policy, _append_control_note。
+# [项目注释] 输入：`record`: Mapping[str, Any]；`condition`: str。
+# [项目注释] 输出：标注返回 `tuple[list[dict[str, Any]], dict[str, Any]]`；具体值由各分支决定。
 def _public_messages(record: Mapping[str, Any], condition: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     base = normalize_actor_messages(record.get("messages", []))
     if not base or base[0].get("role") != "system":
@@ -378,10 +424,16 @@ def _public_messages(record: Mapping[str, Any], condition: str) -> tuple[list[di
     return messages, payload
 
 
+# [项目注释] 功能：`_answer_ids`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：strip, split。
+# [项目注释] 输入：`content`: str。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _answer_ids(content: str) -> list[str]:
     return [value.strip() for value in content.split(",") if value.strip()]
 
 
+# [项目注释] 功能：`_action_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：getattr, isinstance。
+# [项目注释] 输入：`call`: Any。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _action_record(call: Any) -> dict[str, Any]:
     action = getattr(call, "action", None)
     if not isinstance(action, UserBenchAction):
@@ -394,6 +446,10 @@ def _action_record(call: Any) -> dict[str, Any]:
     }
 
 
+# [项目注释] 功能：`_classify_probe`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str, _answer_ids, set, len。
+# [项目注释] 输入：`category`: str；`record`: Mapping[str, Any]；`action`: UserBenchAction | None；`state_payload`:
+# [项目注释]    Mapping[str, Any]；`previous_actions`: Sequence[UserBenchAction]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _classify_probe(
     category: str,
     record: Mapping[str, Any],
@@ -488,6 +544,11 @@ def _classify_probe(
     return result
 
 
+# [项目注释] 功能：`run_one_step_probes`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：tuple, atomic_json, fromkeys,
+# [项目注释]    mkdir。
+# [项目注释] 输入：`samples`: Mapping[str, Sequence[Mapping[str, Any]]]；`actor`:
+# [项目注释]    OpenAICompatibleActorClient；`output`: Path；`conditions`: Sequence[str]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 async def run_one_step_probes(
     *,
     samples: Mapping[str, Sequence[Mapping[str, Any]]],
@@ -553,6 +614,9 @@ async def run_one_step_probes(
     return summaries
 
 
+# [项目注释] 功能：`_mean_flags`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：len, sum, bool。
+# [项目注释] 输入：`rows`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _mean_flags(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     keys = (
         "answer_at_1", "visible_id_only", "search_at_1", "clean_search_at_1",
@@ -591,6 +655,9 @@ def _public_reward_summary(report: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+# [项目注释] 功能：`_sanitize_transcript`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：normalize_actor_messages。
+# [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def _sanitize_transcript(messages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return normalize_actor_messages(messages)
 
@@ -681,6 +748,10 @@ async def guarded_rollout_task(
         wrapper.close()
 
 
+# [项目注释] 功能：`_old_result_summary`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：isinstance, _public_reward_summary,
+# [项目注释]    _sanitize_transcript。
+# [项目注释] 输入：`result`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _old_result_summary(result: Mapping[str, Any]) -> dict[str, Any]:
     report = result.get("reward") if isinstance(result.get("reward"), Mapping) else {}
     return {
@@ -699,6 +770,10 @@ def _old_result_summary(result: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+# [项目注释] 功能：`run_closed_loop`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：tuple, fromkeys, mkdir, enumerate。
+# [项目注释] 输入：`tasks`: Sequence[Mapping[str, Any]]；`actor`: OpenAICompatibleActorClient；`simulator`:
+# [项目注释]    UserSimulatorRuntime；`output`: Path；`conditions`: Sequence[str]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 async def run_closed_loop(
     *,
     tasks: Sequence[Mapping[str, Any]],
@@ -740,6 +815,9 @@ async def run_closed_loop(
     return summaries
 
 
+# [项目注释] 功能：`_transcript_choice_counts`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：Counter, isinstance, loads。
+# [项目注释] 输入：`transcript`: Any。
+# [项目注释] 输出：标注返回 `Counter[str]`；具体值由各分支决定。
 def _transcript_choice_counts(transcript: Any) -> Counter[str]:
     counts: Counter[str] = Counter()
     if not isinstance(transcript, list):
@@ -766,6 +844,9 @@ def _transcript_choice_counts(transcript: Any) -> Counter[str]:
     return counts
 
 
+# [项目注释] 功能：`_guard_reason_count`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：sum, bool, isinstance, int。
+# [项目注释] 输入：`rows`: Sequence[Mapping[str, Any]]；`predicate`: Any。
+# [项目注释] 输出：标注返回 `tuple[int, int]`；具体值由各分支决定。
 def _guard_reason_count(
     rows: Sequence[Mapping[str, Any]],
     predicate: Any,
@@ -786,6 +867,10 @@ def _guard_reason_count(
     return total, tasks
 
 
+# [项目注释] 功能：`summarize_closed_loop`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：_guard_reason_count, Counter, float,
+# [项目注释]    int。
+# [项目注释] 输入：`rows`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def summarize_closed_loop(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     rewards = [row.get("reward", {}) for row in rows]
     completion = [float(value.get("completion_rate", 0.0)) for value in rewards if isinstance(value, Mapping)]
@@ -866,6 +951,9 @@ def summarize_closed_loop(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 def build_comparison_report(output: Path) -> dict[str, Any]:
     """Assemble a compact A/B report from immutable per-sample summaries."""
 
+    # [项目注释] 功能：`load`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：loads, is_file, read_text, isinstance。
+    # [项目注释] 输入：`relative`: str。
+    # [项目注释] 输出：标注返回 `dict[str, Any] | None`；具体值由各分支决定。
     def load(relative: str) -> dict[str, Any] | None:
         path = output / relative
         if not path.is_file():
@@ -895,6 +983,10 @@ def build_comparison_report(output: Path) -> dict[str, Any]:
     }
     return report
 
+# [项目注释] 功能：`build_manifest`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：load_boundary_records, items, int,
+# [项目注释]    choose_closed_loop_tasks。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `tuple[dict[str, Any], dict[str, list[dict[str, Any]]], list[dict[str, Any]]]`；具体值由各分支决定。
 def build_manifest(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     records = load_boundary_records(args.boundary_file)
     samples: dict[str, list[dict[str, Any]]] = {}
@@ -958,6 +1050,9 @@ def build_manifest(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, 
     return manifest, samples, tasks
 
 
+# [项目注释] 功能：`_requested_conditions`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：getattr, tuple, fromkeys, any。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
 def _requested_conditions(args: argparse.Namespace) -> tuple[str, ...]:
     values = getattr(args, "conditions", None)
     if values is None:
@@ -999,6 +1094,10 @@ def preserve_baseline_condition(args: argparse.Namespace, conditions: Sequence[s
     shutil.copytree(source, destination)
 
 
+# [项目注释] 功能：`run`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：mkdir, _requested_conditions,
+# [项目注释]    preserve_baseline_condition, build_manifest。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 async def run(args: argparse.Namespace) -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     conditions = _requested_conditions(args)
@@ -1039,6 +1138,9 @@ async def run(args: argparse.Namespace) -> None:
         await actor.close()
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args, run。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, default=ROOT / "data/evaluation/tasks.parquet")

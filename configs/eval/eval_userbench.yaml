@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 frozen UserBench evaluation 的模型、simulator、采样和输出参数。
 evaluation:
   contract_version: travel-userbench-evaluation-v1
   dataset: data/evaluation/tasks.parquet

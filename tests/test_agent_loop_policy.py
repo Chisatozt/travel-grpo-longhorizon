@@ -23,6 +23,9 @@ from travel_grpo.training.grpo.adapter.agent_loop import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# [项目注释] 功能：`prompt`：把协议/状态数据转换为模型、用户或日志可见的文本表示。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `list[dict[str, object]]`；具体值由各分支决定。
 def prompt() -> list[dict[str, object]]:
     return [
         {"role": "system", "content": "Use interact_with_env."},
@@ -30,6 +33,10 @@ def prompt() -> list[dict[str, object]]:
     ]
 
 
+# [项目注释] 功能：`test_agent_loop_injects_policy_into_the_system_message_only`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：prepare_actor_prompt, prompt, count。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_agent_loop_injects_policy_into_the_system_message_only() -> None:
     prepared = prepare_actor_prompt(prompt())
     assert ACTOR_RUNTIME_POLICY in prepared[0]["content"]
@@ -37,6 +44,10 @@ def test_agent_loop_injects_policy_into_the_system_message_only() -> None:
     assert ACTOR_RUNTIME_POLICY not in prepared[1]["content"]
 
 
+# [项目注释] 功能：`test_agent_loop_policy_injection_is_idempotent`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：prepare_actor_prompt, prompt, count。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_agent_loop_policy_injection_is_idempotent() -> None:
     prepared = prepare_actor_prompt(prompt())
     repeated = prepare_actor_prompt(prepared)
@@ -44,11 +55,19 @@ def test_agent_loop_policy_injection_is_idempotent() -> None:
     assert repeated[0]["content"].count(ACTOR_RUNTIME_POLICY_MARKER) == 1
 
 
+# [项目注释] 功能：`test_agent_loop_requires_a_system_message_when_enabled`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：raises, prepare_actor_prompt。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_agent_loop_requires_a_system_message_when_enabled() -> None:
     with pytest.raises(ValueError, match="system message"):
         prepare_actor_prompt([{"role": "user", "content": "Plan."}])
 
 
+# [项目注释] 功能：`test_policy_can_be_disabled_without_changing_prompt_content`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：prompt, prepare_actor_prompt。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_policy_can_be_disabled_without_changing_prompt_content() -> None:
     original = prompt()
     prepared = prepare_actor_prompt(
@@ -61,6 +80,10 @@ def test_policy_can_be_disabled_without_changing_prompt_content() -> None:
     assert prepared[0] is not original[0]
 
 
+# [项目注释] 功能：`test_train_and_validation_use_the_same_default_policy`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：prepare_actor_prompt, prompt。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_train_and_validation_use_the_same_default_policy() -> None:
     train_prompt = prepare_actor_prompt(
         prompt(), actor_policy_enabled=True, actor_policy_version=ACTOR_RUNTIME_POLICY_VERSION
@@ -71,6 +94,10 @@ def test_train_and_validation_use_the_same_default_policy() -> None:
     assert train_prompt == validation_prompt
 
 
+# [项目注释] 功能：`test_raw_prompt_is_never_modified_in_place`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：prompt,
+# [项目注释]    prepare_actor_prompt, dict。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_raw_prompt_is_never_modified_in_place() -> None:
     original = prompt()
     snapshot = [dict(message) for message in original]
@@ -79,6 +106,10 @@ def test_raw_prompt_is_never_modified_in_place() -> None:
     assert ACTOR_RUNTIME_POLICY not in original[0]["content"]
 
 
+# [项目注释] 功能：`test_policy_version_is_recorded_without_hidden_state`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：actor_policy_metadata。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_policy_version_is_recorded_without_hidden_state() -> None:
     assert actor_policy_metadata(
         actor_policy_enabled=True,
@@ -93,6 +124,10 @@ def test_policy_version_is_recorded_without_hidden_state() -> None:
     ) == {"actor_policy_enabled": False, "actor_policy_version": "disabled"}
 
 
+# [项目注释] 功能：`test_agent_loop_config_pins_one_default_for_train_and_validation`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：safe_load, read_text。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_agent_loop_config_pins_one_default_for_train_and_validation() -> None:
     config = yaml.safe_load(
         (ROOT / "configs/interaction_config/agent_loop.yaml").read_text(
@@ -123,13 +158,20 @@ def test_agent_loop_run_passes_private_policy_prompt_to_parent(monkeypatch: pyte
 
     seen: list[dict] = []
 
+    # [项目注释] 功能：`fake_parent_run`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：SimpleNamespace。
+    # [项目注释] 输入：`sampling_params`；**`kwargs`。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     async def fake_parent_run(self, sampling_params, **kwargs):
         seen.append(kwargs)
         # Simulate a parent that mutates its private prompt while tokenizing.
         kwargs["raw_prompt"][0]["content"] += " parent mutation"
         return SimpleNamespace(extra_fields={}, reward_score=None)
 
+    # [项目注释] 类型：`FakeRuntime` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
     class FakeRuntime:
+        # [项目注释] 功能：`astart_session`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：SimpleNamespace。
+        # [项目注释] 输入：`task_id`。
+        # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
         async def astart_session(self, task_id):
             return SimpleNamespace(
                 task_id=task_id,

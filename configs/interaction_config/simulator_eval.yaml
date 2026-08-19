@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 evaluation simulator 边界。
 simulator:
   role: eval
   backend: openai

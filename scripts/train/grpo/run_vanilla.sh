@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# [项目注释] 文件职责：启动最小 vanilla GRPO profile。
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT"

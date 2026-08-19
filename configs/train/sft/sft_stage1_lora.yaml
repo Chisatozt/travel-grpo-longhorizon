@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 stage-1 prefix/action-only SFT 参数。
 stage:
   name: prefix_bootstrap
 

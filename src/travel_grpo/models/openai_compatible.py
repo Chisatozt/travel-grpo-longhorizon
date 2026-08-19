@@ -47,6 +47,9 @@ class TeacherRuntime:
     thought_max_chars: int = 200
     thinking: str | None = "disabled"
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：casefold, ValueError, strip。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if self.model.casefold() != DEEPSEEK_V4_FLASH_MODEL:
             raise ValueError(
@@ -74,11 +77,18 @@ class TeacherRuntime:
             raise ValueError("teacher thinking must be enabled, disabled, or None")
 
     @classmethod
+    # [项目注释] 功能：`from_environment`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：lower, cls, strip,
+    # [项目注释]    TeacherApiError。
+    # [项目注释] 输入：`environ`: Mapping[str, str] | None。
+    # [项目注释] 输出：标注返回 `TeacherRuntime`；具体值由各分支决定。
     def from_environment(
         cls, environ: Mapping[str, str] | None = None
     ) -> TeacherRuntime:
         values = os.environ if environ is None else environ
 
+        # [项目注释] 功能：`require`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：strip, TeacherApiError。
+        # [项目注释] 输入：`name`: str。
+        # [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
         def require(name: str) -> str:
             value = values.get(name, "").strip()
             if not value:
@@ -108,6 +118,9 @@ class TeacherRequestConstraint:
     choice: ActionChoice
     allowed_contents: tuple[str, ...] = ()
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, ValueError, isinstance, strip。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if any(not isinstance(value, str) or not value.strip() for value in self.allowed_contents):
             raise ValueError("allowed_contents must contain non-empty strings")
@@ -126,6 +139,9 @@ class TeacherToolCall:
     usage: Mapping[str, int] = field(default_factory=dict)
 
     @property
+    # [项目注释] 功能：`parameters`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, str]`；具体值由各分支决定。
     def parameters(self) -> dict[str, str]:
         return {
             "thought": self.action.thought,
@@ -133,6 +149,9 @@ class TeacherToolCall:
             "content": self.action.content,
         }
 
+    # [项目注释] 功能：`to_assistant_message`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：dumps。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def to_assistant_message(self) -> dict[str, Any]:
         return {
             "role": "assistant",
@@ -152,9 +171,14 @@ class TeacherToolCall:
         }
 
 
+# [项目注释] 类型：`TeacherClientProtocol` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TeacherClientProtocol(Protocol):
     runtime: TeacherRuntime
 
+    # [项目注释] 功能：`generate_action`：异步地根据输入配置和中间状态构建或生成新的项目产物。
+    # [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]；`force_answer`: bool；`constraint`:
+    # [项目注释]    TeacherRequestConstraint | None。
+    # [项目注释] 输出：标注返回 `TeacherToolCall`；具体值由各分支决定。
     async def generate_action(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -163,13 +187,22 @@ class TeacherClientProtocol(Protocol):
         constraint: TeacherRequestConstraint | None = None,
     ) -> TeacherToolCall: ...
 
+    # [项目注释] 功能：`close`：异步地清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     async def close(self) -> None: ...
 
 
+# [项目注释] 功能：`_attribute`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, getattr。
+# [项目注释] 输入：`value`: Any；`name`: str。
+# [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
 def _attribute(value: Any, name: str) -> Any:
     return value.get(name) if isinstance(value, Mapping) else getattr(value, name, None)
 
 
+# [项目注释] 功能：`_usage_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_attribute, int, isinstance。
+# [项目注释] 输入：`response`: Any。
+# [项目注释] 输出：标注返回 `dict[str, int]`；具体值由各分支决定。
 def _usage_record(response: Any) -> dict[str, int]:
     usage = _attribute(response, "usage")
     return {
@@ -183,6 +216,9 @@ def _usage_record(response: Any) -> dict[str, int]:
 class OpenAICompatibleTeacherClient:
     """Strict single-tool client for a DeepSeek-V4-Flash compatible endpoint."""
 
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：AsyncOpenAI, TeacherApiError。
+    # [项目注释] 输入：`runtime`: TeacherRuntime；`client`: Any | None。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __init__(self, runtime: TeacherRuntime, *, client: Any | None = None) -> None:
         self.runtime = runtime
         self._owns_client = client is None
@@ -204,6 +240,11 @@ class OpenAICompatibleTeacherClient:
             )
         self._client = client
 
+    # [项目注释] 功能：`generate_action`：异步地根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：range, AssertionError,
+    # [项目注释]    TeacherProtocolError, TeacherRequestConstraint。
+    # [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]；`force_answer`: bool；`constraint`:
+    # [项目注释]    TeacherRequestConstraint | None。
+    # [项目注释] 输出：标注返回 `TeacherToolCall`；具体值由各分支决定。
     async def generate_action(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -323,6 +364,10 @@ class OpenAICompatibleTeacherClient:
         raise AssertionError("unreachable teacher protocol retry state")
 
     @staticmethod
+    # [项目注释] 功能：`_protocol_messages`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：dict, insert, isinstance,
+    # [项目注释]    TeacherProtocolError。
+    # [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]；`attempt`: int；`correction`: str | None。
+    # [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
     def _protocol_messages(
         messages: Sequence[Mapping[str, Any]],
         attempt: int,
@@ -351,6 +396,9 @@ class OpenAICompatibleTeacherClient:
             prepared.append({"role": "user", "content": correction})
         return prepared
 
+    # [项目注释] 功能：`_retry_correction`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：getattr, dumps。
+    # [项目注释] 输入：`error`: TeacherProtocolError；`locked_action`: tuple[ActionChoice, str] | None。
+    # [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
     def _retry_correction(
         self,
         error: TeacherProtocolError,
@@ -385,6 +433,10 @@ class OpenAICompatibleTeacherClient:
         )
 
     @staticmethod
+    # [项目注释] 功能：`_parse_response`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：_attribute, TeacherToolCall, isinstance,
+    # [项目注释]    TeacherProtocolError。
+    # [项目注释] 输入：`response`: Any。
+    # [项目注释] 输出：标注返回 `TeacherToolCall`；具体值由各分支决定。
     def _parse_response(response: Any) -> TeacherToolCall:
         choices = _attribute(response, "choices")
         if not isinstance(choices, Sequence) or isinstance(choices, (str, bytes)):
@@ -434,6 +486,9 @@ class OpenAICompatibleTeacherClient:
             raise error
         return TeacherToolCall(call_id=call_id, action=action, content=content)
 
+    # [项目注释] 功能：`close`：异步地清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。 主要协作调用：getattr, callable, close, isawaitable。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     async def close(self) -> None:
         if not self._owns_client:
             return

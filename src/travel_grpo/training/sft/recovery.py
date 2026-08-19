@@ -85,12 +85,20 @@ class CPUChatTemplateTokenizer:
 
     padding_side = "right"
 
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`tokenizer`: Any；`template`: Any；`pad_token_id`: int | None；`eos_token_id`: int | None。
+    # [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
     def __init__(self, tokenizer: Any, template: Any, *, pad_token_id: int | None, eos_token_id: int | None):
         self._tokenizer = tokenizer
         self._template = template
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
 
+    # [项目注释] 功能：`apply_chat_template`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：render, list, RecoverySFTError,
+    # [项目注释]    encode。
+    # [项目注释] 输入：`conversation`: Sequence[Mapping[str, Any]]；`tools`: Sequence[Mapping[str, Any]]；`tokenize`:
+    # [项目注释]    bool；`add_generation_prompt`: bool；`enable_thinking`: bool；**`_`。
+    # [项目注释] 输出：标注返回 `list[int]`；具体值由各分支决定。
     def apply_chat_template(
         self,
         conversation: Sequence[Mapping[str, Any]],
@@ -113,6 +121,9 @@ class CPUChatTemplateTokenizer:
         return list(self._tokenizer.encode(rendered, add_special_tokens=False).ids)
 
     @property
+    # [项目注释] 功能：`vocab_size`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：int, get_vocab_size。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
     def vocab_size(self) -> int:
         return int(self._tokenizer.get_vocab_size())
 
@@ -153,6 +164,10 @@ def load_cpu_chat_template_tokenizer(path: str | Path) -> CPUChatTemplateTokeniz
     return CPUChatTemplateTokenizer(tokenizer, template, pad_token_id=pad_id, eos_token_id=eos_id)
 
 
+# [项目注释] 功能：`_jsonl_records`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：open, enumerate, RecoverySFTError,
+# [项目注释]    strip。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `Iterable[tuple[int, Mapping[str, Any] | None, str | None]]`；具体值由各分支决定。
 def _jsonl_records(path: Path) -> Iterable[tuple[int, Mapping[str, Any] | None, str | None]]:
     try:
         handle = path.open(encoding="utf-8")
@@ -173,6 +188,9 @@ def _jsonl_records(path: Path) -> Iterable[tuple[int, Mapping[str, Any] | None, 
             yield line_number, value, None
 
 
+# [项目注释] 功能：`_sha256`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, open, iter。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -181,6 +199,9 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_initial_user_message`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：RecoverySFTError, isinstance, str。
+# [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _initial_user_message(messages: Sequence[Mapping[str, Any]]) -> str:
     for message in messages:
         if message.get("role") == "user" and isinstance(message.get("content"), str):
@@ -188,6 +209,10 @@ def _initial_user_message(messages: Sequence[Mapping[str, Any]]) -> str:
     raise RecoverySFTError("recovery history has no public user message")
 
 
+# [项目注释] 功能：`_coerce_recovery_mode`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, casefold,
+# [项目注释]    RecoverySFTError, strip。
+# [项目注释] 输入：`value`: Any。
+# [项目注释] 输出：标注返回 `RecoveryMode`；具体值由各分支决定。
 def _coerce_recovery_mode(value: Any) -> RecoveryMode:
     if isinstance(value, RecoveryMode):
         return value
@@ -303,6 +328,9 @@ def public_state_from_payload(
     return state
 
 
+# [项目注释] 功能：`_append_public_control_note`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str, RecoverySFTError。
+# [项目注释] 输入：`messages`: list[dict[str, Any]]；`note`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _append_public_control_note(
     messages: list[dict[str, Any]], note: str
 ) -> str:
@@ -318,6 +346,9 @@ def _append_public_control_note(
     return str(role)
 
 
+# [项目注释] 功能：`_existing_call_ids`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：set, isinstance, add, str。
+# [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `set[str]`；具体值由各分支决定。
 def _existing_call_ids(messages: Sequence[Mapping[str, Any]]) -> set[str]:
     result: set[str] = set()
     for message in messages:
@@ -331,6 +362,10 @@ def _existing_call_ids(messages: Sequence[Mapping[str, Any]]) -> set[str]:
     return result
 
 
+# [项目注释] 功能：`_normalise_target`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：normalize_actor_messages, str, pop,
+# [项目注释]    RecoverySFTError。
+# [项目注释] 输入：`target`: Mapping[str, Any]；`existing_ids`: set[str]；`task_id`: str；`boundary`: str。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _normalise_target(target: Mapping[str, Any], existing_ids: set[str], task_id: str, boundary: str) -> dict[str, Any]:
     values = normalize_actor_messages([target])
     if len(values) != 1 or values[0].get("role") != "assistant":
@@ -410,6 +445,9 @@ def render_recovery_record(target_record: Mapping[str, Any]) -> dict[str, Any]:
     return rendered
 
 
+# [项目注释] 功能：`_leakage_hits`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, items, extend, enumerate。
+# [项目注释] 输入：`value`: Any；`path`: str。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _leakage_hits(value: Any, path: str = "") -> list[str]:
     hits: list[str] = []
     if isinstance(value, Mapping):
@@ -428,6 +466,10 @@ def _leakage_hits(value: Any, path: str = "") -> list[str]:
     return hits
 
 
+# [项目注释] 功能：`_target_action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, RecoverySFTError,
+# [项目注释]    from_parameters, loads。
+# [项目注释] 输入：`record`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `UserBenchAction`；具体值由各分支决定。
 def _target_action(record: Mapping[str, Any]) -> UserBenchAction:
     target = record.get("target_assistant")
     if not isinstance(target, Mapping):
@@ -443,6 +485,10 @@ def _target_action(record: Mapping[str, Any]) -> UserBenchAction:
         raise RecoverySFTError("target tool arguments are invalid") from exc
 
 
+# [项目注释] 功能：`_answer_visibility`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_target_action,
+# [项目注释]    public_state_from_payload, strip, frozenset。
+# [项目注释] 输入：`record`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `tuple[bool, str | None]`；具体值由各分支决定。
 def _answer_visibility(record: Mapping[str, Any]) -> tuple[bool, str | None]:
     action = _target_action(record)
     if action.choice is not ActionChoice.ANSWER:
@@ -461,6 +507,9 @@ def _answer_visibility(record: Mapping[str, Any]) -> tuple[bool, str | None]:
     return True, None
 
 
+# [项目注释] 功能：`_sample_hash`：按固定约束拆分、采样或选择输入集合，保持确定性和边界条件。 主要协作调用：encode, hexdigest, dumps, sha256。
+# [项目注释] 输入：`record`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sample_hash(record: Mapping[str, Any]) -> str:
     payload = {
         "boundary_type": record.get("boundary_type"),
@@ -568,6 +617,9 @@ def audit_rendered_record(
     )
 
 
+# [项目注释] 功能：`_percentile`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sorted, min, int, max。
+# [项目注释] 输入：`values`: Sequence[int]；`fraction`: float。
+# [项目注释] 输出：标注返回 `int | None`；具体值由各分支决定。
 def _percentile(values: Sequence[int], fraction: float) -> int | None:
     if not values:
         return None
@@ -576,6 +628,9 @@ def _percentile(values: Sequence[int], fraction: float) -> int | None:
     return int(ordered[index])
 
 
+# [项目注释] 功能：`_length_summary`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：len, int, sum, _percentile。
+# [项目注释] 输入：`lengths`: Sequence[int]；`labels`: Sequence[int]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _length_summary(lengths: Sequence[int], labels: Sequence[int]) -> dict[str, Any]:
     return {
         "examples": len(lengths),
@@ -590,6 +645,9 @@ def _length_summary(lengths: Sequence[int], labels: Sequence[int]) -> dict[str, 
     }
 
 
+# [项目注释] 功能：`_rejection_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str, list, isinstance, fromkeys。
+# [项目注释] 输入：`value`: Mapping[str, Any] | None；`line`: int；`reasons`: Sequence[str]；`path`: Path。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _rejection_record(value: Mapping[str, Any] | None, *, line: int, reasons: Sequence[str], path: Path) -> dict[str, Any]:
     return {
         "schema_version": RECOVERY_SFT_SCHEMA_VERSION,
@@ -604,6 +662,10 @@ def _rejection_record(value: Mapping[str, Any] | None, *, line: int, reasons: Se
     }
 
 
+# [项目注释] 功能：`_preflight_task_issues`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：defaultdict, Counter, items,
+# [项目注释]    _jsonl_records。
+# [项目注释] 输入：`paths`: Mapping[str, Path]。
+# [项目注释] 输出：标注返回 `tuple[dict[str, list[tuple[str, int, str]]], dict[str, int]]`；具体值由各分支决定。
 def _preflight_task_issues(paths: Mapping[str, Path]) -> tuple[dict[str, list[tuple[str, int, str]],], dict[str, int]]:
     occurrences: dict[str, list[tuple[str, int, str]]] = defaultdict(list)
     invalid: dict[str, int] = Counter()

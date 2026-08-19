@@ -49,6 +49,9 @@ DEFAULT_SOURCES = (
 )
 
 
+# [项目注释] 功能：`load_task_map`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：glob, loads, isinstance, read_text。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `dict[str, dict[str, Any]]`；具体值由各分支决定。
 def load_task_map() -> dict[str, dict[str, Any]]:
     tasks: dict[str, dict[str, Any]] = {}
     for path in (ROOT / "environments/UserBench/travelgym/data").glob(
@@ -60,6 +63,9 @@ def load_task_map() -> dict[str, dict[str, Any]]:
     return tasks
 
 
+# [项目注释] 功能：`clean_messages`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：deepcopy, pop, dict。
+# [项目注释] 输入：`messages`: list[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def clean_messages(messages: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
     cleaned = []
     for message in messages:
@@ -81,6 +87,10 @@ def with_teacher_suffix(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return ensure_actor_runtime_policy(messages)
 
 
+# [项目注释] 功能：`collect_contexts`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：enumerate, len, ValueError,
+# [项目注释]    splitlines。
+# [项目注释] 输入：`sources`: tuple[Path, ...]；`task_map`: Mapping[str, Mapping[str, Any]]；`limit`: int。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def collect_contexts(
     sources: tuple[Path, ...], task_map: Mapping[str, Mapping[str, Any]], limit: int
 ) -> list[dict[str, Any]]:
@@ -149,6 +159,9 @@ def collect_contexts(
     return contexts[:limit]
 
 
+# [项目注释] 功能：`classify`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：bool, lower, str, fullmatch。
+# [项目注释] 输入：`parameters`: Mapping[str, Any] | None；`context`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def classify(parameters: Mapping[str, Any] | None, context: Mapping[str, Any]) -> dict[str, Any]:
     choice = str(parameters.get("choice", "")).strip().lower() if parameters else ""
     content = str(parameters.get("content", "")) if parameters else ""
@@ -170,13 +183,22 @@ def classify(parameters: Mapping[str, Any] | None, context: Mapping[str, Any]) -
     }
 
 
+# [项目注释] 功能：`summarize`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：len, sum, dict, count。
+# [项目注释] 输入：`results`: list[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def summarize(results: list[Mapping[str, Any]]) -> dict[str, Any]:
     n = len(results)
     answer_calls = [value for value in results if value.get("answer_at_1") is True]
 
+    # [项目注释] 功能：`count`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sum。
+    # [项目注释] 输入：`key`: str。
+    # [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
     def count(key: str) -> int:
         return sum(value.get(key) is True for value in results)
 
+    # [项目注释] 功能：`pct`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`value`: int；`denominator`: int。
+    # [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
     def pct(value: int, denominator: int = n) -> float:
         return value / denominator if denominator else 0.0
 
@@ -217,6 +239,10 @@ def summarize(results: list[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+# [项目注释] 功能：`run`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：load_task_map, collect_contexts, mkdir,
+# [项目注释]    atomic_json。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 async def run(args: argparse.Namespace) -> None:
     task_map = load_task_map()
     contexts = collect_contexts(tuple(args.source), task_map, args.contexts)
@@ -272,6 +298,9 @@ async def run(args: argparse.Namespace) -> None:
         await actor.close()
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args, run。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--contexts", type=int, default=24)

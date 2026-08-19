@@ -105,11 +105,18 @@ class _TurnLedgerSnapshot:
     infrastructure_error_count: int
 
 
+# [项目注释] 功能：`_contains_explicit_no_preference`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：join, any, split,
+# [项目注释]    casefold。
+# [项目注释] 输入：`text`: str。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _contains_explicit_no_preference(text: str) -> bool:
     normalized = " ".join(text.casefold().split())
     return any(marker in normalized for marker in _EXPLICIT_NO_PREFERENCE_MARKERS)
 
 
+# [项目注释] 功能：`_is_complete_reward_task`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：all, isinstance, bool。
+# [项目注释] 输入：`task`: TravelRewardTask | None。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _is_complete_reward_task(task: TravelRewardTask | None) -> bool:
     if not isinstance(task, TravelRewardTask) or not task.task_id or not task.aspects:
         return False
@@ -125,6 +132,9 @@ def _is_complete_reward_task(task: TravelRewardTask | None) -> bool:
     )
 
 
+# [项目注释] 功能：`_is_complete_reward_snapshot`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：all, isinstance。
+# [项目注释] 输入：`snapshot`: UserBenchRewardSnapshot | None。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _is_complete_reward_snapshot(
     snapshot: UserBenchRewardSnapshot | None,
 ) -> bool:
@@ -150,6 +160,9 @@ def _is_complete_reward_snapshot(
     )
 
 
+# [项目注释] 功能：`_snapshot_matches_task`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：union, set, len。
+# [项目注释] 输入：`task`: TravelRewardTask；`snapshot`: UserBenchRewardSnapshot。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _snapshot_matches_task(
     task: TravelRewardTask,
     snapshot: UserBenchRewardSnapshot,
@@ -165,6 +178,10 @@ def _snapshot_matches_task(
     )
 
 
+# [项目注释] 功能：`_evidence_transition_is_valid`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_snapshot_matches_task,
+# [项目注释]    set, len。
+# [项目注释] 输入：`task`: TravelRewardTask；`before`: UserBenchRewardSnapshot；`after`: UserBenchRewardSnapshot。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _evidence_transition_is_valid(
     task: TravelRewardTask,
     before: UserBenchRewardSnapshot,
@@ -193,6 +210,9 @@ def _evidence_transition_is_valid(
     )
 
 
+# [项目注释] 功能：`_fallback_counts`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, int。
+# [项目注释] 输入：`diagnostics`: object。
+# [项目注释] 输出：标注返回 `dict[str, int]`；具体值由各分支决定。
 def _fallback_counts(diagnostics: object) -> dict[str, int]:
     if not isinstance(diagnostics, ABCMapping):
         return {}
@@ -206,6 +226,7 @@ def _fallback_counts(diagnostics: object) -> dict[str, int]:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`EmbeddedUserBench` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class EmbeddedUserBench:
     root: Path
     upstream_commit: str
@@ -222,6 +243,10 @@ def validate_embedded_userbench(root: str | Path | None = None) -> EmbeddedUserB
 
 
 @cache
+# [项目注释] 功能：`_validate_embedded_userbench_cached`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：any,
+# [项目注释]    EmbeddedUserBench, is_file, UserBenchSourceError。
+# [项目注释] 输入：`source_root`: Path。
+# [项目注释] 输出：标注返回 `EmbeddedUserBench`；具体值由各分支决定。
 def _validate_embedded_userbench_cached(source_root: Path) -> EmbeddedUserBench:
     manifest_path = source_root / "EMBEDDED_SOURCE.json"
     if not manifest_path.is_file():
@@ -341,6 +366,10 @@ class UserBenchSessionState:
     _active_turn: TurnEvent | None = field(default=None, repr=False)
     _turn_ledger_snapshot: _TurnLedgerSnapshot | None = field(default=None, repr=False)
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, validate_turn_credit_mode,
+    # [项目注释]    isinstance, ValueError。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         if (
             isinstance(self.stall_no_progress_threshold, bool)
@@ -381,6 +410,9 @@ class UserBenchSessionState:
         self.turn_credit_mode = validate_turn_credit_mode(self.turn_credit_mode)
 
     @property
+    # [项目注释] 功能：`done`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def done(self) -> bool:
         return self.terminated or self.truncated
 
@@ -400,6 +432,10 @@ class UserBenchSessionState:
         if config is not None:
             self.turn_credit_config = config
 
+    # [项目注释] 功能：`_capture_turn_ledger_snapshot`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_TurnLedgerSnapshot,
+    # [项目注释]    frozenset, len, set。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `_TurnLedgerSnapshot`；具体值由各分支决定。
     def _capture_turn_ledger_snapshot(self) -> _TurnLedgerSnapshot:
         state = self.public_control_state
         aspect = state.current_aspect if state is not None else None
@@ -440,6 +476,10 @@ class UserBenchSessionState:
             phase_after=snapshot.public_phase,
         )
 
+    # [项目注释] 功能：`_ensure_actor_turn`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：begin_actor_turn,
+    # [项目注释]    TurnCreditError。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `tuple[TurnEvent, _TurnLedgerSnapshot] | None`；具体值由各分支决定。
     def _ensure_actor_turn(self) -> tuple[TurnEvent, _TurnLedgerSnapshot] | None:
         if self.turn_credit_mode == "off":
             return None
@@ -451,6 +491,9 @@ class UserBenchSessionState:
             raise TurnCreditError("actor turn ledger is unavailable")
         return self._active_turn, self._turn_ledger_snapshot
 
+    # [项目注释] 功能：`_finish_actor_turn`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：TurnCreditError。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def _finish_actor_turn(self) -> None:
         if self.turn_credit_mode == "off":
             return
@@ -460,6 +503,10 @@ class UserBenchSessionState:
         self._active_turn = None
         self._turn_ledger_snapshot = None
 
+    # [项目注释] 功能：`_turn_aspect_for_action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：semantic_action_signature,
+    # [项目注释]    strip, len, aspect_from_option_id。
+    # [项目注释] 输入：`action`: UserBenchAction；`fallback`: str | None。
+    # [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
     def _turn_aspect_for_action(
         self, action: UserBenchAction, fallback: str | None
     ) -> str | None:
@@ -627,6 +674,10 @@ class UserBenchSessionState:
         )
         self._finish_actor_turn()
 
+    # [项目注释] 功能：`record_turn_infrastructure_failure`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释]    主要协作调用：_ensure_actor_turn, _finish_actor_turn, _turn_aspect_for_action。
+    # [项目注释] 输入：`action`: UserBenchAction | None。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def record_turn_infrastructure_failure(
         self, action: UserBenchAction | None = None
     ) -> None:
@@ -641,6 +692,9 @@ class UserBenchSessionState:
         event.infrastructure_failure = True
         self._finish_actor_turn()
 
+    # [项目注释] 功能：`finalize_pending_actor_turn`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：reject_actor_turn。
+    # [项目注释] 输入：`reason`: str。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def finalize_pending_actor_turn(self, *, reason: str = "no_tool_output") -> None:
         if self.turn_credit_mode == "off" or self._active_turn is None:
             return
@@ -698,6 +752,9 @@ class UserBenchSessionState:
             if reason is None and action.choice is ActionChoice.ANSWER:
                 self.valid_candidate_answer_transitions += 1
 
+    # [项目注释] 功能：`_sync_public_control_metrics`：计算奖励、指标或聚合统计，供训练、评测或报告使用。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def _sync_public_control_metrics(self) -> None:
         state = self.public_control_state
         if state is None:
@@ -711,6 +768,10 @@ class UserBenchSessionState:
             )
             self.terminated = True
 
+    # [项目注释] 功能：`_advance_public_control_if_needed`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释]    主要协作调用：_sync_public_control_metrics, advance_public_aspect。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def _advance_public_control_if_needed(self) -> None:
         state = self.public_control_state
         if state is None:
@@ -745,6 +806,10 @@ class UserBenchSessionState:
         self._record_public_phase_attempt(action, reason)
         return reason
 
+    # [项目注释] 功能：`record_public_non_progress`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释]    主要协作调用：note_public_non_progress, _sync_public_control_metrics。
+    # [项目注释] 输入：`reason`: str | None。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def record_public_non_progress(self, reason: str | None = None) -> None:
         del reason
         if self.public_control_state is None:
@@ -754,6 +819,10 @@ class UserBenchSessionState:
         )
         self._sync_public_control_metrics()
 
+    # [项目注释] 功能：`_record_public_step`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：classify_public_observation,
+    # [项目注释]    reduce_public_control_state, _sync_public_control_metrics, PublicControlEvent。
+    # [项目注释] 输入：`result`: UserBenchStepResult；`action`: UserBenchAction | None。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def _record_public_step(
         self,
         result: UserBenchStepResult,
@@ -856,6 +925,9 @@ class UserBenchSessionState:
         return None
 
     @staticmethod
+    # [项目注释] 功能：`recovery_instruction`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
     def recovery_instruction() -> str:
         return (
             "Recovery instruction:\n"
@@ -883,6 +955,10 @@ class UserBenchSessionState:
         self.stall_hard_truncated = True
         self.answer_only_pending = False
 
+    # [项目注释] 功能：`_stall_evidence_is_valid`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_is_complete_reward_task,
+    # [项目注释]    _is_complete_reward_snapshot, _snapshot_matches_task。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def _stall_evidence_is_valid(self) -> bool:
         return (
             _is_complete_reward_task(self.reward_task)
@@ -890,6 +966,10 @@ class UserBenchSessionState:
             and _snapshot_matches_task(self.reward_task, self.reward_snapshot)
         )
 
+    # [项目注释] 功能：`_maybe_trigger_stall`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：hard_stop_stalled,
+    # [项目注释]    _stall_evidence_is_valid。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def _maybe_trigger_stall(self) -> None:
         # Runtime sessions with a public ledger use RecoveryMode instead. The
         # hidden reward evidence below remains only as a legacy compatibility
@@ -915,6 +995,10 @@ class UserBenchSessionState:
         else:
             self.hard_stop_stalled()
 
+    # [项目注释] 功能：`_record_no_progress`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：max, _maybe_trigger_stall,
+    # [项目注释]    _stall_evidence_is_valid。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def _record_no_progress(self) -> None:
         if self.public_control_state is not None:
             return
@@ -951,12 +1035,20 @@ class UserBenchSessionState:
             return
         self._record_no_progress()
 
+    # [项目注释] 功能：`_complete_answer_only_recovery`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def _complete_answer_only_recovery(self) -> None:
         self.consecutive_no_progress = 0
         self.answer_only_pending = False
         self.answer_only_generation_started = False
         self.stall_recovery_used = True
 
+    # [项目注释] 功能：`record_step`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：set, _record_public_step,
+    # [项目注释]    _fallback_counts, items。
+    # [项目注释] 输入：`result`: UserBenchStepResult；`action`: UserBenchAction | None；`snapshot`:
+    # [项目注释]    UserBenchRewardSnapshot | None；`count_action_repetition`: bool。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def record_step(
         self,
         result: UserBenchStepResult,
@@ -1117,6 +1209,9 @@ class UserBenchSessionState:
         else:
             self._record_no_progress()
 
+    # [项目注释] 功能：`reward_report`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：compute_travel_reward, list, bool, dict。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def reward_report(self) -> dict[str, Any]:
         if not _is_complete_reward_task(self.reward_task):
             return {
@@ -1200,6 +1295,9 @@ class UserBenchSessionState:
         )
         return report
 
+    # [项目注释] 功能：`metrics`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：reward_report, list, len, bool。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def metrics(self) -> dict[str, Any]:
         report = self.reward_report()
         public_state = self.public_control_state
@@ -1263,14 +1361,24 @@ CURRENT_USERBENCH_SESSION: contextvars.ContextVar[UserBenchSessionState | None] 
 )
 
 
+# [项目注释] 功能：`set_current_session`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：set。
+# [项目注释] 输入：`session`: UserBenchSessionState。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def set_current_session(session: UserBenchSessionState) -> None:
     CURRENT_USERBENCH_SESSION.set(session)
 
 
+# [项目注释] 功能：`get_current_session`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `UserBenchSessionState | None`；具体值由各分支决定。
 def get_current_session() -> UserBenchSessionState | None:
     return CURRENT_USERBENCH_SESSION.get()
 
 
+# [项目注释] 功能：`require_current_session`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：get_current_session,
+# [项目注释]    UserBenchSessionError。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `UserBenchSessionState`；具体值由各分支决定。
 def require_current_session() -> UserBenchSessionState:
     session = get_current_session()
     if session is None:
@@ -1280,6 +1388,9 @@ def require_current_session() -> UserBenchSessionState:
     return session
 
 
+# [项目注释] 功能：`clear_current_session`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：get_current_session, set, close。
+# [项目注释] 输入：`close`: bool。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def clear_current_session(*, close: bool = True) -> None:
     session = get_current_session()
     CURRENT_USERBENCH_SESSION.set(None)

@@ -69,6 +69,9 @@ class UserBenchEnvironmentConfig:
     verbose: bool = False
     capture_upstream_diagnostics: bool = False
 
+    # [项目注释] 功能：`__post_init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：items, ValueError, getattr。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __post_init__(self) -> None:
         fixed_values = {
             "max_steps": 20,
@@ -92,17 +95,30 @@ class UserBenchEnvironmentConfig:
             raise ValueError("raw UserBench rewards must not be normalized")
 
 
+# [项目注释] 类型：`TravelEnvProtocol` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TravelEnvProtocol(Protocol):
+    # [项目注释] 功能：`reset`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。
+    # [项目注释] 输入：`seed`: int | None；`options`: Any。
+    # [项目注释] 输出：标注返回 `tuple[Any, Any]`；具体值由各分支决定。
     def reset(
         self, *, seed: int | None = None, options: Any = None
     ) -> tuple[Any, Any]: ...
 
+    # [项目注释] 功能：`step`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`action_input`: str。
+    # [项目注释] 输出：标注返回 `tuple[Any, float, bool, bool, Any]`；具体值由各分支决定。
     def step(self, action_input: str) -> tuple[Any, float, bool, bool, Any]: ...
 
+    # [项目注释] 功能：`step_async`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`action_input`: str。
+    # [项目注释] 输出：标注返回 `Awaitable[tuple[Any, float, bool, bool, Any]]`；具体值由各分支决定。
     def step_async(
         self, action_input: str
     ) -> Awaitable[tuple[Any, float, bool, bool, Any]]: ...
 
+    # [项目注释] 功能：`close`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def close(self) -> None: ...
 
 
@@ -138,6 +154,11 @@ EnvironmentFactory = Callable[
 ]
 
 
+# [项目注释] 功能：`_default_environment_factory`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：getattr, resolve,
+# [项目注释]    get_default_config, cast。
+# [项目注释] 输入：`task_id`: str；`config`: UserBenchEnvironmentConfig；`runtime`: UserSimulatorRuntime；`source`:
+# [项目注释]    EmbeddedUserBench。
+# [项目注释] 输出：标注返回 `TravelEnvProtocol`；具体值由各分支决定。
 def _default_environment_factory(
     task_id: str,
     config: UserBenchEnvironmentConfig,
@@ -189,6 +210,11 @@ def _default_environment_factory(
 class UserBenchWrapper:
     """One-task TravelGym wrapper with actor-safe observations and strict lifecycle."""
 
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：strip, validate_embedded_userbench,
+    # [项目注释]    bind_user_simulator_process, ValueError。
+    # [项目注释] 输入：`task_id`: str；`runtime`: UserSimulatorRuntime；`config`: UserBenchEnvironmentConfig |
+    # [项目注释]    None；`source_root`: str | Path | None；`environment_factory`: EnvironmentFactory | None。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __init__(
         self,
         task_id: str,
@@ -218,6 +244,10 @@ class UserBenchWrapper:
         self._done = False
         self._closed = False
 
+    # [项目注释] 功能：`reset`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。 主要协作调用：_require_open, _validate_info_task_id,
+    # [项目注释]    from_upstream, reset。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `UserBenchObservation`；具体值由各分支决定。
     def reset(self) -> UserBenchObservation:
         self._require_open()
         try:
@@ -288,6 +318,10 @@ class UserBenchWrapper:
                 "TravelGym reward state violates the pinned snapshot contract"
             ) from exc
 
+    # [项目注释] 功能：`step`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_prepare_step, _project_transition, step,
+    # [项目注释]    to_environment_action。
+    # [项目注释] 输入：`action`: UserBenchAction | Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `UserBenchStepResult`；具体值由各分支决定。
     def step(self, action: UserBenchAction | Mapping[str, Any]) -> UserBenchStepResult:
         normalized = self._prepare_step(action)
         try:
@@ -298,6 +332,10 @@ class UserBenchWrapper:
             ) from exc
         return self._project_transition(transition)
 
+    # [项目注释] 功能：`astep`：异步地实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_prepare_step, to_environment_action,
+    # [项目注释]    _project_transition, getattr。
+    # [项目注释] 输入：`action`: UserBenchAction | Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `UserBenchStepResult`；具体值由各分支决定。
     async def astep(
         self, action: UserBenchAction | Mapping[str, Any]
     ) -> UserBenchStepResult:
@@ -335,6 +373,9 @@ class UserBenchWrapper:
                 )
         return result
 
+    # [项目注释] 功能：`close`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。 主要协作调用：close, UserBenchEnvironmentError。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def close(self) -> None:
         if self._closed:
             return
@@ -346,6 +387,10 @@ class UserBenchWrapper:
                 f"TravelGym close failed for task {self.task_id!r}"
             ) from exc
 
+    # [项目注释] 功能：`_prepare_step`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：_require_open, isinstance, from_parameters,
+    # [项目注释]    UserBenchLifecycleError。
+    # [项目注释] 输入：`action`: UserBenchAction | Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `UserBenchAction`；具体值由各分支决定。
     def _prepare_step(
         self, action: UserBenchAction | Mapping[str, Any]
     ) -> UserBenchAction:
@@ -358,6 +403,10 @@ class UserBenchWrapper:
             return action
         return UserBenchAction.from_parameters(action)
 
+    # [项目注释] 功能：`_project_transition`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_validate_info_task_id,
+    # [项目注释]    _async_one_choice_termination, from_upstream, deepcopy。
+    # [项目注释] 输入：`transition`: Any。
+    # [项目注释] 输出：标注返回 `UserBenchStepResult`；具体值由各分支决定。
     def _project_transition(self, transition: Any) -> UserBenchStepResult:
         if not isinstance(transition, tuple) or len(transition) != 5:
             raise UserBenchEnvironmentError(
@@ -412,6 +461,10 @@ class UserBenchWrapper:
             return terminated
         return bool(dimensions) and len(choices) >= len(dimensions)
 
+    # [项目注释] 功能：`_validate_info_task_id`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：isinstance,
+    # [项目注释]    UserBenchEnvironmentError。
+    # [项目注释] 输入：`info`: Any。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def _validate_info_task_id(self, info: Any) -> None:
         if not isinstance(info, Mapping):
             raise UserBenchEnvironmentError("TravelGym info must be a mapping")
@@ -420,14 +473,24 @@ class UserBenchWrapper:
                 f"TravelGym returned task ID {info.get('task_id')!r}, expected {self.task_id!r}"
             )
 
+    # [项目注释] 功能：`_require_open`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：UserBenchLifecycleError。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def _require_open(self) -> None:
         if self._closed:
             raise UserBenchLifecycleError("UserBench environment is closed")
 
+    # [项目注释] 功能：`__enter__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_require_open。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `UserBenchWrapper`；具体值由各分支决定。
     def __enter__(self) -> UserBenchWrapper:
         self._require_open()
         return self
 
+    # [项目注释] 功能：`__exit__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：close。
+    # [项目注释] 输入：`exc_type`: type[BaseException] | None；`exc`: BaseException | None；`traceback`:
+    # [项目注释]    TracebackType | None。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __exit__(
         self,
         exc_type: type[BaseException] | None,

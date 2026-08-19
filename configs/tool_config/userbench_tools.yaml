@@ -1,3 +1,4 @@
+# [项目注释] 文件职责：定义 Actor 可见工具 schema、参数和返回格式。
 tools:
   - class_name: travel_grpo.training.grpo.adapter.tools.UserBenchTool
     config:

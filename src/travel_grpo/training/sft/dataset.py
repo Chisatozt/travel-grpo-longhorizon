@@ -45,15 +45,20 @@ class SFTTrajectoryTooLongError(SFTDatasetError):
     """Raised so callers can reject one whole trajectory without truncation."""
 
 
+# [项目注释] 类型：`ChatTemplateTokenizer` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class ChatTemplateTokenizer(Protocol):
     pad_token_id: int | None
     eos_token_id: int | None
     padding_side: str
 
+    # [项目注释] 功能：`apply_chat_template`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`conversation`: Sequence[Mapping[str, Any]]；**`kwargs`。
+    # [项目注释] 输出：标注返回 `Any`；具体值由各分支决定。
     def apply_chat_template(self, conversation: Sequence[Mapping[str, Any]], **kwargs: Any) -> Any: ...
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`TrajectoryRejection` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TrajectoryRejection:
     line_number: int
     task_id: str | None
@@ -61,11 +66,15 @@ class TrajectoryRejection:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`TrajectoryAudit` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TrajectoryAudit:
     source: Path
     records: tuple[dict[str, Any], ...]
     rejections: tuple[TrajectoryRejection, ...]
 
+    # [项目注释] 功能：`summary`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：Counter, str, len, dict。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def summary(self) -> dict[str, Any]:
         reasons = Counter(reason for item in self.rejections for reason in item.reasons)
         compositions = Counter(str(record["composition"]) for record in self.records)
@@ -88,6 +97,7 @@ class TrajectoryAudit:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`ActionOnlyExample` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class ActionOnlyExample:
     input_ids: tuple[int, ...]
     attention_mask: tuple[int, ...]
@@ -98,13 +108,22 @@ class ActionOnlyExample:
     composition: str
 
     @property
+    # [项目注释] 功能：`sequence_length`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：len。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
     def sequence_length(self) -> int:
         return len(self.input_ids)
 
     @property
+    # [项目注释] 功能：`label_tokens`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sum。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
     def label_tokens(self) -> int:
         return sum(value != IGNORE_INDEX for value in self.labels)
 
+    # [项目注释] 功能：`to_trainer_dict`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：list。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def to_trainer_dict(self) -> dict[str, Any]:
         return {
             "input_ids": list(self.input_ids),
@@ -141,6 +160,9 @@ def load_tool_schema(path: str | Path) -> dict[str, Any]:
     return expected
 
 
+# [项目注释] 功能：`_message_reasons`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：set, range, tuple, add。
+# [项目注释] 输入：`messages`: Any。
+# [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
 def _message_reasons(messages: Any) -> tuple[str, ...]:
     reasons: set[str] = set()
     if not isinstance(messages, list) or len(messages) < 4:
@@ -597,6 +619,10 @@ def recovery_admission_reasons(record: Any) -> tuple[str, ...]:
     return tuple(sorted(reasons))
 
 
+# [项目注释] 功能：`sft_record_admission_reasons`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sft_admission_reasons,
+# [项目注释]    SFTDatasetError, prefix_admission_reasons, recovery_admission_reasons。
+# [项目注释] 输入：`record`: Any；`record_format`: str；`accepted_quality_tiers`: Sequence[str]。
+# [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
 def sft_record_admission_reasons(
     record: Any,
     *,
@@ -616,6 +642,11 @@ def sft_record_admission_reasons(
     )
 
 
+# [项目注释] 功能：`audit_trajectory_file`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：Path, set, enumerate,
+# [项目注释]    TrajectoryAudit。
+# [项目注释] 输入：`path`: str | Path；`limit`: int | None；`accepted_quality_tiers`: Sequence[str]；`record_format`:
+# [项目注释]    str。
+# [项目注释] 输出：标注返回 `TrajectoryAudit`；具体值由各分支决定。
 def audit_trajectory_file(
     path: str | Path,
     *,
@@ -672,6 +703,11 @@ def audit_trajectory_file(
     return TrajectoryAudit(source.resolve(), tuple(accepted), tuple(rejected))
 
 
+# [项目注释] 功能：`load_sft_trajectories`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：audit_trajectory_file,
+# [项目注释]    SFTDatasetError, join。
+# [项目注释] 输入：`path`: str | Path；`limit`: int | None；`accepted_quality_tiers`: Sequence[str]；`record_format`:
+# [项目注释]    str。
+# [项目注释] 输出：标注返回 `tuple[dict[str, Any], ...]`；具体值由各分支决定。
 def load_sft_trajectories(
     path: str | Path,
     *,
@@ -763,6 +799,10 @@ def assert_sft_readiness(
             )
 
 
+# [项目注释] 功能：`assert_train_validation_disjoint`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：SFTDatasetError, str,
+# [项目注释]    min。
+# [项目注释] 输入：`train`: Sequence[Mapping[str, Any]]；`validation`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def assert_train_validation_disjoint(
     train: Sequence[Mapping[str, Any]], validation: Sequence[Mapping[str, Any]]
 ) -> None:
@@ -792,6 +832,10 @@ def assert_task_ids_within_split(
         )
 
 
+# [项目注释] 功能：`_token_ids`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, hasattr, tolist,
+# [项目注释]    SFTDatasetError。
+# [项目注释] 输入：`value`: Any。
+# [项目注释] 输出：标注返回 `list[int]`；具体值由各分支决定。
 def _token_ids(value: Any) -> list[int]:
     if isinstance(value, Mapping):
         value = value.get("input_ids")
@@ -806,6 +850,11 @@ def _token_ids(value: Any) -> list[int]:
     return value
 
 
+# [项目注释] 功能：`_render`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：_token_ids, apply_chat_template,
+# [项目注释]    _messages_for_qwen_template, SFTDatasetError。
+# [项目注释] 输入：`tokenizer`: ChatTemplateTokenizer；`messages`: Sequence[Mapping[str, Any]]；`tool_schema`:
+# [项目注释]    Mapping[str, Any]；`add_generation_prompt`: bool。
+# [项目注释] 输出：标注返回 `list[int]`；具体值由各分支决定。
 def _render(
     tokenizer: ChatTemplateTokenizer,
     messages: Sequence[Mapping[str, Any]],
@@ -971,11 +1020,15 @@ def build_action_only_dataset(
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`ActionOnlyDataCollator` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class ActionOnlyDataCollator:
     pad_token_id: int
     label_pad_token_id: int = IGNORE_INDEX
     padding_side: str = "right"
 
+    # [项目注释] 功能：`__call__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：max, SFTDatasetError, len, tensor。
+    # [项目注释] 输入：`features`: Sequence[Mapping[str, Any] | ActionOnlyExample]。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def __call__(self, features: Sequence[Mapping[str, Any] | ActionOnlyExample]) -> dict[str, Any]:
         if not features:
             raise SFTDatasetError("cannot collate an empty batch")
@@ -1011,12 +1064,18 @@ class ActionOnlyDataCollator:
         return {key: tensor(value) for key, value in rows.items()}
 
 
+# [项目注释] 功能：`rendered_dataset_summary`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：sorted, sum, SFTDatasetError, min。
+# [项目注释] 输入：`examples`: Sequence[ActionOnlyExample]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def rendered_dataset_summary(examples: Sequence[ActionOnlyExample]) -> dict[str, Any]:
     if not examples:
         raise SFTDatasetError("cannot summarize an empty rendered dataset")
     lengths = sorted(value.sequence_length for value in examples)
     labels = sum(value.label_tokens for value in examples)
 
+    # [项目注释] 功能：`percentile`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：min, max, len, ceil。
+    # [项目注释] 输入：`fraction`: float。
+    # [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
     def percentile(fraction: float) -> int:
         index = min(len(lengths) - 1, math.ceil(fraction * len(lengths)) - 1)
         return lengths[max(0, index)]

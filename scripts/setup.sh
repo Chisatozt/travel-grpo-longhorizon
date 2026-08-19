@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# [项目注释] 文件职责：安装项目及固定 UserBench 快照和运行依赖。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

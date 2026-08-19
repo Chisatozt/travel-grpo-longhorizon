@@ -6,6 +6,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# [项目注释] 功能：`test_stage_oriented_directories_exist`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：all, is_dir。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_stage_oriented_directories_exist():
     required = (
         "configs/data",
@@ -29,6 +32,9 @@ def test_stage_oriented_directories_exist():
     assert all((ROOT / path).is_dir() for path in required)
 
 
+# [项目注释] 功能：`test_runtime_boundaries_have_separate_configs`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：is_file。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_runtime_boundaries_have_separate_configs():
     interaction = ROOT / "configs" / "interaction_config"
     assert (interaction / "simulator_train.yaml").is_file()
@@ -37,6 +43,10 @@ def test_runtime_boundaries_have_separate_configs():
     assert (ROOT / "scripts" / "vllm_server" / "train_user_simulator.sh").is_file()
 
 
+# [项目注释] 功能：`test_legacy_flat_entrypoints_are_absent`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：any, list, exists,
+# [项目注释]    glob。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_legacy_flat_entrypoints_are_absent():
     legacy_paths = (
         "configs/dataset_split.toml",

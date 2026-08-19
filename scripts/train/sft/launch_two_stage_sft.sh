@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# [项目注释] 文件职责：串联两个 SFT stage 的 shell 入口。
 set -Eeuo pipefail
 
 # One-command Linux GPU launcher for the local Transformers two-stage SFT.

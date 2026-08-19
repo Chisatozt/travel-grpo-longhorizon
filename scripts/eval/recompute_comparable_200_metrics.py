@@ -38,6 +38,9 @@ FALLBACK_RE = re.compile(r"Current aspect fallback count:\s*(\d+)")
 PHASE_KEYS = ("search_required", "retry_search", "candidate_answer", "aspect_switch")
 
 
+# [项目注释] 功能：`_sha256`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, open, iter。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -46,6 +49,9 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_atomic_json`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：mkdir, with_suffix, write_text, replace。
+# [项目注释] 输入：`path`: Path；`value`: Any。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -53,10 +59,16 @@ def _atomic_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
+# [项目注释] 功能：`_ratio`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：min, max。
+# [项目注释] 输入：`numerator`: float；`denominator`: float。
+# [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
 def _ratio(numerator: float, denominator: float) -> float:
     return 0.0 if denominator <= 0 else min(1.0, max(0.0, numerator / denominator))
 
 
+# [项目注释] 功能：`_tool_choice`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, loads, str。
+# [项目注释] 输入：`message`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def _tool_choice(message: Mapping[str, Any]) -> str | None:
     try:
         calls = message.get("tool_calls") or ()
@@ -130,6 +142,9 @@ def replay_public_metrics(transcript: Sequence[Mapping[str, Any]]) -> dict[str, 
     }
 
 
+# [项目注释] 功能：`_load_preference_counts`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：sorted, set, loads, items。
+# [项目注释] 输入：`compositions`: Sequence[str]。
+# [项目注释] 输出：标注返回 `dict[str, int]`；具体值由各分支决定。
 def _load_preference_counts(compositions: Sequence[str]) -> dict[str, int]:
     counts: dict[str, int] = {}
     data_root = ROOT / "environments/UserBench/travelgym/data"
@@ -145,6 +160,10 @@ def _load_preference_counts(compositions: Sequence[str]) -> dict[str, int]:
     return counts
 
 
+# [项目注释] 功能：`_current_penalty`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：max, int, sum, _ratio。
+# [项目注释] 输入：`reward`: Mapping[str, Any]；`guard_rejections`: int；`blocked_aspects`: int；`aspect_count`:
+# [项目注释]    int；`termination_reason`: str。
+# [项目注释] 输出：标注返回 `tuple[float, dict[str, float]]`；具体值由各分支决定。
 def _current_penalty(
     reward: Mapping[str, Any], *, guard_rejections: int, blocked_aspects: int,
     aspect_count: int, termination_reason: str,
@@ -171,6 +190,9 @@ def _current_penalty(
     return sum(values.values()), values
 
 
+# [项目注释] 功能：`project_current_reward`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：len, str, float, min。
+# [项目注释] 输入：`result`: Mapping[str, Any]；`preference_count`: int。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def project_current_reward(result: Mapping[str, Any], preference_count: int) -> dict[str, Any]:
     source = result.get("reward")
     if not isinstance(source, Mapping):
@@ -241,8 +263,14 @@ def project_current_reward(result: Mapping[str, Any], preference_count: int) -> 
     return projected
 
 
+# [项目注释] 功能：`_extra_summary`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：rate, sum, len, bool。
+# [项目注释] 输入：`records`: Sequence[Mapping[str, Any]]；`denominator`: int。
+# [项目注释] 输出：标注返回 `dict[str, float]`；具体值由各分支决定。
 def _extra_summary(records: Sequence[Mapping[str, Any]], denominator: int) -> dict[str, float]:
     valid = [row for row in records if row.get("infrastructure_valid") is True]
+    # [项目注释] 功能：`rate`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sum, bool, predicate。
+    # [项目注释] 输入：`predicate`。
+    # [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
     def rate(predicate) -> float:
         return sum(bool(predicate(row)) for row in records) / denominator
     return {
@@ -259,6 +287,9 @@ def _extra_summary(records: Sequence[Mapping[str, Any]], denominator: int) -> di
     }
 
 
+# [项目注释] 功能：`_task_digest`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, sorted, hexdigest, update。
+# [项目注释] 输入：`paths`: Sequence[Path]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _task_digest(paths: Sequence[Path]) -> str:
     digest = hashlib.sha256()
     for path in sorted(paths):
@@ -267,6 +298,9 @@ def _task_digest(paths: Sequence[Path]) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`replay_run`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：loads, sorted, Counter, summarize_results。
+# [项目注释] 输入：`name`: str；`run_dir`: Path；`output_root`: Path；`preference_counts`: Mapping[str, int]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def replay_run(name: str, run_dir: Path, output_root: Path, preference_counts: Mapping[str, int]) -> dict[str, Any]:
     contract = json.loads((run_dir / "contract.json").read_text(encoding="utf-8"))
     task_paths = sorted((run_dir / "tasks").glob("*.json"))
@@ -323,6 +357,9 @@ def replay_run(name: str, run_dir: Path, output_root: Path, preference_counts: M
     }
 
 
+# [项目注释] 功能：`_report`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：extend, join。
+# [项目注释] 输入：`rows`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _report(rows: Sequence[Mapping[str, Any]]) -> str:
     lines = [
         "# Comparable 200-Task metrics (current Reward v3 replay)", "",
@@ -344,6 +381,9 @@ def _report(rows: Sequence[Mapping[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args, resolve。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)

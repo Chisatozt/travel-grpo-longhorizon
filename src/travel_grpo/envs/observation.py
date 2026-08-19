@@ -23,6 +23,10 @@ class UserBenchObservation:
     diagnostics: Mapping[str, Any] = field(repr=False, compare=False)
 
     @classmethod
+    # [项目注释] 功能：`from_upstream`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：cls, isinstance,
+    # [项目注释]    UserBenchObservationError, float。
+    # [项目注释] 输入：`observation`: Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `UserBenchObservation`；具体值由各分支决定。
     def from_upstream(cls, observation: Mapping[str, Any]) -> UserBenchObservation:
         if not isinstance(observation, Mapping):
             raise UserBenchObservationError("TravelGym observation must be a mapping")
@@ -56,6 +60,9 @@ class UserBenchObservation:
             ),
         )
 
+    # [项目注释] 功能：`to_tool_text`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
     def to_tool_text(self) -> str:
         return self.feedback
 
@@ -72,5 +79,8 @@ class UserBenchStepResult:
     diagnostics: Mapping[str, Any] = field(repr=False, compare=False)
 
     @property
+    # [项目注释] 功能：`done`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def done(self) -> bool:
         return self.terminated or self.truncated

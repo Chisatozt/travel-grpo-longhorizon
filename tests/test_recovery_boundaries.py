@@ -1,3 +1,6 @@
+# [项目注释] 模块：测试模块，负责验证 test_recovery_boundaries 的行为契约。
+# [项目注释] 该文件的公共边界、输入输出和调用关系由下方实现及架构文档共同定义。
+
 from __future__ import annotations
 
 import json
@@ -16,6 +19,9 @@ from travel_grpo.data.recovery_boundaries import (
 )
 
 
+# [项目注释] 功能：`_call`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：dumps, len。
+# [项目注释] 输入：`thought`: str；`choice`: str；`content`: str。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def _call(thought: str, choice: str, content: str) -> dict:
     return {
         "role": "assistant",
@@ -35,10 +41,16 @@ def _call(thought: str, choice: str, content: str) -> dict:
     }
 
 
+# [项目注释] 功能：`_tool`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：`content`: str。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def _tool(content: str) -> dict:
     return {"role": "tool", "name": "interact_with_env", "content": content}
 
 
+# [项目注释] 功能：`_messages`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：_call, _tool。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `list[dict]`；具体值由各分支决定。
 def _messages() -> list[dict]:
     return [
         {"role": "system", "content": "public system"},
@@ -61,6 +73,10 @@ def _messages() -> list[dict]:
     ]
 
 
+# [项目注释] 功能：`test_schema_boundaries_and_public_replay`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：extract_message_boundaries, next, _messages。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_schema_boundaries_and_public_replay() -> None:
     records = extract_message_boundaries(
         task_id="apartment:2-1|rental_car:2-2",
@@ -92,6 +108,10 @@ def test_schema_boundaries_and_public_replay() -> None:
     assert second.public_state_before["blocked_aspects"] == ["rental_car"]
 
 
+# [项目注释] 功能：`test_grpo_transcript_parser_keeps_only_public_call_fields`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：parse_grpo_transcript, loads, set。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_grpo_transcript_parser_keeps_only_public_call_fields() -> None:
     input_text = "system\npublic system\nuser\nI need an apartment.\nassistant\n"
     output_text = (
@@ -106,6 +126,10 @@ def test_grpo_transcript_parser_keeps_only_public_call_fields() -> None:
     assert set(arguments) == {"thought", "choice", "content"}
 
 
+# [项目注释] 功能：`test_split_assignment_precedes_extraction_and_eval_is_not_training`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：items, load_task_split_map, mkdir, write_text。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_split_assignment_precedes_extraction_and_eval_is_not_training(tmp_path: Path) -> None:
     rows = {
         "data/sft/tasks_train.jsonl": {"task_id": "train-task", "composition": "22"},
@@ -147,6 +171,10 @@ def test_split_assignment_precedes_extraction_and_eval_is_not_training(tmp_path:
     assert manifest["split_checks"]["sample_level_random_split"] is False
 
 
+# [项目注释] 功能：`test_normalizer_drops_record_level_hidden_fields`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：normalize_actor_messages。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_normalizer_drops_record_level_hidden_fields() -> None:
     messages = normalize_actor_messages(
         [
@@ -165,6 +193,10 @@ def test_normalizer_drops_record_level_hidden_fields() -> None:
     ]
 
 
+# [项目注释] 功能：`test_write_extraction_manifest_and_targets_deferred`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：extract_message_boundaries, _dedupe_candidates, write_extraction, loads。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_write_extraction_manifest_and_targets_deferred(tmp_path: Path) -> None:
     records = extract_message_boundaries(
         task_id="apartment:2-1",

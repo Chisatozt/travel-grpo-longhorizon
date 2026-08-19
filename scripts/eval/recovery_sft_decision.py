@@ -34,6 +34,9 @@ FORBIDDEN = (
 )
 
 
+# [项目注释] 功能：`sha256_file`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, is_file, open。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def sha256_file(path: Path) -> str | None:
     if not path.is_file():
         return None
@@ -44,6 +47,9 @@ def sha256_file(path: Path) -> str | None:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`read_json`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：loads, read_text, isinstance, ValueError。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def read_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -51,6 +57,9 @@ def read_json(path: Path) -> dict[str, Any]:
     return value
 
 
+# [项目注释] 功能：`rel`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str, relative_to, resolve。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def rel(path: Path) -> str:
     try:
         return str(path.resolve().relative_to(ROOT.resolve()))
@@ -58,6 +67,9 @@ def rel(path: Path) -> str:
         return str(path)
 
 
+# [项目注释] 功能：`_tool_choices`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, loads。
+# [项目注释] 输入：`transcript`: Any。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _tool_choices(transcript: Any) -> list[str]:
     choices: list[str] = []
     if not isinstance(transcript, list):
@@ -84,6 +96,9 @@ def _tool_choices(transcript: Any) -> list[str]:
     return choices
 
 
+# [项目注释] 功能：`closed_loop_followup`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。 主要协作调用：sorted, glob, _tool_choices, len。
+# [项目注释] 输入：`gate_dir`: Path。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def closed_loop_followup(gate_dir: Path) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for condition in ("A", "B"):
@@ -120,6 +135,9 @@ def closed_loop_followup(gate_dir: Path) -> dict[str, Any]:
     return result
 
 
+# [项目注释] 功能：`leakage_scan`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list, sorted, glob, casefold。
+# [项目注释] 输入：`gate_dir`: Path。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def leakage_scan(gate_dir: Path) -> dict[str, Any]:
     hits: list[dict[str, str]] = []
     candidates = list(gate_dir.glob("A/probes/*.json")) + list(gate_dir.glob("B/probes/*.json"))
@@ -133,6 +151,9 @@ def leakage_scan(gate_dir: Path) -> dict[str, Any]:
     return {"forbidden_patterns": list(FORBIDDEN), "hits": hits, "hit_count": len(hits)}
 
 
+# [项目注释] 功能：`gate_rows`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：float, bool。
+# [项目注释] 输入：`comparison`: Mapping[str, Any]；`followup`: Mapping[str, Any]；`leakage`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def gate_rows(comparison: Mapping[str, Any], followup: Mapping[str, Any], leakage: Mapping[str, Any]) -> list[dict[str, Any]]:
     b = comparison.get("single_step", {}).get("B", {})
     closed_b = comparison.get("closed_loop", {}).get("B", {}) or {}
@@ -149,6 +170,10 @@ def gate_rows(comparison: Mapping[str, Any], followup: Mapping[str, Any], leakag
     return rows
 
 
+# [项目注释] 功能：`build_report`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：read_json, closed_loop_followup, leakage_scan,
+# [项目注释]    gate_rows。
+# [项目注释] 输入：`gate_dir`: Path；`boundaries`: Path；`targets`: Path；`sft`: Path。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def build_report(gate_dir: Path, boundaries: Path, targets: Path, sft: Path) -> dict[str, Any]:
     comparison = read_json(gate_dir / "comparison.json")
     manifest = read_json(gate_dir / "manifest.json")
@@ -285,6 +310,10 @@ def build_report(gate_dir: Path, boundaries: Path, targets: Path, sft: Path) -> 
     }
 
 
+# [项目注释] 功能：`render_markdown`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：float, int, items, join。
+# [项目注释] 输入：`report`: Mapping[str, Any]；`machine_path`: str | None；`gate_path`: str | None；`output_path`:
+# [项目注释]    str | None；`markdown_path`: str | None。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def render_markdown(
     report: Mapping[str, Any],
     *,
@@ -381,6 +410,10 @@ def render_markdown(
     return "\n".join(lines)
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args,
+# [项目注释]    build_report。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gate", type=Path, default=DEFAULT_GATE)

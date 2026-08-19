@@ -36,6 +36,9 @@ class GRPODataError(ValueError):
     """Raised when canonical or derived GRPO data violates its contract."""
 
 
+# [项目注释] 功能：`_pyarrow`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：RuntimeError。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _pyarrow():
     try:
         import pyarrow as pa
@@ -45,6 +48,9 @@ def _pyarrow():
     return pa, pq
 
 
+# [项目注释] 功能：`sha256_file`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, open, iter。
+# [项目注释] 输入：`path`: str | Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def sha256_file(path: str | Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -53,12 +59,19 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_non_empty`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：strip, GRPODataError, isinstance。
+# [项目注释] 输入：`value`: Any；`name`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _non_empty(value: Any, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise GRPODataError(f"{name} must be a non-empty string")
     return value.strip()
 
 
+# [项目注释] 功能：`_validate_prompt`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：enumerate, isinstance, GRPODataError,
+# [项目注释]    dict。
+# [项目注释] 输入：`prompt`: Any；`task_id`: str。
+# [项目注释] 输出：标注返回 `list[dict[str, str]]`；具体值由各分支决定。
 def _validate_prompt(prompt: Any, task_id: str) -> list[dict[str, str]]:
     if not isinstance(prompt, Sequence) or isinstance(prompt, (str, bytes)):
         raise GRPODataError(f"task {task_id!r} prompt must be a message sequence")
@@ -155,6 +168,10 @@ def build_verl_records(
     return tuple(records)
 
 
+# [项目注释] 功能：`_validate_derived_records`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：set, enumerate, len,
+# [项目注释]    GRPODataError。
+# [项目注释] 输入：`records`: Sequence[Mapping[str, Any]]；`project_split`: str。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _validate_derived_records(
     records: Sequence[Mapping[str, Any]], *, project_split: str
 ) -> None:
@@ -211,6 +228,9 @@ def _validate_derived_records(
             )
 
 
+# [项目注释] 功能：`_atomic_write_parquet`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：_pyarrow, mkdir, mkstemp, close。
+# [项目注释] 输入：`records`: Sequence[Mapping[str, Any]]；`destination`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _atomic_write_parquet(records: Sequence[Mapping[str, Any]], destination: Path) -> None:
     pa, pq = _pyarrow()
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -228,6 +248,9 @@ def _atomic_write_parquet(records: Sequence[Mapping[str, Any]], destination: Pat
         raise
 
 
+# [项目注释] 功能：`_atomic_write_json`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：mkdir, mkstemp, Path, replace。
+# [项目注释] 输入：`document`: Mapping[str, Any]；`destination`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _atomic_write_json(document: Mapping[str, Any], destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(

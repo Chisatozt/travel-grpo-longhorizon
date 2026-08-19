@@ -47,12 +47,16 @@ DEFAULT_STEPS = (100, 150, 200)
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`Progress` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class Progress:
     total: int
     valid: int
     invalid: int
 
 
+# [项目注释] 功能：`parse_args`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument, parse_args, list。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.Namespace`；具体值由各分支决定。
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, default=DEFAULT_RUN_ROOT)
@@ -79,10 +83,16 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# [项目注释] 功能：`utc_now`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isoformat, now。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# [项目注释] 功能：`resolve_from_root`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：is_absolute。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def resolve_from_root(path: Path) -> Path:
     return path if path.is_absolute() else ROOT / path
 
@@ -92,6 +102,9 @@ def relative_model_name(path: Path) -> str:
     return path.resolve().relative_to(ROOT).as_posix()
 
 
+# [项目注释] 功能：`read_subset_count`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：loads, int, read_text, ValueError。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def read_subset_count(path: Path) -> int:
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("schema_version") != "travel-evaluation-subset-v1":
@@ -99,6 +112,9 @@ def read_subset_count(path: Path) -> int:
     return int(document["selected_task_count"])
 
 
+# [项目注释] 功能：`task_progress`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：glob, Progress, is_dir, loads。
+# [项目注释] 输入：`run_dir`: Path。
+# [项目注释] 输出：标注返回 `Progress`；具体值由各分支决定。
 def task_progress(run_dir: Path) -> Progress:
     task_dir = run_dir / "tasks"
     total = valid = invalid = 0
@@ -117,6 +133,10 @@ def task_progress(run_dir: Path) -> Progress:
     return Progress(total=total, valid=valid, invalid=invalid)
 
 
+# [项目注释] 功能：`evaluation_complete`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：task_progress, bool, is_file,
+# [项目注释]    loads。
+# [项目注释] 输入：`run_dir`: Path；`expected_tasks`: int；`model_name`: str。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def evaluation_complete(run_dir: Path, expected_tasks: int, model_name: str) -> bool:
     manifest_path = run_dir / "run_manifest.json"
     if not manifest_path.is_file():
@@ -137,6 +157,9 @@ def evaluation_complete(run_dir: Path, expected_tasks: int, model_name: str) -> 
     )
 
 
+# [项目注释] 功能：`merged_model_complete`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：bool, is_file, any, glob。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def merged_model_complete(path: Path) -> bool:
     return bool(
         (path / "config.json").is_file()
@@ -148,6 +171,9 @@ def merged_model_complete(path: Path) -> bool:
     )
 
 
+# [项目注释] 功能：`atomic_status`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：mkdir, with_suffix, write_text, replace。
+# [项目注释] 输入：`path`: Path；**`values`。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def atomic_status(path: Path, **values: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     document = {"schema_version": "checkpoint-eval-sequence-v1", "updated_at": utc_now(), **values}
@@ -156,6 +182,9 @@ def atomic_status(path: Path, **values: Any) -> None:
     os.replace(temporary, path)
 
 
+# [项目注释] 功能：`stop_process`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：print, killpg, wait, poll。
+# [项目注释] 输入：`process`: subprocess.Popen[Any] | None；`name`: str。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def stop_process(process: subprocess.Popen[Any] | None, name: str) -> None:
     if process is None or process.poll() is not None:
         return
@@ -174,6 +203,9 @@ def stop_process(process: subprocess.Popen[Any] | None, name: str) -> None:
             pass
 
 
+# [项目注释] 功能：`actor_ready`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：Request, build_opener, rstrip, ProxyHandler。
+# [项目注释] 输入：`base_url`: str；`api_key`: str；`model_name`: str。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def actor_ready(base_url: str, api_key: str, model_name: str) -> bool:
     url = base_url.rstrip("/") + "/models"
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
@@ -191,6 +223,11 @@ def actor_ready(base_url: str, api_key: str, model_name: str) -> bool:
     }
 
 
+# [项目注释] 功能：`wait_for_actor`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：TimeoutError, monotonic, poll,
+# [项目注释]    actor_ready。
+# [项目注释] 输入：`process`: subprocess.Popen[Any]；`base_url`: str；`api_key`: str；`model_name`:
+# [项目注释]    str；`timeout_seconds`: float；`poll_seconds`: float。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def wait_for_actor(
     process: subprocess.Popen[Any],
     *,
@@ -212,6 +249,9 @@ def wait_for_actor(
     raise TimeoutError(f"vLLM Actor was not ready after {timeout_seconds / 60:.1f} minutes")
 
 
+# [项目注释] 功能：`export_command`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：str。
+# [项目注释] 输入：`actor_dir`: Path；`merged_dir`: Path。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def export_command(actor_dir: Path, merged_dir: Path) -> list[str]:
     return [
         sys.executable,
@@ -227,6 +267,9 @@ def export_command(actor_dir: Path, merged_dir: Path) -> list[str]:
     ]
 
 
+# [项目注释] 功能：`actor_command`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：`model_name`: str。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def actor_command(model_name: str) -> list[str]:
     return [
         sys.executable,
@@ -246,6 +289,9 @@ def actor_command(model_name: str) -> list[str]:
     ]
 
 
+# [项目注释] 功能：`evaluation_command`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str。
+# [项目注释] 输入：`model_name`: str；`dataset`: Path；`subset_manifest`: Path；`run_dir`: Path；`concurrency`: int。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def evaluation_command(
     *,
     model_name: str,
@@ -319,6 +365,9 @@ def monitor_evaluation(
     return False, last_progress_at
 
 
+# [项目注释] 功能：`shutdown_after_grace`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。 主要协作调用：atomic_status, print, sleep, call。
+# [项目注释] 输入：`reason`: str；`delay_seconds`: float；`no_shutdown`: bool；`status_path`: Path。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def shutdown_after_grace(
     *,
     reason: str,
@@ -341,6 +390,10 @@ def shutdown_after_grace(
     return subprocess.call(["/usr/bin/shutdown", "-h", "now"])
 
 
+# [项目注释] 功能：`validate_inputs`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：resolve_from_root, read_subset_count,
+# [项目注释]    ValueError, is_file。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `tuple[Path, Path, Path, Path, int]`；具体值由各分支决定。
 def validate_inputs(args: argparse.Namespace) -> tuple[Path, Path, Path, Path, int]:
     run_root = resolve_from_root(args.run_root)
     dataset = resolve_from_root(args.subset_dataset)
@@ -366,6 +419,10 @@ def validate_inputs(args: argparse.Namespace) -> tuple[Path, Path, Path, Path, i
     return run_root, dataset, subset_manifest, output_root, expected
 
 
+# [项目注释] 功能：`print_dry_run`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：print, relative_model_name, dumps, str。
+# [项目注释] 输入：`args`: argparse.Namespace；`run_root`: Path；`dataset`: Path；`subset_manifest`:
+# [项目注释]    Path；`output_root`: Path；`expected`: int。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def print_dry_run(
     args: argparse.Namespace,
     *,
@@ -416,6 +473,9 @@ def print_dry_run(
     )
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：parse_args, chdir, validate_inputs, strip。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     args = parse_args()
     os.chdir(ROOT)

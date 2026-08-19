@@ -27,6 +27,9 @@ from travel_grpo.training.sft.dataset import (  # noqa: E402
 )
 
 
+# [项目注释] 功能：`build_parser`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：ArgumentParser, add_argument。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `argparse.ArgumentParser`；具体值由各分支决定。
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -50,12 +53,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# [项目注释] 功能：`_mapping`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, ValueError。
+# [项目注释] 输入：`value`: Any；`name`: str。
+# [项目注释] 输出：标注返回 `Mapping[str, Any]`；具体值由各分支决定。
 def _mapping(value: Any, name: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{name} must be a mapping")
     return value
 
 
+# [项目注释] 功能：`_project_path`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：expanduser, ValueError, is_absolute,
+# [项目注释]    resolve。
+# [项目注释] 输入：`value`: Any；`name`: str。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def _project_path(value: Any, name: str) -> Path:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be a non-empty path")
@@ -63,6 +73,10 @@ def _project_path(value: Any, name: str) -> Path:
     return path.resolve() if path.is_absolute() else (ROOT / path).resolve()
 
 
+# [项目注释] 功能：`_project_paths`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：tuple, isinstance, ValueError,
+# [项目注释]    _project_path。
+# [项目注释] 输入：`value`: Any；`name`: str。
+# [项目注释] 输出：标注返回 `tuple[Path, ...]`；具体值由各分支决定。
 def _project_paths(value: Any, name: str) -> tuple[Path, ...]:
     values = [value] if isinstance(value, str) else value
     if not isinstance(values, list) or not values:
@@ -70,6 +84,9 @@ def _project_paths(value: Any, name: str) -> tuple[Path, ...]:
     return tuple(_project_path(item, name) for item in values)
 
 
+# [项目注释] 功能：`load_config`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：_mapping, _project_path, _project_paths, items。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def load_config(path: Path) -> dict[str, Any]:
     try:
         import yaml
@@ -198,6 +215,11 @@ def load_config(path: Path) -> dict[str, Any]:
     return dict(root)
 
 
+# [项目注释] 功能：`_audit`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_mapping, load_tool_schema, _project_paths,
+# [项目注释]    tuple。
+# [项目注释] 输入：`config`: Mapping[str, Any]；`limit`: int | None；`allow_small_smoke`: bool。
+# [项目注释] 输出：标注返回 `tuple[dict[str, Any], tuple[dict[str, Any], ...], tuple[dict[str, Any], ...], dict[str,
+# [项目注释]    Any]]`；具体值由各分支决定。
 def _audit(
     config: Mapping[str, Any],
     *,
@@ -297,6 +319,9 @@ def _audit(
     )
 
 
+# [项目注释] 功能：`_load_tokenizer`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：from_pretrained, RuntimeError, bool, str。
+# [项目注释] 输入：`model`: Mapping[str, Any]。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _load_tokenizer(model: Mapping[str, Any]):
     try:
         from transformers import AutoTokenizer
@@ -326,6 +351,10 @@ def _load_tokenizer(model: Mapping[str, Any]):
     return tokenizer
 
 
+# [项目注释] 功能：`_render`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：_mapping, _load_tokenizer, str,
+# [项目注释]    build_action_only_dataset。
+# [项目注释] 输入：`config`；`train`；`validation`；`schema`；`limit`；`allow_small_smoke`。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _render(config, train, validation, schema, *, limit, allow_small_smoke):
     model = _mapping(config["model"], "model")
     data = _mapping(config["data"], "data")
@@ -370,6 +399,10 @@ def _render(config, train, validation, schema, *, limit, allow_small_smoke):
     )
 
 
+# [项目注释] 功能：`_train`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：_mapping, bool, from_pretrained,
+# [项目注释]    TrainingArguments。
+# [项目注释] 输入：`config`；`tokenizer`；`train_examples`；`validation_examples`；`resume`。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def _train(config, tokenizer, train_examples, validation_examples, resume):
     try:
         import torch
@@ -524,6 +557,9 @@ def _train(config, tokenizer, train_examples, validation_examples, resume):
     trainer.save_model()
 
 
+# [项目注释] 功能：`run`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：load_config, _mapping, load_tool_schema, _audit。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def run(args: argparse.Namespace) -> dict[str, Any]:
     config = load_config(args.config.resolve())
     data = _mapping(config["data"], "data")
@@ -587,6 +623,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     return summary
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：print, dumps, SystemExit, run。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def main() -> None:
     try:
         print(json.dumps(run(build_parser().parse_args()), ensure_ascii=False, indent=2))

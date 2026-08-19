@@ -25,12 +25,19 @@ from travel_grpo.envs.userbench_context import UserBenchSessionState
 from travel_grpo.envs.userbench_tools import ActionChoice, UserBenchAction
 
 
+# [项目注释] 功能：`_action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：from_parameters。
+# [项目注释] 输入：`choice`: str；`content`: str；`thought`: str。
+# [项目注释] 输出：标注返回 `UserBenchAction`；具体值由各分支决定。
 def _action(choice: str, content: str, thought: str = "public thought") -> UserBenchAction:
     return UserBenchAction.from_parameters(
         {"thought": thought, "choice": choice, "content": content}
     )
 
 
+# [项目注释] 功能：`test_public_aspects_only_use_explicit_initial_message_mentions`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：extract_public_aspects。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_public_aspects_only_use_explicit_initial_message_mentions():
     assert extract_public_aspects("Please arrange a hotel, then a flight and a rental car.") == (
         "hotel",
@@ -43,6 +50,10 @@ def test_public_aspects_only_use_explicit_initial_message_mentions():
     assert extract_public_aspects("No travel composition was named.") == ()
 
 
+# [项目注释] 功能：`test_observation_classifier_uses_text_not_hidden_diagnostics`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：classify_public_observation, signature。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_observation_classifier_uses_text_not_hidden_diagnostics():
     normal = classify_public_observation(
         "Normal results: H1 and H2", choice=ActionChoice.SEARCH
@@ -63,6 +74,10 @@ def test_observation_classifier_uses_text_not_hidden_diagnostics():
     assert "diagnostics" not in inspect.signature(classify_public_observation).parameters
 
 
+# [项目注释] 功能：`test_public_signatures_do_not_use_actor_thought_or_hidden_aspects`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_action, public_action_signature, public_search_signature, public_semantic_signature。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_public_signatures_do_not_use_actor_thought_or_hidden_aspects():
     first = _action("action", "hotel name", thought="one")
     second = _action("action", "hotel name", thought="a different thought")
@@ -74,6 +89,10 @@ def test_public_signatures_do_not_use_actor_thought_or_hidden_aspects():
     assert public_semantic_signature(_action("action", "flight company"), ("hotel",)) is None
 
 
+# [项目注释] 功能：`test_normal_search_records_only_visible_ids_for_public_aspects_and_requires_answer`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, _action, frozenset。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_normal_search_records_only_visible_ids_for_public_aspects_and_requires_answer():
     state = new_public_control_state("I need a hotel and a flight.")
     state = reduce_public_feedback(
@@ -89,6 +108,10 @@ def test_normal_search_records_only_visible_ids_for_public_aspects_and_requires_
     assert state.aspects[1].visible_option_ids == frozenset()
 
 
+# [项目注释] 功能：`test_visible_wrong_answer_is_publicly_answered_without_correctness_lookup`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_visible_wrong_answer_is_publicly_answered_without_correctness_lookup():
     state = new_public_control_state("I need a hotel.")
     state = reduce_public_feedback(
@@ -104,6 +127,10 @@ def test_visible_wrong_answer_is_publicly_answered_without_correctness_lookup():
     assert state.recovery_mode is RecoveryMode.SWITCH_ASPECT_REQUIRED
 
 
+# [项目注释] 功能：`test_unseen_answer_is_recorded_as_actor_input_but_not_marked_answered`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_unseen_answer_is_recorded_as_actor_input_but_not_marked_answered():
     state = new_public_control_state("I need a hotel.")
     state = reduce_public_feedback(state, _action("answer", "H99"), "not accepted")
@@ -112,6 +139,10 @@ def test_unseen_answer_is_recorded_as_actor_input_but_not_marked_answered():
     assert state.submitted_answer_ids == ("H99",)
 
 
+# [项目注释] 功能：`test_first_and_second_public_search_fallbacks_are_separate_recovery_signals`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_first_and_second_public_search_fallbacks_are_separate_recovery_signals():
     state = new_public_control_state("I need a hotel.")
     state = reduce_public_feedback(
@@ -137,6 +168,10 @@ def test_first_and_second_public_search_fallbacks_are_separate_recovery_signals(
     assert state.recovery_mode is RecoveryMode.BLOCKED
 
 
+# [项目注释] 功能：`test_no_public_aspect_does_not_invent_a_search_recovery_target`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_control_state, PublicControlEvent, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_no_public_aspect_does_not_invent_a_search_recovery_target():
     state = new_public_control_state("Please help with my trip.", no_progress_threshold=1)
     state = reduce_public_control_state(
@@ -147,6 +182,10 @@ def test_no_public_aspect_does_not_invent_a_search_recovery_target():
     assert state.recovery_mode is RecoveryMode.NONE
 
 
+# [项目注释] 功能：`test_no_progress_threshold_is_public_and_does_not_need_reward_snapshot`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, _action, reduce_public_control_state, PublicControlEvent。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_no_progress_threshold_is_public_and_does_not_need_reward_snapshot():
     state = new_public_control_state("I need a hotel.", no_progress_threshold=2)
     action = _action("action", "hotel name")
@@ -158,6 +197,10 @@ def test_no_progress_threshold_is_public_and_does_not_need_reward_snapshot():
     assert state.recovery_mode is RecoveryMode.SEARCH_REQUIRED
 
 
+# [项目注释] 功能：`test_public_aspect_advance_follows_initial_message_order_and_terminates`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, advance_public_aspect, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_public_aspect_advance_follows_initial_message_order_and_terminates():
     state = new_public_control_state("I need a hotel and a flight.")
     state = reduce_public_feedback(state, _action("search", "hotel"), "H1")
@@ -173,6 +216,10 @@ def test_public_aspect_advance_follows_initial_message_order_and_terminates():
     assert state.episode_done is True
 
 
+# [项目注释] 功能：`test_renderer_contains_public_evidence_only`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_feedback, render_actor_control_info, _action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_renderer_contains_public_evidence_only():
     state = new_public_control_state("I need a hotel.")
     state = reduce_public_feedback(state, _action("search", "hotel"), "H1 and H2")
@@ -188,11 +235,19 @@ def test_renderer_contains_public_evidence_only():
         assert secret not in rendered
 
 
+# [项目注释] 类型：`_FeedbackWrapper` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class _FeedbackWrapper:
+    # [项目注释] 功能：`close`：清理运行时资源或恢复边界状态，保证后续调用不会继承脏状态。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
     def close(self):
         return None
 
 
+# [项目注释] 功能：`test_session_feedback_entry_is_unified_and_idempotent`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：UserBenchSessionState, render_actor_feedback, startswith, _FeedbackWrapper。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_session_feedback_entry_is_unified_and_idempotent():
     session = UserBenchSessionState(
         "feedback-request",
@@ -208,6 +263,10 @@ def test_session_feedback_entry_is_unified_and_idempotent():
     assert session.append_recovery_instruction("Candidates: H1") == rendered
 
 
+# [项目注释] 功能：`test_session_public_phase_ledger_counts_opportunities_and_guard_rejections`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：UserBenchSessionState, record_public_non_progress, _action, validate_public_action。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_session_public_phase_ledger_counts_opportunities_and_guard_rejections():
     session = UserBenchSessionState(
         "phase-request",
@@ -228,6 +287,10 @@ def test_session_public_phase_ledger_counts_opportunities_and_guard_rejections()
     assert session.guard_rejections == 1
 
 
+# [项目注释] 功能：`test_actor_control_renderer_has_stable_normal_snapshot`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, render_actor_control_info。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_actor_control_renderer_has_stable_normal_snapshot():
     state = new_public_control_state("I need a hotel.")
     assert render_actor_control_info(state) == (
@@ -240,7 +303,15 @@ def test_actor_control_renderer_has_stable_normal_snapshot():
     )
 
 
+# [项目注释] 功能：`test_actor_control_renderer_names_each_recovery_phase_and_allowlist`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, reduce_public_control_state, render_actor_control_info,
+# [项目注释]    reduce_public_feedback。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_actor_control_renderer_names_each_recovery_phase_and_allowlist():
+    # [项目注释] 功能：`action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_action。
+    # [项目注释] 输入：`choice`: str；`content`: str。
+    # [项目注释] 输出：标注返回 `UserBenchAction`；具体值由各分支决定。
     def action(choice: str, content: str) -> UserBenchAction:
         return _action(choice, content)
 
@@ -307,6 +378,10 @@ def test_actor_control_renderer_names_each_recovery_phase_and_allowlist():
     assert "do not search or answer it" in rendered
 
 
+# [项目注释] 功能：`test_actor_control_renderer_never_serializes_hidden_reward_fields`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：new_public_control_state, render_actor_control_info。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_actor_control_renderer_never_serializes_hidden_reward_fields():
     state = new_public_control_state("I need a hotel.")
     rendered = render_actor_control_info(state)
@@ -321,6 +396,10 @@ def test_actor_control_renderer_never_serializes_hidden_reward_fields():
         assert secret not in rendered
 
 
+# [项目注释] 功能：`test_session_feedback_leakage_guard_excludes_hidden_values_and_reward_fields`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：TravelRewardTask, UserBenchRewardSnapshot, UserBenchSessionState, render_actor_feedback。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_session_feedback_leakage_guard_excludes_hidden_values_and_reward_fields():
     hidden_value = "SECRET_HIDDEN_PREFERENCE_VALUE"
     task = TravelRewardTask(
@@ -359,6 +438,10 @@ def test_session_feedback_leakage_guard_excludes_hidden_values_and_reward_fields
     ):
         assert secret not in rendered
 
+# [项目注释] 功能：`test_public_reducer_api_has_no_hidden_reward_inputs`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：set,
+# [项目注释]    signature。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：主要通过副作用更新状态或写出产物，默认返回 `None`。
 def test_public_reducer_api_has_no_hidden_reward_inputs():
     parameters = set(inspect.signature(reduce_public_control_state).parameters)
     assert parameters == {"state", "event"}

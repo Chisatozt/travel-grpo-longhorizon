@@ -1,3 +1,6 @@
+# [项目注释] 模块：测试模块，负责验证 test_inference_gate 的行为契约。
+# [项目注释] 该文件的公共边界、输入输出和调用关系由下方实现及架构文档共同定义。
+
 from __future__ import annotations
 
 import importlib.util
@@ -16,6 +19,9 @@ gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)
 
 
+# [项目注释] 功能：`_args`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：type。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：返回运行时计算结果；没有显式返回值的分支返回 `None`。
 def _args(tmp_path: Path):
     return type(
         "Args",
@@ -34,6 +40,10 @@ def _args(tmp_path: Path):
     not (ROOT / "outputs/recovery_boundaries/recovery-boundary-v1/contexts.jsonl").exists(),
     reason="derived boundary fixture is not present",
 )
+# [项目注释] 功能：`test_fixed_manifest_counts_and_task_ids`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：skipif,
+# [项目注释]    build_manifest, _args, len。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_fixed_manifest_counts_and_task_ids(tmp_path: Path) -> None:
     manifest, samples, tasks = gate.build_manifest(_args(tmp_path))
     assert {key: len(value) for key, value in samples.items()} == gate.FIXED_COUNTS
@@ -47,6 +57,10 @@ def test_fixed_manifest_counts_and_task_ids(tmp_path: Path) -> None:
     not (ROOT / "outputs/recovery_boundaries/recovery-boundary-v1/contexts.jsonl").exists(),
     reason="derived boundary fixture is not present",
 )
+# [项目注释] 功能：`test_prompt_conditions_are_public_and_nonduplicating`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：skipif, build_manifest, items, _args。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_prompt_conditions_are_public_and_nonduplicating(tmp_path: Path) -> None:
     _, samples, _ = gate.build_manifest(_args(tmp_path))
     for category, records in samples.items():
@@ -71,6 +85,10 @@ def test_prompt_conditions_are_public_and_nonduplicating(tmp_path: Path) -> None
     not (ROOT / "outputs/recovery_boundaries/recovery-boundary-v1/contexts.jsonl").exists(),
     reason="derived boundary fixture is not present",
 )
+# [项目注释] 功能：`test_normal_result_probes_are_answer_required_with_visible_ids`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：skipif, load_boundary_records, choose_probe_records, len。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_normal_result_probes_are_answer_required_with_visible_ids() -> None:
     records = gate.load_boundary_records(gate.BOUNDARY_FILE)
     selected = gate.choose_probe_records(
@@ -89,6 +107,10 @@ def test_normal_result_probes_are_answer_required_with_visible_ids() -> None:
     not (ROOT / "data/evaluation/tasks.parquet").exists(),
     reason="frozen evaluation fixture is not present",
 )
+# [项目注释] 功能：`test_manifest_supports_32_task_closed_loop_validation`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：skipif, _args, build_manifest, len。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_manifest_supports_32_task_closed_loop_validation(tmp_path: Path) -> None:
     args = _args(tmp_path)
     args.closed_loop_task_count = 32
@@ -98,6 +120,10 @@ def test_manifest_supports_32_task_closed_loop_validation(tmp_path: Path) -> Non
     assert set(manifest["closed_loop_compositions"]) <= {"22", "33", "44"}
 
 
+# [项目注释] 功能：`test_probe_metric_definitions`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：UserBenchAction,
+# [项目注释]    _classify_probe。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_probe_metric_definitions() -> None:
     state = {"current_aspect": "restaurant", "visible_option_ids": ["R1"]}
     action = gate.UserBenchAction("answer", gate.ActionChoice.ANSWER, "R1")

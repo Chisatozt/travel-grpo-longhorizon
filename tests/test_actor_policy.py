@@ -18,6 +18,9 @@ from travel_grpo.training.sft_collection import (
 )
 
 
+# [项目注释] 功能：`_prompt`：把协议/状态数据转换为模型、用户或日志可见的文本表示。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `list[dict[str, str]]`；具体值由各分支决定。
 def _prompt() -> list[dict[str, str]]:
     return [
         {"role": "system", "content": "Use interact_with_env."},
@@ -25,6 +28,9 @@ def _prompt() -> list[dict[str, str]]:
     ]
 
 
+# [项目注释] 功能：`test_runtime_policy_contains_the_production_behavior_contract`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_runtime_policy_contains_the_production_behavior_contract() -> None:
     for phrase in (
         "already answered a preference",
@@ -50,6 +56,10 @@ def test_runtime_policy_contains_the_production_behavior_contract() -> None:
     assert TEACHER_GENERATION_INSTRUCTION not in ACTOR_RUNTIME_POLICY
 
 
+# [项目注释] 功能：`test_runtime_policy_injection_is_idempotent_and_deduplicated`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：ensure_actor_runtime_policy, _prompt, count。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_runtime_policy_injection_is_idempotent_and_deduplicated() -> None:
     once = ensure_actor_runtime_policy(_prompt())
     twice = ensure_actor_runtime_policy(once)
@@ -59,6 +69,11 @@ def test_runtime_policy_injection_is_idempotent_and_deduplicated() -> None:
     assert content.count(ACTOR_RUNTIME_POLICY) == 1
 
 
+# [项目注释] 功能：`test_teacher_instruction_is_request_only_and_removed_for_actor_messages`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：ensure_teacher_generation_messages, strip_teacher_generation_instruction,
+# [项目注释]    _prepare_teacher_messages, _prompt。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_teacher_instruction_is_request_only_and_removed_for_actor_messages() -> None:
     teacher_messages = ensure_teacher_generation_messages(_prompt())
     teacher_content = teacher_messages[0]["content"]
@@ -77,6 +92,10 @@ def test_teacher_instruction_is_request_only_and_removed_for_actor_messages() ->
     assert ACTOR_RUNTIME_POLICY in archived[0]["content"]
 
 
+# [项目注释] 功能：`test_sft_trajectory_records_actor_policy_version`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：TeacherTrajectory, tuple, to_record, _prompt。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_sft_trajectory_records_actor_policy_version() -> None:
     trajectory = TeacherTrajectory(
         task_id="hotel:2-1",
@@ -93,6 +112,10 @@ def test_sft_trajectory_records_actor_policy_version() -> None:
     assert trajectory.to_record()["actor_policy_version"] == ACTOR_RUNTIME_POLICY_VERSION
 
 
+# [项目注释] 功能：`test_grpo_rows_use_the_same_runtime_policy_without_hidden_labels`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：str, build_verl_records, count, resolve。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_grpo_rows_use_the_same_runtime_policy_without_hidden_labels() -> None:
     from pathlib import Path
 

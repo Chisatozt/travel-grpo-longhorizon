@@ -38,6 +38,9 @@ from travel_grpo.prompts.actor_policy import (
 CHOICES = frozenset(("action", "search", "answer"))
 
 
+# [项目注释] 功能：`load_tasks`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：read_table, to_pylist, tuple, ValueError。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def load_tasks(path: Path) -> list[dict[str, Any]]:
     table = pq.read_table(path)
     expected = ("task_id", "composition", "difficulty", "source_split", "prompt")
@@ -78,6 +81,10 @@ def choose_batch(rows: Sequence[Mapping[str, Any]], size: int) -> list[dict[str,
     return [dict(row) for row in selected]
 
 
+# [项目注释] 功能：`with_condition_prompt`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：deepcopy, dict, list,
+# [项目注释]    ensure_actor_runtime_policy。
+# [项目注释] 输入：`task`: Mapping[str, Any]；`condition`: str。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def with_condition_prompt(task: Mapping[str, Any], condition: str) -> dict[str, Any]:
     value = copy.deepcopy(dict(task))
     value["prompt"] = copy.deepcopy(list(task["prompt"]))
@@ -86,6 +93,9 @@ def with_condition_prompt(task: Mapping[str, Any], condition: str) -> dict[str, 
     return value
 
 
+# [项目注释] 功能：`action_choices`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, len, loads, lower。
+# [项目注释] 输入：`result`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def action_choices(result: Mapping[str, Any]) -> list[str]:
     choices: list[str] = []
     for message in result.get("visible_transcript", []):
@@ -106,6 +116,9 @@ def action_choices(result: Mapping[str, Any]) -> list[str]:
     return choices
 
 
+# [项目注释] 功能：`condition_summary`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：len, Counter, action_choices, mean_metric。
+# [项目注释] 输入：`records`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def condition_summary(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     valid = [record for record in records if record.get("infrastructure_valid") is True]
     task_count = len(records)
@@ -132,12 +145,18 @@ def condition_summary(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 task_transitions[name] += 1
         answers_per_task.append(sum(value == "answer" for value in choices))
 
+    # [项目注释] 功能：`rate`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：`name`: str。
+    # [项目注释] 输出：标注返回 `float | None`；具体值由各分支决定。
     def rate(name: str) -> float | None:
         denominator = transition_denominators[name]
         return transitions[name] / denominator if denominator else None
 
     reward_values = [record.get("reward", {}) for record in valid]
 
+    # [项目注释] 功能：`mean_metric`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：sum, float。
+    # [项目注释] 输入：`name`: str。
+    # [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
     def mean_metric(name: str) -> float:
         return sum(float(value.get(name, 0.0)) for value in reward_values) / valid_count if valid_count else 0.0
 
@@ -172,6 +191,9 @@ def condition_summary(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+# [项目注释] 功能：`run`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：load_tasks, choose_batch, mkdir, atomic_json。
+# [项目注释] 输入：`args`: argparse.Namespace。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 async def run(args: argparse.Namespace) -> None:
     rows = load_tasks(args.dataset)
     tasks = choose_batch(rows, args.tasks)
@@ -214,6 +236,9 @@ async def run(args: argparse.Namespace) -> None:
         await actor.close()
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args, run。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, default=ROOT / "data/evaluation/tasks.parquet")

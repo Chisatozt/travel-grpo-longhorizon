@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any
 
 
+# [项目注释] 功能：`atomic_json`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：mkdir, mkstemp, replace, exists。
+# [项目注释] 输入：`path`: Path；`value`: Any。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -23,11 +26,17 @@ def atomic_json(path: Path, value: Any) -> None:
             os.unlink(name)
 
 
+# [项目注释] 功能：`task_path`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：replace。
+# [项目注释] 输入：`root`: Path；`task_id`: str。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def task_path(root: Path, task_id: str) -> Path:
     safe = task_id.replace(":", "_").replace("/", "_").replace("\\", "_")
     return root / "tasks" / f"{safe}.json"
 
 
+# [项目注释] 功能：`load_completed`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：is_dir, sorted, loads, glob。
+# [项目注释] 输入：`root`: Path。
+# [项目注释] 输出：标注返回 `dict[str, dict[str, Any]]`；具体值由各分支决定。
 def load_completed(root: Path) -> dict[str, dict[str, Any]]:
     completed: dict[str, dict[str, Any]] = {}
     for path in sorted((root / "tasks").glob("*.json")) if (root / "tasks").is_dir() else ():
@@ -40,6 +49,9 @@ def load_completed(root: Path) -> dict[str, dict[str, Any]]:
     return completed
 
 
+# [项目注释] 功能：`write_results_jsonl`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：mkdir, mkstemp, replace, exists。
+# [项目注释] 输入：`path`: Path；`records`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def write_results_jsonl(path: Path, records: Sequence[Mapping[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)

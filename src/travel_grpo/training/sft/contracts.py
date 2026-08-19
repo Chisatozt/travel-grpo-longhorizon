@@ -17,6 +17,7 @@ COLLECTION_DIAGNOSTIC_SCHEMA_VERSION = "userbench-teacher-diagnostic-v4"
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`TeacherTrajectory` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TeacherTrajectory:
     task_id: str
     composition: str
@@ -44,9 +45,15 @@ class TeacherTrajectory:
     quality_tier: str = "gold"
 
     @property
+    # [项目注释] 功能：`total_reward`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：float, sum。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
     def total_reward(self) -> float:
         return float(sum(self.step_rewards))
 
+    # [项目注释] 功能：`to_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：dict, list, len。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def to_record(self) -> dict[str, Any]:
         reward = dict(self.reward_breakdown or {})
         teacher_usage = dict(self.teacher_usage or {})
@@ -105,6 +112,10 @@ class TeacherTrajectory:
         }
 
     @classmethod
+    # [项目注释] 功能：`from_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：cls, TeacherCollectionError, str,
+    # [项目注释]    tuple。
+    # [项目注释] 输入：`record`: Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `'TeacherTrajectory'`；具体值由各分支决定。
     def from_record(cls, record: Mapping[str, Any]) -> "TeacherTrajectory":
         if record.get("schema_version") != TRAJECTORY_SCHEMA_VERSION:
             raise TeacherCollectionError("checkpoint contains an unsupported trajectory")
@@ -141,6 +152,7 @@ class TeacherTrajectory:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`TeacherAttemptDiagnostic` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TeacherAttemptDiagnostic:
     task_id: str
     attempt: int
@@ -155,6 +167,9 @@ class TeacherAttemptDiagnostic:
     attempt_strategy: str = AttemptStrategy.NATURAL.value
     quality_tier: str = "rejected"
 
+    # [项目注释] 功能：`to_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：list, dict。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def to_record(self) -> dict[str, Any]:
         return {
             "schema_version": COLLECTION_DIAGNOSTIC_SCHEMA_VERSION,
@@ -177,6 +192,9 @@ class TeacherAttemptDiagnostic:
         }
 
     @classmethod
+    # [项目注释] 功能：`from_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：cls, TeacherCollectionError, str, int。
+    # [项目注释] 输入：`record`: Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `'TeacherAttemptDiagnostic'`；具体值由各分支决定。
     def from_record(cls, record: Mapping[str, Any]) -> "TeacherAttemptDiagnostic":
         if record.get("schema_version") != COLLECTION_DIAGNOSTIC_SCHEMA_VERSION:
             raise TeacherCollectionError("checkpoint contains unsupported diagnostics")
@@ -205,6 +223,7 @@ class TeacherAttemptDiagnostic:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`TeacherTaskOutcome` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TeacherTaskOutcome:
     task_id: str
     trajectory: TeacherTrajectory | None
@@ -212,13 +231,22 @@ class TeacherTaskOutcome:
     quality_tier: str = "rejected"
 
     @property
+    # [项目注释] 功能：`accepted`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def accepted(self) -> bool:
         return self.trajectory is not None
 
     @property
+    # [项目注释] 功能：`gold`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
     def gold(self) -> bool:
         return self.quality_tier == "gold"
 
+    # [项目注释] 功能：`rejected_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：len, list。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def rejected_record(self) -> dict[str, Any]:
         final = self.attempts[-1]
         return {
@@ -234,6 +262,9 @@ class TeacherTaskOutcome:
             "quality_tier": self.quality_tier,
         }
 
+    # [项目注释] 功能：`to_checkpoint_record`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：to_record。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def to_checkpoint_record(self) -> dict[str, Any]:
         return {
             "schema_version": "userbench-teacher-task-checkpoint-v1",
@@ -246,6 +277,10 @@ class TeacherTaskOutcome:
         }
 
     @classmethod
+    # [项目注释] 功能：`from_checkpoint_record`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：cls, TeacherCollectionError,
+    # [项目注释]    str, tuple。
+    # [项目注释] 输入：`record`: Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `'TeacherTaskOutcome'`；具体值由各分支决定。
     def from_checkpoint_record(cls, record: Mapping[str, Any]) -> "TeacherTaskOutcome":
         if record.get("schema_version") != "userbench-teacher-task-checkpoint-v1":
             raise TeacherCollectionError("unsupported teacher task checkpoint")

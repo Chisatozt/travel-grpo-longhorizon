@@ -27,6 +27,9 @@ ENVIRONMENT_NAME = "TravelGym"
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
 
 
+# [项目注释] 功能：`_non_empty`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：strip, ValueError, isinstance。
+# [项目注释] 输入：`value`: Any；`name`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _non_empty(value: Any, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be a non-empty string")
@@ -51,6 +54,10 @@ def build_rollout_extra_info(task_id: str) -> dict[str, Any]:
     }
 
 
+# [项目注释] 功能：`validate_rollout_extra_info`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：_non_empty, isinstance,
+# [项目注释]    TypeError, ValueError。
+# [项目注释] 输入：`extra_info`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def validate_rollout_extra_info(extra_info: Mapping[str, Any]) -> str:
     if not isinstance(extra_info, Mapping):
         raise TypeError("rollout extra_info must be a mapping")
@@ -70,6 +77,10 @@ def validate_rollout_extra_info(extra_info: Mapping[str, Any]) -> str:
     return task_id
 
 
+# [项目注释] 功能：`task_id_from_run_kwargs`：编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：hasattr,
+# [项目注释]    validate_rollout_extra_info, item, isinstance。
+# [项目注释] 输入：`kwargs`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def task_id_from_run_kwargs(kwargs: Mapping[str, Any]) -> str:
     extra_info = kwargs.get("extra_info")
     if hasattr(extra_info, "item"):
@@ -79,10 +90,17 @@ def task_id_from_run_kwargs(kwargs: Mapping[str, Any]) -> str:
     return validate_rollout_extra_info(extra_info)
 
 
+# [项目注释] 功能：`calculate_current_session_score`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：float, reward_report,
+# [项目注释]    require_current_session。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
 def calculate_current_session_score() -> float:
     return float(require_current_session().reward_report()["terminal_reward"])
 
 
+# [项目注释] 功能：`_project_path`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：expanduser, is_absolute, resolve, exists。
+# [项目注释] 输入：`value`: str | Path。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def _project_path(value: str | Path) -> Path:
     candidate = Path(value).expanduser()
     if candidate.is_absolute():
@@ -91,6 +109,9 @@ def _project_path(value: str | Path) -> Path:
     return working if working.exists() else (PROJECT_ROOT / candidate).resolve()
 
 
+# [项目注释] 功能：`_load_yaml`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：_project_path, safe_load, read_text, isinstance。
+# [项目注释] 输入：`path`: str | Path。
+# [项目注释] 输出：标注返回 `Mapping[str, Any]`；具体值由各分支决定。
 def _load_yaml(path: str | Path) -> Mapping[str, Any]:
     try:
         import yaml
@@ -104,12 +125,17 @@ def _load_yaml(path: str | Path) -> Mapping[str, Any]:
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`UserBenchRolloutRuntime` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class UserBenchRolloutRuntime:
     environment_config: UserBenchEnvironmentConfig
     simulator_runtime: UserSimulatorRuntime
     source_root: Path | None
 
     @classmethod
+    # [项目注释] 功能：`from_config_files`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_load_yaml, SimulatorRole, items,
+    # [项目注释]    set。
+    # [项目注释] 输入：`environment_path`: str | Path；`simulator_path`: str | Path。
+    # [项目注释] 输出：标注返回 `'UserBenchRolloutRuntime'`；具体值由各分支决定。
     def from_config_files(
         cls, environment_path: str | Path, simulator_path: str | Path
     ) -> "UserBenchRolloutRuntime":
@@ -149,6 +175,10 @@ class UserBenchRolloutRuntime:
             source_root=None if source is None else _project_path(str(source)),
         )
 
+    # [项目注释] 功能：`start_session`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_non_empty, wrapper_factory,
+    # [项目注释]    set_current_session, get_current_session。
+    # [项目注释] 输入：`task_id`: str；`request_id`: str | None；`wrapper_factory`: Any。
+    # [项目注释] 输出：标注返回 `UserBenchSessionState`；具体值由各分支决定。
     def start_session(
         self,
         task_id: str,
@@ -229,5 +259,8 @@ class UserBenchInteraction:
     loudly so an old interaction config can never silently enter production.
     """
 
+    # [项目注释] 功能：`__init__`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：RuntimeError。
+    # [项目注释] 输入：*`_`；**`__`。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def __init__(self, *_: Any, **__: Any) -> None:
         raise RuntimeError("UserBenchInteraction was removed; use UserBenchAgentLoop with veRL 0.8")

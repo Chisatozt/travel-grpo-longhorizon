@@ -29,6 +29,10 @@ class RawRewardTrace:
 
     _values: list[float] = field(default_factory=list, repr=False)
 
+    # [项目注释] 功能：`append`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：float, isinstance, UserBenchRewardError,
+    # [项目注释]    isfinite。
+    # [项目注释] 输入：`value`: float。
+    # [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
     def append(self, value: float) -> None:
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             raise UserBenchRewardError("UserBench reward must be numeric")
@@ -38,10 +42,16 @@ class RawRewardTrace:
         self._values.append(normalized)
 
     @property
+    # [项目注释] 功能：`values`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：tuple。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `tuple[float, ...]`；具体值由各分支决定。
     def values(self) -> tuple[float, ...]:
         return tuple(self._values)
 
     @property
+    # [项目注释] 功能：`total`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：float, sum。
+    # [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+    # [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
     def total(self) -> float:
         return float(sum(self._values))
 
@@ -62,6 +72,10 @@ class TravelRewardTask:
     )
 
     @classmethod
+    # [项目注释] 功能：`from_upstream`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：tuple, cls, UserBenchRewardError,
+    # [项目注释]    isinstance。
+    # [项目注释] 输入：`task`: Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `'TravelRewardTask'`；具体值由各分支决定。
     def from_upstream(cls, task: Mapping[str, Any]) -> "TravelRewardTask":
         task_id = task.get("id")
         dimensions = task.get("dimensions")
@@ -144,6 +158,9 @@ class UserBenchRewardSnapshot:
     choice_initials: frozenset[str]
 
 
+# [项目注释] 功能：`_ratio`：计算奖励、指标或聚合统计，供训练、评测或报告使用。 主要协作调用：min, max。
+# [项目注释] 输入：`numerator`: int；`denominator`: int。
+# [项目注释] 输出：标注返回 `float`；具体值由各分支决定。
 def _ratio(numerator: int, denominator: int) -> float:
     return 0.0 if denominator <= 0 else min(1.0, max(0.0, numerator / denominator))
 
@@ -199,6 +216,9 @@ def scale_priority_reward(
     return max(-1.0, min(1.0, normalized_raw / normalized_scale))
 
 
+# [项目注释] 功能：`_count`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, UserBenchRewardError。
+# [项目注释] 输入：`value`: int；`name`: str。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def _count(value: int, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise UserBenchRewardError(f"{name} must be a non-negative integer")

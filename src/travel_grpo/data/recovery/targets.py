@@ -108,12 +108,14 @@ _SOURCE_MESSAGES_CACHE: dict[tuple[str, int], list[dict[str, Any]] | None] = {}
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`_SourceAction` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class _SourceAction:
     action: UserBenchAction
     source: dict[str, Any]
 
 
 @dataclass(frozen=True)
+# [项目注释] 类型：`TargetDecision` 封装相关状态、协议或数据结构。类属性和方法共同维护其不变量。
 class TargetDecision:
     status: str
     target_assistant: dict[str, Any] | None
@@ -122,10 +124,16 @@ class TargetDecision:
     rejection_reasons: tuple[str, ...] = ()
 
 
+# [项目注释] 功能：`_normalise`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：join, split, casefold。
+# [项目注释] 输入：`value`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _normalise(value: str) -> str:
     return " ".join(value.casefold().split())
 
 
+# [项目注释] 功能：`_relative`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：str, relative_to, resolve。
+# [项目注释] 输入：`root`: Path；`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _relative(root: Path, path: Path) -> str:
     try:
         return str(path.resolve().relative_to(root.resolve()))
@@ -133,6 +141,9 @@ def _relative(root: Path, path: Path) -> str:
         return str(path)
 
 
+# [项目注释] 功能：`_jsonl_row`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：open, enumerate, loads, isinstance。
+# [项目注释] 输入：`path`: Path；`line`: int。
+# [项目注释] 输出：标注返回 `Mapping[str, Any] | None`；具体值由各分支决定。
 def _jsonl_row(path: Path, line: int) -> Mapping[str, Any] | None:
     try:
         with path.open(encoding="utf-8") as handle:
@@ -203,6 +214,9 @@ def _source_for_provenance(
     }
 
 
+# [项目注释] 功能：`_message_equal`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：zip, str, len, isinstance。
+# [项目注释] 输入：`left`: Mapping[str, Any]；`right`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _message_equal(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     if left.get("role") != right.get("role"):
         return False
@@ -231,6 +245,10 @@ def _message_equal(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     return True
 
 
+# [项目注释] 功能：`_prefix_matches`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：all, len, _message_equal, zip。
+# [项目注释] 输入：`context_messages`: Sequence[Mapping[str, Any]]；`source_messages`: Sequence[Mapping[str,
+# [项目注释]    Any]]；`end`: int。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _prefix_matches(
     context_messages: Sequence[Mapping[str, Any]],
     source_messages: Sequence[Mapping[str, Any]],
@@ -241,6 +259,10 @@ def _prefix_matches(
     return all(_message_equal(left, right) for left, right in zip(context_messages, source_messages[:end]))
 
 
+# [项目注释] 功能：`_next_source_action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：normalize_actor_messages,
+# [项目注释]    _source_for_provenance, events_from_messages, isinstance。
+# [项目注释] 输入：`context`: Mapping[str, Any]；`root`: Path。
+# [项目注释] 输出：标注返回 `_SourceAction | None`；具体值由各分支决定。
 def _next_source_action(
     context: Mapping[str, Any], root: Path
 ) -> _SourceAction | None:
@@ -261,6 +283,10 @@ def _next_source_action(
     return None
 
 
+# [项目注释] 功能：`_last_action`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：events_from_messages, reversed,
+# [项目注释]    normalize_actor_messages。
+# [项目注释] 输入：`context`: Mapping[str, Any]；`choice`: ActionChoice | None。
+# [项目注释] 输出：标注返回 `UserBenchAction | None`；具体值由各分支决定。
 def _last_action(
     context: Mapping[str, Any], *, choice: ActionChoice | None = None
 ) -> UserBenchAction | None:
@@ -271,6 +297,10 @@ def _last_action(
     return None
 
 
+# [项目注释] 功能：`_public_aspects`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：normalize_actor_messages, next,
+# [项目注释]    extract_public_aspects, str。
+# [项目注释] 输入：`context`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
 def _public_aspects(context: Mapping[str, Any]) -> tuple[str, ...]:
     messages = normalize_actor_messages(context.get("messages", []))
     initial = next(
@@ -280,30 +310,48 @@ def _public_aspects(context: Mapping[str, Any]) -> tuple[str, ...]:
     return extract_public_aspects(initial)
 
 
+# [项目注释] 功能：`_state`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance。
+# [项目注释] 输入：`context`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `Mapping[str, Any]`；具体值由各分支决定。
 def _state(context: Mapping[str, Any]) -> Mapping[str, Any]:
     value = context.get("public_state_before")
     return value if isinstance(value, Mapping) else {}
 
 
+# [项目注释] 功能：`_current_aspect`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_state, isinstance。
+# [项目注释] 输入：`context`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def _current_aspect(context: Mapping[str, Any]) -> str | None:
     value = _state(context).get("current_aspect")
     return value if isinstance(value, str) and value else None
 
 
+# [项目注释] 功能：`_human_aspect`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：replace。
+# [项目注释] 输入：`aspect`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _human_aspect(aspect: str) -> str:
     return _HUMAN_ASPECT.get(aspect, aspect.replace("_", " "))
 
 
+# [项目注释] 功能：`_field_prompt`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：lower, _human_aspect。
+# [项目注释] 输入：`aspect`: str；`field`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _field_prompt(aspect: str, field: str) -> str:
     phrase = _FIELD_PHRASES.get(aspect, {}).get(field, f"{_human_aspect(aspect)} preferences")
     article = "an" if phrase[:1].lower() in "aeiou" else "a"
     return f"What {phrase} do you prefer for {article} {_human_aspect(aspect)}?"
 
 
+# [项目注释] 功能：`_search_prompt`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：_human_aspect。
+# [项目注释] 输入：`aspect`: str。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _search_prompt(aspect: str) -> str:
     return f"Search for {_human_aspect(aspect)} options using the preferences stated by the user."
 
 
+# [项目注释] 功能：`_target_message`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：dumps。
+# [项目注释] 输入：`action`: UserBenchAction；`target_id`: str。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _target_message(action: UserBenchAction, *, target_id: str) -> dict[str, Any]:
     arguments = json.dumps(
         {
@@ -330,12 +378,19 @@ def _target_message(action: UserBenchAction, *, target_id: str) -> dict[str, Any
     }
 
 
+# [项目注释] 功能：`_generated_action`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：from_parameters。
+# [项目注释] 输入：`choice`: str；`content`: str。
+# [项目注释] 输出：标注返回 `UserBenchAction`；具体值由各分支决定。
 def _generated_action(choice: str, content: str) -> UserBenchAction:
     return UserBenchAction.from_parameters(
         {"thought": _GENERIC_THOUGHT, "choice": choice, "content": content}
     )
 
 
+# [项目注释] 功能：`_asked_fields`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_public_aspects, set,
+# [项目注释]    events_from_messages, normalize_actor_messages。
+# [项目注释] 输入：`context`: Mapping[str, Any]；`aspect`: str。
+# [项目注释] 输出：标注返回 `set[str]`；具体值由各分支决定。
 def _asked_fields(context: Mapping[str, Any], aspect: str) -> set[str]:
     public_aspects = _public_aspects(context)
     asked: set[str] = set()
@@ -348,6 +403,10 @@ def _asked_fields(context: Mapping[str, Any], aspect: str) -> set[str]:
     return asked
 
 
+# [项目注释] 功能：`_next_open_aspect`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_current_aspect, _state, set,
+# [项目注释]    _public_aspects。
+# [项目注释] 输入：`context`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `str | None`；具体值由各分支决定。
 def _next_open_aspect(context: Mapping[str, Any]) -> str | None:
     current = _current_aspect(context)
     state = _state(context)
@@ -359,6 +418,10 @@ def _next_open_aspect(context: Mapping[str, Any]) -> str | None:
     return None
 
 
+# [项目注释] 功能：`_target_for_boundary`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：_state, _current_aspect,
+# [项目注释]    _next_source_action, _last_action。
+# [项目注释] 输入：`context`: Mapping[str, Any]；`root`: Path。
+# [项目注释] 输出：标注返回 `tuple[UserBenchAction | None, dict[str, Any], list[str]]`；具体值由各分支决定。
 def _target_for_boundary(
     context: Mapping[str, Any], root: Path
 ) -> tuple[UserBenchAction | None, dict[str, Any], list[str]]:
@@ -478,6 +541,10 @@ def _target_for_boundary(
     return None, {"method": "unknown_boundary"}, ["unknown_boundary_type"]
 
 
+# [项目注释] 功能：`_target_hidden_key_hits`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, items, extend,
+# [项目注释]    enumerate。
+# [项目注释] 输入：`value`: Any；`path`: str。
+# [项目注释] 输出：标注返回 `list[str]`；具体值由各分支决定。
 def _target_hidden_key_hits(value: Any, path: str = "") -> list[str]:
     hits: list[str] = []
     if isinstance(value, Mapping):
@@ -616,6 +683,9 @@ def construct_target(context: Mapping[str, Any], project_root: str | Path) -> Ta
     )
 
 
+# [项目注释] 功能：`_target_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：deepcopy, list, dict。
+# [项目注释] 输入：`context`: Mapping[str, Any]；`decision`: TargetDecision。
+# [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
 def _target_record(context: Mapping[str, Any], decision: TargetDecision) -> dict[str, Any]:
     record = copy.deepcopy(dict(context))
     record["schema_version"] = TARGET_SCHEMA_VERSION
@@ -628,6 +698,9 @@ def _target_record(context: Mapping[str, Any], decision: TargetDecision) -> dict
     return record
 
 
+# [项目注释] 功能：`_read_contexts`：读取并解析外部数据，将其转换为项目内部可消费的结构。 主要协作调用：open, strip, loads, isinstance。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `list[dict[str, Any]]`；具体值由各分支决定。
 def _read_contexts(path: Path) -> list[dict[str, Any]]:
     contexts: list[dict[str, Any]] = []
     with path.open(encoding="utf-8") as handle:
@@ -639,6 +712,9 @@ def _read_contexts(path: Path) -> list[dict[str, Any]]:
     return contexts
 
 
+# [项目注释] 功能：`_write_jsonl`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：open, write, dumps。
+# [项目注释] 输入：`path`: Path；`records`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _write_jsonl(path: Path, records: Sequence[Mapping[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for record in records:
@@ -679,6 +755,9 @@ def build_target_dataset(
             rejection_reasons[reason] += 1
         hidden_hits += len(_target_hidden_key_hits(enriched))
 
+    # [项目注释] 功能：`finalize`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：int。
+    # [项目注释] 输入：`value`: Counter[str]。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def finalize(value: Counter[str]) -> dict[str, Any]:
         total = int(value.get("total", 0))
         valid = int(value.get("target_valid", 0))
@@ -856,6 +935,9 @@ def build_targets_from_boundary_file(
                 all_train_validation_public_only = all_train_validation_public_only and checks.get("public_only") is True
             all_deferred = all_deferred and enriched.get("boundary_schema_version") == BOUNDARY_SCHEMA_VERSION
 
+    # [项目注释] 功能：`finalize`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：int。
+    # [项目注释] 输入：`value`: Counter[str]。
+    # [项目注释] 输出：标注返回 `dict[str, Any]`；具体值由各分支决定。
     def finalize(value: Counter[str]) -> dict[str, Any]:
         total = int(value.get("total", 0))
         valid = int(value.get("target_valid", 0))

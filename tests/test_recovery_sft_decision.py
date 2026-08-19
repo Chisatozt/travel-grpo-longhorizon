@@ -1,3 +1,6 @@
+# [项目注释] 模块：测试模块，负责验证 test_recovery_sft_decision 的行为契约。
+# [项目注释] 该文件的公共边界、输入输出和调用关系由下方实现及架构文档共同定义。
+
 from __future__ import annotations
 
 import importlib.util
@@ -13,6 +16,10 @@ decision = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(decision)
 
 
+# [项目注释] 功能：`test_followup_gate_is_not_vacuously_passed`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：mkdir,
+# [项目注释]    write_text, dumps, closed_loop_followup。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_followup_gate_is_not_vacuously_passed(tmp_path: Path) -> None:
     (tmp_path / "A/closed_loop").mkdir(parents=True)
     (tmp_path / "B/closed_loop").mkdir(parents=True)
@@ -28,6 +35,10 @@ def test_followup_gate_is_not_vacuously_passed(tmp_path: Path) -> None:
     assert value["answer_followup_gate_observable"] is False
 
 
+# [项目注释] 功能：`test_leakage_scan_detects_forbidden_public_text`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：mkdir,
+# [项目注释]    write_text, leakage_scan。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_leakage_scan_detects_forbidden_public_text(tmp_path: Path) -> None:
     (tmp_path / "A/probes").mkdir(parents=True)
     (tmp_path / "B/probes").mkdir(parents=True)
@@ -40,6 +51,9 @@ def test_leakage_scan_detects_forbidden_public_text(tmp_path: Path) -> None:
     assert value["hit_count"] == 1
 
 
+# [项目注释] 功能：`test_gate_rows_fail_known_recovery_boundaries`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。 主要协作调用：gate_rows。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_gate_rows_fail_known_recovery_boundaries() -> None:
     comparison = {
         "single_step": {

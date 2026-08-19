@@ -7,6 +7,9 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 
+# [项目注释] 功能：`_clean_tool_call`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance, str, set, loads。
+# [项目注释] 输入：`call`: Mapping[str, Any]。
+# [项目注释] 输出：标注返回 `dict[str, Any] | None`；具体值由各分支决定。
 def _clean_tool_call(call: Mapping[str, Any]) -> dict[str, Any] | None:
     function = call.get("function")
     if not isinstance(function, Mapping):

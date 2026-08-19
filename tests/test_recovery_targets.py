@@ -1,3 +1,6 @@
+# [项目注释] 模块：测试模块，负责验证 test_recovery_targets 的行为契约。
+# [项目注释] 该文件的公共边界、输入输出和调用关系由下方实现及架构文档共同定义。
+
 from __future__ import annotations
 
 import json
@@ -12,6 +15,9 @@ from travel_grpo.data.recovery_targets import (
 from travel_grpo.envs.userbench_tools import ActionChoice, UserBenchAction
 
 
+# [项目注释] 功能：`_call`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：dumps, len。
+# [项目注释] 输入：`choice`: str；`content`: str；`thought`: str。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def _call(choice: str, content: str, thought: str = "source") -> dict:
     return {
         "role": "assistant",
@@ -31,10 +37,17 @@ def _call(choice: str, content: str, thought: str = "source") -> dict:
     }
 
 
+# [项目注释] 功能：`_tool`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：`content`: str。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def _tool(content: str) -> dict:
     return {"role": "tool", "name": "interact_with_env", "content": content}
 
 
+# [项目注释] 功能：`_context`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。
+# [项目注释] 输入：`boundary_type`: str；`messages`: list[dict]；`state`: dict；`split`: str；`provenance`: list[dict]
+# [项目注释]    | None。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def _context(
     boundary_type: str,
     messages: list[dict],
@@ -58,6 +71,10 @@ def _context(
     }
 
 
+# [项目注释] 功能：`test_accepted_teacher_search_and_answer_are_reused`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：write_text, _context, construct_target, loads。
+# [项目注释] 输入：`tmp_path`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_accepted_teacher_search_and_answer_are_reused(tmp_path: Path) -> None:
     messages = [
         {"role": "system", "content": "system"},
@@ -97,6 +114,10 @@ def test_accepted_teacher_search_and_answer_are_reused(tmp_path: Path) -> None:
     assert decision.target_assistant["content"] == ""
 
 
+# [项目注释] 功能：`test_first_fallback_gets_one_substantive_same_aspect_retry`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_context, construct_target, from_parameters, _call。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_first_fallback_gets_one_substantive_same_aspect_retry() -> None:
     messages = [
         {"role": "system", "content": "system"},
@@ -127,6 +148,10 @@ def test_first_fallback_gets_one_substantive_same_aspect_retry() -> None:
     assert "apartment" in action.content.casefold()
 
 
+# [项目注释] 功能：`test_second_fallback_switches_to_next_public_aspect`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_context, construct_target, loads, _call。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_second_fallback_switches_to_next_public_aspect() -> None:
     messages = [
         {"role": "system", "content": "system"},
@@ -159,6 +184,10 @@ def test_second_fallback_switches_to_next_public_aspect() -> None:
     assert "apartment" not in arguments["content"].casefold()
 
 
+# [项目注释] 功能：`test_pending_visible_options_is_quarantined_instead_of_guessing`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_context, construct_target。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_pending_visible_options_is_quarantined_instead_of_guessing() -> None:
     context = _context(
         "visible_options_pending_answer",
@@ -180,6 +209,10 @@ def test_pending_visible_options_is_quarantined_instead_of_guessing() -> None:
     assert "answer_id_not_determinable_without_hidden_correctness" in decision.rejection_reasons
 
 
+# [项目注释] 功能：`test_evaluation_targets_are_excluded_from_train_and_hidden_keys_absent`：构造测试输入并断言目标行为，失败时暴露回归或契约不一致。
+# [项目注释]    主要协作调用：_context, build_target_dataset, len。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def test_evaluation_targets_are_excluded_from_train_and_hidden_keys_absent() -> None:
     context = _context(
         "repeated_no_progress_action",

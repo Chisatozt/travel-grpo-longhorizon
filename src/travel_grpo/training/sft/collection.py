@@ -216,6 +216,9 @@ def _prepare_teacher_messages(
         raise TeacherCollectionError(str(exc)) from exc
 
 
+# [项目注释] 功能：`_simulator_fallback`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：strip, to_tool_text。
+# [项目注释] 输入：`result`: Any。
+# [项目注释] 输出：标注返回 `bool`；具体值由各分支决定。
 def _simulator_fallback(result: Any) -> bool:
     if result.observation.to_tool_text().strip() == SIMULATOR_FALLBACK_TEXT:
         return True
@@ -226,6 +229,9 @@ def _simulator_fallback(result: Any) -> bool:
     return False
 
 
+# [项目注释] 功能：`_simulator_diagnostic_count`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：isinstance。
+# [项目注释] 输入：`result`: Any；`name`: str。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def _simulator_diagnostic_count(result: Any, name: str) -> int:
     value = result.diagnostics.get(name, 0)
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
@@ -276,6 +282,9 @@ def _partial_trajectory_record(
     }
 
 
+# [项目注释] 功能：`_message_contract_errors`：把协议/状态数据转换为模型、用户或日志可见的文本表示。 主要协作调用：range, tuple, len, sorted。
+# [项目注释] 输入：`messages`: Sequence[Mapping[str, Any]]。
+# [项目注释] 输出：标注返回 `tuple[str, ...]`；具体值由各分支决定。
 def _message_contract_errors(messages: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
     errors: list[str] = []
     if len(messages) < 4 or [message.get("role") for message in messages[:2]] != [
@@ -388,6 +397,9 @@ _SILVER_ALLOWED_REASONS = frozenset(
 )
 
 
+# [项目注释] 功能：`_silver_markers`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：any, str, add, isinstance。
+# [项目注释] 输入：`trajectory`: TeacherTrajectory。
+# [项目注释] 输出：标注返回 `set[str]`；具体值由各分支决定。
 def _silver_markers(trajectory: TeacherTrajectory) -> set[str]:
     markers = {
         str(value.get("reason"))
@@ -950,6 +962,9 @@ async def collect_teacher_trajectories(
         raise ValueError("concurrency must be positive")
     semaphore = asyncio.Semaphore(concurrency)
 
+    # [项目注释] 功能：`collect`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：collect_teacher_trajectory。
+    # [项目注释] 输入：`task`: Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `TeacherTrajectory`；具体值由各分支决定。
     async def collect(task: Mapping[str, Any]) -> TeacherTrajectory:
         async with semaphore:
             return await collect_teacher_trajectory(
@@ -1065,6 +1080,10 @@ async def collect_teacher_outcomes(
         raise ValueError("concurrency must be positive")
     semaphore = asyncio.Semaphore(concurrency)
 
+    # [项目注释] 功能：`collect`：异步地编排一个训练、采集、评测或 replay 流程，并汇总其结果。 主要协作调用：collect_teacher_task_with_retries,
+    # [项目注释]    on_outcome, isawaitable。
+    # [项目注释] 输入：`task`: Mapping[str, Any]。
+    # [项目注释] 输出：标注返回 `TeacherTaskOutcome`；具体值由各分支决定。
     async def collect(task: Mapping[str, Any]) -> TeacherTaskOutcome:
         async with semaphore:
             outcome = await collect_teacher_task_with_retries(
@@ -1084,6 +1103,9 @@ async def collect_teacher_outcomes(
     return tuple(await asyncio.gather(*(collect(task) for task in tasks)))
 
 
+# [项目注释] 功能：`_atomic_json_record`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：mkdir, mkstemp, Path, replace。
+# [项目注释] 输入：`record`: Mapping[str, Any]；`destination`: Path。
+# [项目注释] 输出：标注返回 `None`；具体值由各分支决定。
 def _atomic_json_record(record: Mapping[str, Any], destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -1148,11 +1170,19 @@ def initialize_teacher_run(
     return root
 
 
+# [项目注释] 功能：`teacher_outcome_checkpoint_path`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。 主要协作调用：hexdigest, sha256,
+# [项目注释]    Path, encode。
+# [项目注释] 输入：`run_dir`: str | Path；`task_id`: str。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def teacher_outcome_checkpoint_path(run_dir: str | Path, task_id: str) -> Path:
     digest = hashlib.sha256(task_id.encode("utf-8")).hexdigest()
     return Path(run_dir) / "tasks" / f"{digest}.json"
 
 
+# [项目注释] 功能：`write_teacher_outcome_checkpoint`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。
+# [项目注释]    主要协作调用：teacher_outcome_checkpoint_path, _atomic_json_record, to_checkpoint_record。
+# [项目注释] 输入：`outcome`: TeacherTaskOutcome；`run_dir`: str | Path。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def write_teacher_outcome_checkpoint(
     outcome: TeacherTaskOutcome, run_dir: str | Path
 ) -> Path:
@@ -1161,6 +1191,10 @@ def write_teacher_outcome_checkpoint(
     return destination
 
 
+# [项目注释] 功能：`load_teacher_outcome_checkpoints`：执行输入、状态或产物校验，并在不满足约束时返回诊断或抛出异常。
+# [项目注释]    主要协作调用：teacher_outcome_checkpoint_path, from_checkpoint_record, exists, loads。
+# [项目注释] 输入：`run_dir`: str | Path；`task_ids`: Sequence[str]。
+# [项目注释] 输出：标注返回 `dict[str, TeacherTaskOutcome]`；具体值由各分支决定。
 def load_teacher_outcome_checkpoints(
     run_dir: str | Path, task_ids: Sequence[str]
 ) -> dict[str, TeacherTaskOutcome]:
@@ -1286,6 +1320,9 @@ def write_teacher_trajectories(
     return destination
 
 
+# [项目注释] 功能：`_write_jsonl_records`：把内部结果序列化或导出到指定介质，并保持项目约定的格式。 主要协作调用：Path, mkdir, mkstemp, exists。
+# [项目注释] 输入：`records`: Sequence[Mapping[str, Any]]；`output_path`: str | Path；`force`: bool。
+# [项目注释] 输出：标注返回 `Path`；具体值由各分支决定。
 def _write_jsonl_records(
     records: Sequence[Mapping[str, Any]], output_path: str | Path, *, force: bool
 ) -> Path:

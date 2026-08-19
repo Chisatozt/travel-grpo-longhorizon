@@ -19,6 +19,9 @@ DEFAULT_COUNT = 200
 DEFAULT_SEED = 47120042
 
 
+# [项目注释] 功能：`_sha256`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sha256, hexdigest, open, iter。
+# [项目注释] 输入：`path`: Path。
+# [项目注释] 输出：标注返回 `str`；具体值由各分支决定。
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -27,6 +30,9 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# [项目注释] 功能：`_allocate_quotas`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：sum, items, dict, values。
+# [项目注释] 输入：`counts`: Counter[str]；`target`: int。
+# [项目注释] 输出：标注返回 `dict[str, int]`；具体值由各分支决定。
 def _allocate_quotas(counts: Counter[str], target: int) -> dict[str, int]:
     total = sum(counts.values())
     if target <= 0:
@@ -47,6 +53,9 @@ def _allocate_quotas(counts: Counter[str], target: int) -> dict[str, int]:
     return dict(sorted(floors.items()))
 
 
+# [项目注释] 功能：`create_subset`：根据输入配置和中间状态构建或生成新的项目产物。 主要协作调用：read_table, to_pylist, any, Counter。
+# [项目注释] 输入：`source`: Path；`output`: Path；`manifest_path`: Path；`count`: int；`seed`: int。
+# [项目注释] 输出：标注返回 `dict`；具体值由各分支决定。
 def create_subset(
     source: Path,
     output: Path,
@@ -118,6 +127,10 @@ def create_subset(
     return manifest
 
 
+# [项目注释] 功能：`main`：实现该模块在当前调用链中的局部业务逻辑，并维护相关状态不变量。 主要协作调用：ArgumentParser, add_argument, parse_args,
+# [项目注释]    create_subset。
+# [项目注释] 输入：无显式业务参数（仅使用实例/类状态）。
+# [项目注释] 输出：标注返回 `int`；具体值由各分支决定。
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(

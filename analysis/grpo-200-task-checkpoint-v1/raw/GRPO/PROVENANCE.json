@@ -1,0 +1,153 @@
+{
+  "actual_evaluation_executed": false,
+  "actual_training_executed": false,
+  "checkpoint_donors": {
+    "0": {
+      "path": "/root/autodl-tmp/travel-grpo-longhorizon/outputs/evaluation/200-Task/SFT/run2/results.jsonl",
+      "sha256": "ef0d4659f575df53161d920929c5203a9709d6b561711d875bfb40283db4895a"
+    },
+    "100": {
+      "path": "/root/autodl-tmp/travel-grpo-longhorizon/outputs/evaluation/turn-credit-checkpoints-200-task-public-guarded-c4/step-100/run/results.jsonl",
+      "sha256": "7eee2aafee8e3d4607edb7563041468bcb4dc5f415896ef913d771ed4b114aae"
+    },
+    "150": {
+      "path": "/root/autodl-tmp/travel-grpo-longhorizon/outputs/evaluation/turn-credit-checkpoints-200-task-public-guarded-c4/step-150/run/results.jsonl",
+      "sha256": "a31563c2410cd3fe84364a6213fe9269e3627c1c624db088583c92b125e8e50c"
+    },
+    "200": {
+      "path": "/root/autodl-tmp/travel-grpo-longhorizon/outputs/evaluation/turn-credit-checkpoints-200-task-public-guarded-c4/step-200/run/results.jsonl",
+      "sha256": "7924c67d1a97c0c06a507d79f250a6b094595141db8a6a22f69329664d9810a2"
+    },
+    "50": {
+      "path": "/root/autodl-tmp/travel-grpo-longhorizon/outputs/evaluation/turn-credit-step50-200/run/results.jsonl",
+      "sha256": "a4c6818e807c84020d979da1669c955b06dabf43c541ac161b2545d68e64bff6"
+    }
+  },
+  "generated_aspect_correct_counts": {
+    "0": {
+      "apartment": 16,
+      "flight": 19,
+      "hotel": 20,
+      "rental_car": 24,
+      "restaurant": 23
+    },
+    "100": {
+      "apartment": 14,
+      "flight": 28,
+      "hotel": 21,
+      "rental_car": 24,
+      "restaurant": 32
+    },
+    "150": {
+      "apartment": 12,
+      "flight": 27,
+      "hotel": 30,
+      "rental_car": 18,
+      "restaurant": 28
+    },
+    "200": {
+      "apartment": 32,
+      "flight": 19,
+      "hotel": 44,
+      "rental_car": 14,
+      "restaurant": 42
+    },
+    "50": {
+      "apartment": 13,
+      "flight": 28,
+      "hotel": 21,
+      "rental_car": 21,
+      "restaurant": 29
+    }
+  },
+  "generated_aspect_nonzero_counts": {
+    "0": {
+      "apartment": 20,
+      "flight": 26,
+      "hotel": 27,
+      "rental_car": 29,
+      "restaurant": 35
+    },
+    "100": {
+      "apartment": 22,
+      "flight": 30,
+      "hotel": 26,
+      "rental_car": 29,
+      "restaurant": 36
+    },
+    "150": {
+      "apartment": 15,
+      "flight": 34,
+      "hotel": 35,
+      "rental_car": 23,
+      "restaurant": 37
+    },
+    "200": {
+      "apartment": 37,
+      "flight": 25,
+      "hotel": 50,
+      "rental_car": 22,
+      "restaurant": 42
+    },
+    "50": {
+      "apartment": 17,
+      "flight": 32,
+      "hotel": 27,
+      "rental_car": 27,
+      "restaurant": 41
+    }
+  },
+  "generated_outcome_counts": {
+    "0": {
+      "full": 14,
+      "none": 40,
+      "partial": 92,
+      "wrong": 54
+    },
+    "100": {
+      "full": 17,
+      "none": 31,
+      "partial": 98,
+      "wrong": 54
+    },
+    "150": {
+      "full": 15,
+      "none": 31,
+      "partial": 98,
+      "wrong": 56
+    },
+    "200": {
+      "full": 18,
+      "none": 30,
+      "partial": 100,
+      "wrong": 52
+    },
+    "50": {
+      "full": 15,
+      "none": 34,
+      "partial": 96,
+      "wrong": 55
+    }
+  },
+  "generator": "/root/autodl-tmp/travel-grpo-longhorizon/scripts/simulate/generate_grpo_pipeline_simulation.py",
+  "generator_seed": 20260819,
+  "purpose": "pipeline_simulation",
+  "reward_version": "userbench-travel-reward-v3-priority",
+  "source_templates": [],
+  "sources": {
+    "evaluation200_subset_manifest": {
+      "path": "/root/autodl-tmp/travel-grpo-longhorizon/outputs/evaluation/subsets/tasks_200_proportional_v1.json",
+      "sha256": "d1e2b9a866ddd4bd59a4ac70e9e1739dbd6567d616b7cd20df1e138e5968abb4"
+    },
+    "fixed32_manifest": {
+      "path": "/root/autodl-tmp/travel-grpo-longhorizon/outputs/grpo/fixed_validation_32/manifest.json",
+      "sha256": "14fb90702f2d01a517355754c1c334f3610bb8ae9e3f47eff86bdb88149b7360"
+    },
+    "userbench_snapshot": {
+      "note": "static JSON files; directory hash intentionally not used",
+      "path": "/root/autodl-tmp/travel-grpo-longhorizon/environments/UserBench/travelgym/data"
+    }
+  },
+  "swanlab_project": "travel-grpo-longhorizon-sandbox",
+  "swanlab_run_name": "grpo-200step-pipeline-test-v1"
+}

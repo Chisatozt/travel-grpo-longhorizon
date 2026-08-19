@@ -1,0 +1,147 @@
+{
+  "actual_evaluation_executed": false,
+  "actual_training_executed": false,
+  "checkpoint_steps": [
+    0,
+    50,
+    100,
+    150,
+    200
+  ],
+  "evaluation200_targets": {
+    "0": {
+      "answer_submission": 0.516,
+      "completion": 0.28,
+      "efficiency": 0.51,
+      "guard": 0.0817,
+      "phase": 0.859,
+      "preference": 0.496,
+      "search": 0.584
+    },
+    "50": {
+      "answer_submission": 0.565,
+      "completion": 0.294167,
+      "efficiency": 0.455,
+      "guard": 0.064,
+      "phase": 0.907,
+      "preference": 0.548,
+      "search": 0.672
+    },
+    "100": {
+      "answer_submission": 0.604,
+      "completion": 0.305833,
+      "efficiency": 0.414,
+      "guard": 0.092,
+      "phase": 0.842,
+      "preference": 0.582,
+      "search": 0.728
+    },
+    "150": {
+      "answer_submission": 0.548,
+      "completion": 0.299167,
+      "efficiency": 0.561,
+      "guard": 0.058,
+      "phase": 0.915,
+      "preference": 0.536,
+      "search": 0.638
+    },
+    "200": {
+      "answer_submission": 0.581,
+      "completion": 0.314167,
+      "efficiency": 0.575,
+      "guard": 0.086,
+      "phase": 0.873,
+      "preference": 0.521,
+      "search": 0.612
+    }
+  },
+  "generator_seed": 20260819,
+  "outcome_targets": {
+    "0": {
+      "correct_units": 672,
+      "full": 14,
+      "none": 40,
+      "partial": 92,
+      "wrong": 54
+    },
+    "50": {
+      "correct_units": 706,
+      "full": 15,
+      "none": 34,
+      "partial": 96,
+      "wrong": 55
+    },
+    "100": {
+      "correct_units": 734,
+      "full": 17,
+      "none": 31,
+      "partial": 98,
+      "wrong": 54
+    },
+    "150": {
+      "correct_units": 718,
+      "full": 15,
+      "none": 31,
+      "partial": 98,
+      "wrong": 56
+    },
+    "200": {
+      "correct_units": 754,
+      "full": 18,
+      "none": 30,
+      "partial": 100,
+      "wrong": 52
+    }
+  },
+  "reward_version": "userbench-travel-reward-v3-priority",
+  "run_type": "pipeline_simulation",
+  "schema_version": "grpo-pipeline-simulation-v1",
+  "source_manifests": {
+    "evaluation200": "/root/autodl-tmp/travel-grpo-longhorizon/outputs/evaluation/subsets/tasks_200_proportional_v1.json",
+    "validation32": "/root/autodl-tmp/travel-grpo-longhorizon/outputs/grpo/fixed_validation_32/manifest.json"
+  },
+  "swanlab_project": "travel-grpo-longhorizon-sandbox",
+  "swanlab_run_name": "grpo-200step-pipeline-test-v1",
+  "validation32_targets": {
+    "0": {
+      "completion": 0.18,
+      "efficiency": 0.53,
+      "guard": 0.11,
+      "phase": 0.82,
+      "preference": 0.43,
+      "search": 0.46
+    },
+    "50": {
+      "completion": 0.24,
+      "efficiency": 0.46,
+      "guard": 0.06,
+      "phase": 0.88,
+      "preference": 0.51,
+      "search": 0.58
+    },
+    "100": {
+      "completion": 0.22,
+      "efficiency": 0.39,
+      "guard": 0.15,
+      "phase": 0.77,
+      "preference": 0.56,
+      "search": 0.65
+    },
+    "150": {
+      "completion": 0.27,
+      "efficiency": 0.58,
+      "guard": 0.05,
+      "phase": 0.93,
+      "preference": 0.49,
+      "search": 0.58
+    },
+    "200": {
+      "completion": 0.26,
+      "efficiency": 0.56,
+      "guard": 0.12,
+      "phase": 0.84,
+      "preference": 0.47,
+      "search": 0.54
+    }
+  }
+}

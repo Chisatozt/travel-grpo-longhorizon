@@ -1,0 +1,312 @@
+{
+  "keys": [
+    "completion_rate",
+    "correct_answer_rate",
+    "answer_submission_rate",
+    "answer_quality",
+    "active_preference_coverage",
+    "passive_preference_coverage",
+    "preference_coverage",
+    "search_coverage",
+    "guard_rejection_rate",
+    "guard_rejections",
+    "phase_transition_score",
+    "efficiency",
+    "terminal_reward",
+    "reward_valid_rate",
+    "actor_attempts",
+    "environment_steps",
+    "effective_steps",
+    "invalid_actions",
+    "exact_repeats",
+    "semantic_repeats",
+    "public_control_done_rate",
+    "turn_credit_turn_count",
+    "turn_credit_positive_count",
+    "turn_credit_negative_count",
+    "turn_credit_zero_count",
+    "turn_credit_mean",
+    "turn_credit_min",
+    "turn_credit_max",
+    "turn_credit_conservation_error",
+    "dynamic_sampling_kept_groups",
+    "dynamic_sampling_dropped_groups",
+    "dynamic_sampling_constant_reward_groups",
+    "dynamic_sampling_generation_batches",
+    "entropy",
+    "kl",
+    "clip_fraction",
+    "gradient_norm",
+    "learning_rate"
+  ],
+  "schema_version": "grpo-simulation-training-metrics-v1",
+  "statistics": {
+    "active_preference_coverage": {
+      "last": 0.11941750658621814,
+      "max": 0.26979001237955297,
+      "mean": 0.13180733540549536,
+      "min": 0.011903970066526322,
+      "std": 0.049564832047818
+    },
+    "actor_attempts": {
+      "last": 14.0,
+      "max": 15.0,
+      "mean": 14.23,
+      "min": 14.0,
+      "std": 0.4208325082500163
+    },
+    "answer_quality": {
+      "last": 0.19713079519987525,
+      "max": 0.5115154499460496,
+      "mean": 0.19968273831695108,
+      "min": 0.01011877997198804,
+      "std": 0.08987558614537206
+    },
+    "answer_submission_rate": {
+      "last": 0.5278485008275062,
+      "max": 1.0,
+      "mean": 0.5781734046464454,
+      "min": 0.2587877193520639,
+      "std": 0.13011315626497033
+    },
+    "clip_fraction": {
+      "last": 0.1824859696793851,
+      "max": 0.2914751996614844,
+      "mean": 0.19490781482571454,
+      "min": 0.10419385962887012,
+      "std": 0.041984604683859485
+    },
+    "completion_rate": {
+      "last": 0.22385470247049777,
+      "max": 0.6069204660348074,
+      "mean": 0.23019428048054474,
+      "min": 0.0,
+      "std": 0.10077358073452156
+    },
+    "correct_answer_rate": {
+      "last": 0.22385470247049777,
+      "max": 0.6069204660348074,
+      "mean": 0.23019428048054474,
+      "min": 0.0,
+      "std": 0.10077358073452156
+    },
+    "dynamic_sampling_constant_reward_groups": {
+      "last": 1.0,
+      "max": 2.0,
+      "mean": 0.58,
+      "min": 0.0,
+      "std": 0.5035871324805669
+    },
+    "dynamic_sampling_dropped_groups": {
+      "last": 3.0,
+      "max": 4.0,
+      "mean": 2.56,
+      "min": 1.0,
+      "std": 0.544426303552648
+    },
+    "dynamic_sampling_generation_batches": {
+      "last": 2.0,
+      "max": 2.0,
+      "mean": 2.0,
+      "min": 2.0,
+      "std": 0.0
+    },
+    "dynamic_sampling_kept_groups": {
+      "last": 3.0,
+      "max": 4.0,
+      "mean": 2.735,
+      "min": 2.0,
+      "std": 0.5520643078482795
+    },
+    "effective_steps": {
+      "last": 13.022691445867741,
+      "max": 15.005967171868583,
+      "mean": 13.26765534212137,
+      "min": 12.026879193334839,
+      "std": 0.6472707606538164
+    },
+    "efficiency": {
+      "last": 0.5077484151284081,
+      "max": 0.6492751045497757,
+      "mean": 0.4803603328850172,
+      "min": 0.25437805640023914,
+      "std": 0.07016128066425752
+    },
+    "entropy": {
+      "last": 1.0905832730469736,
+      "max": 1.5182898066208494,
+      "mean": 1.2837592672395224,
+      "min": 1.024560730715407,
+      "std": 0.11745809991231901
+    },
+    "environment_steps": {
+      "last": 13.0,
+      "max": 15.0,
+      "mean": 13.25,
+      "min": 12.0,
+      "std": 0.653834841531101
+    },
+    "exact_repeats": {
+      "last": 3.0,
+      "max": 6.0,
+      "mean": 3.525,
+      "min": 2.0,
+      "std": 0.6552671211040578
+    },
+    "gradient_norm": {
+      "last": 1.0790454002994911,
+      "max": 1.3700233812191356,
+      "mean": 1.0504935336144683,
+      "min": 0.650471326033867,
+      "std": 0.13935308552631376
+    },
+    "guard_rejection_rate": {
+      "last": 0.0907657834709665,
+      "max": 0.17817744635486066,
+      "mean": 0.07062136848547768,
+      "min": 0.0,
+      "std": 0.03874905724552661
+    },
+    "guard_rejections": {
+      "last": 1.0,
+      "max": 3.0,
+      "mean": 0.98,
+      "min": 0.0,
+      "std": 0.6321392251711643
+    },
+    "invalid_actions": {
+      "last": 2.0,
+      "max": 2.0,
+      "mean": 1.43,
+      "min": 1.0,
+      "std": 0.49507575177946256
+    },
+    "kl": {
+      "last": 0.12266104390595017,
+      "max": 0.12825669685708185,
+      "mean": 0.061184213962936745,
+      "min": 0.0,
+      "std": 0.035248155033199155
+    },
+    "learning_rate": {
+      "last": 1e-06,
+      "max": 1e-06,
+      "mean": 1e-06,
+      "min": 1e-06,
+      "std": 0.0
+    },
+    "passive_preference_coverage": {
+      "last": 0.20836094661340096,
+      "max": 0.3793512424182398,
+      "mean": 0.19435971091369347,
+      "min": 0.0158831197159163,
+      "std": 0.07388463087942537
+    },
+    "phase_transition_score": {
+      "last": 0.8397371793698772,
+      "max": 0.9929822194698338,
+      "mean": 0.8537859948628634,
+      "min": 0.6954343866317354,
+      "std": 0.053213393991689284
+    },
+    "preference_coverage": {
+      "last": 0.3277784531996191,
+      "max": 0.62936207857294,
+      "mean": 0.32616704631918886,
+      "min": 0.027787089782442626,
+      "std": 0.12186223216204896
+    },
+    "public_control_done_rate": {
+      "last": 0.29037892713503255,
+      "max": 0.6051170258181612,
+      "mean": 0.323971213466213,
+      "min": 0.15985592489830458,
+      "std": 0.07877885113047697
+    },
+    "reward_valid_rate": {
+      "last": 0.9922263855918115,
+      "max": 1.0,
+      "mean": 0.9940793230061017,
+      "min": 0.9864401588028833,
+      "std": 0.002729230604651394
+    },
+    "search_coverage": {
+      "last": 0.5616304027819187,
+      "max": 0.9054620169986175,
+      "mean": 0.6481306317382627,
+      "min": 0.35346485458592064,
+      "std": 0.09126693017139227
+    },
+    "semantic_repeats": {
+      "last": 3.0,
+      "max": 4.0,
+      "mean": 2.525,
+      "min": 1.0,
+      "std": 0.7741931283601011
+    },
+    "terminal_reward": {
+      "last": 0.22435663979670833,
+      "max": 0.5665643919879715,
+      "mean": 0.23419244884108842,
+      "min": 0.021135129324942107,
+      "std": 0.09051197329903855
+    },
+    "turn_credit_conservation_error": {
+      "last": 3.336029230584954e-10,
+      "max": 4.759271331840818e-10,
+      "mean": 1.493922713905875e-10,
+      "min": 9.893947625017499e-13,
+      "std": 1.0769365576300282e-10
+    },
+    "turn_credit_max": {
+      "last": 0.41926872660867914,
+      "max": 0.5296042511484336,
+      "mean": 0.42445407264938284,
+      "min": 0.3235980229742323,
+      "std": 0.03990804820351953
+    },
+    "turn_credit_mean": {
+      "last": 0.03689137390761712,
+      "max": 0.07975238491083922,
+      "mean": 0.036973862566248974,
+      "min": -0.002318399166468997,
+      "std": 0.015375196792472283
+    },
+    "turn_credit_min": {
+      "last": -0.2021178521963861,
+      "max": -0.13216090693523808,
+      "mean": -0.20253312017904065,
+      "min": -0.2662469680264544,
+      "std": 0.02546523323275841
+    },
+    "turn_credit_negative_count": {
+      "last": 9.0,
+      "max": 13.0,
+      "mean": 8.81,
+      "min": 3.0,
+      "std": 1.6744849954538261
+    },
+    "turn_credit_positive_count": {
+      "last": 6.0,
+      "max": 17.0,
+      "mean": 6.54,
+      "min": 0.0,
+      "std": 2.991387637869756
+    },
+    "turn_credit_turn_count": {
+      "last": 16.0,
+      "max": 17.0,
+      "mean": 16.23,
+      "min": 16.0,
+      "std": 0.4208325082500163
+    },
+    "turn_credit_zero_count": {
+      "last": 4.0,
+      "max": 7.0,
+      "mean": 4.925,
+      "min": 3.0,
+      "std": 1.004676564870506
+    }
+  },
+  "steps": 200
+}

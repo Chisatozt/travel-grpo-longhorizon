@@ -1,5 +1,7 @@
 # recovery-sft-v1 渲染与审计
 
+> **归档 / Historical training artifact contract.** 这是 recovery SFT 的历史渲染与审计格式；对应 recovery target/SFT 输出已不再保留，不属于当前 SFT/GRPO 主训练链路。
+
 `recovery-sft-v1` 是从 `recovery-target-v1` 派生的、只包含公开状态边界样本的 SFT 格式。它不修改原始 target，不启动训练，也不读取 reward/correctness 数据。
 
 每条记录包含：

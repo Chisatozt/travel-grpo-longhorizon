@@ -1,5 +1,7 @@
 # Recovery SFT decision (inference-gate-v1)
 
+> **归档 / Historical evaluation record.** 本报告对应已结束且当前输出目录已清理的 recovery/inference gate rerun，不是当前 Baseline/SFT/GRPO 200-Task 结果。
+
 **Decision: NO-GO for the current controller/prompt contract.**
 
 No model parameters were changed and no training was started. The public-state rendering fix was applied and rechecked in this rerun; the remaining failures are policy/grounding gates.

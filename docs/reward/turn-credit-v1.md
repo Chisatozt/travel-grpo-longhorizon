@@ -1,5 +1,7 @@
 # Causal turn credit v1
 
+> **归档 / Historical reference.** 本页描述 v1 turn-credit 设计；当前 turn-credit 参考以 `turn-credit-v2.md` 和当前 GRPO 配置为准，不应将本页作为现行训练契约。
+
 `causal-turn-credit-v1` is an optional, trainer-only credit assignment layer for multi-turn GRPO. Travel Reward v3 remains the sole trajectory objective and the sole value used by dynamic sampling. Turn credit does not add step rewards and does not alter `rm_scores`.
 
 ## Modes

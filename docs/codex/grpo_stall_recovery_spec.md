@@ -1,5 +1,7 @@
 # GRPO T3-Style Stall Recovery 实现规范
 
+> **归档 / Historical design.** 本文件记录旧版 stall/recovery 方案及其推演，不代表当前训练已启用该分支；当前 GRPO 行为应以代码和 [GRPO 训练契约](../training/grpo.md) 为准。
+
 ## 1. 背景
 
 当前项目使用 UserBench 多轮环境进行在线 GRPO。

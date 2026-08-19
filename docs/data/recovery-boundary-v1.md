@@ -1,5 +1,7 @@
 # Recovery boundary contexts (`recovery-boundary-v1`)
 
+> **归档 / Historical artifact contract.** 这是 recovery boundary 的历史派生格式；对应的默认输出目录已不再保留，不属于当前 200-Task 最终测试主链路。
+
 `scripts/data/extract_recovery_boundaries.py` creates a derived, CPU-only
 context set for recovery and phase-boundary work. It reads existing accepted
 Teacher trajectories, failed 20-step GRPO rollouts, and A/B probe artifacts;

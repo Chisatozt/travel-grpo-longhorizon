@@ -1277,7 +1277,7 @@ SFT 和 GRPO 训练逻辑。SFT 子包负责 contracts、planning、collection�
 
 ### `scripts/eval/compare_stages.py`
 
-职责：Generate the formal paired comparison after all three 471-task runs.
+职责：Generate the paired comparison for either the formal 471-task runs or three matching explicit 200-task subset runs when `--allow-subset` is supplied.
 
 代码行数：59。
 

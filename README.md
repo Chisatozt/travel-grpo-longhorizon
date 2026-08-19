@@ -2,7 +2,7 @@
 
 面向 UserBench 旅游助手的可审计 Agentic 后训练项目，覆盖冻结数据划分、教师轨迹 Gold/Silver 验收、action-only LoRA SFT、veRL 0.8 在线 GRPO，以及 Baseline/SFT/GRPO 冻结测试集配对评测。
 
-当前状态：代码链路与离线验证已实现；尚未在正式 Linux GPU 环境执行 SFT、GRPO 或 471 题评测，因此本仓库不声明任何模型或 benchmark 指标。
+当前状态：代码链路与离线验证已实现；当前项目已保存 Baseline、SFT 和 GRPO checkpoint 的固定 200-Task 最终测试产物。这里的 200-Task 是从完整 471-task UserBench test pool 派生的项目内最终测试子集，不外推为完整 UserBench benchmark；完整 471-task formal evaluation contract 仍保留，尚无完整 471 条结果声明。
 
 ## 固定流水线
 
@@ -12,8 +12,9 @@ UserBench 固定划分
   → Qwen/Qwen3.5-2B action-only LoRA SFT
   → 合并 SFT 模型
   → veRL 0.8 + UserBench 在线 GRPO
-  → 132 题 validation 选择 checkpoint
-  → 471 题 Baseline / SFT / GRPO 配对评测
+  → GRPO validation 选择 checkpoint
+  → 当前项目最终测试：固定 200-Task Baseline / SFT / GRPO 配对评测
+  → 未来 formal full evaluation：完整 471-task test pool
 ```
 
 Actor、采集模拟器、GRPO 模拟器和评测模拟器是独立运行边界。后三者虽都使用 `deepseek-v4-flash`，仍必须分别读取 `COLLECTION_USER_SIM_*`、`GRPO_USER_SIM_*`、`EVAL_USER_SIM_*` 并运行在不同进程。
@@ -90,4 +91,4 @@ python scripts/eval/compare_stages.py
 
 ## 不可变边界
 
-`environments/UserBench/` 是 Salesforce AI Research UserBench 提交 `80506d2ab484cab843e60a2401ff3e0290d05b87` 的完整快照。日常开发不得修改；来源和 Apache-2.0 信息记录在 `EMBEDDED_SOURCE.json`。正式 471 条 test 只允许在训练配方和 checkpoint 完全冻结后使用。
+`environments/UserBench/` 是 Salesforce AI Research UserBench 提交 `80506d2ab484cab843e60a2401ff3e0290d05b87` 的完整快照。日常开发不得修改；来源和 Apache-2.0 信息记录在 `EMBEDDED_SOURCE.json`。完整 471 条 test 仍是 UserBench 的 formal source pool；当前项目报告使用从该 pool 固定派生的 200-Task 最终测试，二者指标口径不能混用。

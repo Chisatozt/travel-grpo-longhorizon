@@ -1,7 +1,5 @@
 # Documentation
 
-For a context-free project handoff, start with [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md).
-
 The documentation mirrors the runtime pipeline:
 
 - `architecture/`: repository boundaries and ownership;

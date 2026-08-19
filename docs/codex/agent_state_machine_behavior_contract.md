@@ -1,5 +1,7 @@
 # Agent 状态机与行为契约
 
+> **归档 / Historical design.** 本文件是早期状态机设计与测试规划，包含 Reward v2 时代的约束；它不是当前运行时的唯一权威契约，使用前应以当前代码和评测契约为准。
+
 > 状态：设计与测试规划；本文件不实现状态机、不启动训练或 GPU 推理，也不修改
 > `environments/UserBench/`。  
 > 适用边界：Actor、UserBench session、`interact_with_env` 工具适配层和 GRPO

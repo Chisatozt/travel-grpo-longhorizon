@@ -1,5 +1,7 @@
 # recovery-target-v1
 
+> **归档 / Historical artifact contract.** 这是 recovery target 的历史派生格式；对应输出目录已不再保留，不属于当前 200-Task 最终测试主链路。
+
 `recovery-target-v1` is the derived, one-step target format built from
 `recovery-boundary-v1` contexts. It is an offline training/evaluation aid; it
 does not alter the source trajectories and it never consults hidden reward
